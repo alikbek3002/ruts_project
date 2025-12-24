@@ -3,7 +3,7 @@ import { Navigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { trackedFetch } from "../../../api/client";
+import { apiListSubjects, Subject, trackedFetch } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
 
 type Student = {
@@ -34,16 +34,24 @@ export function AdminClassJournalPage() {
   const [viewMode, setViewMode] = useState<"dates" | "subjects">("subjects");
   const [journalByDates, setJournalByDates] = useState<JournalByDates | null>(null);
   const [journalBySubject, setJournalBySubject] = useState<JournalBySubject | null>(null);
+  const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [className, setClassName] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const subjectColumns = useMemo(() => {
+    const names = (allSubjects || []).map((s) => (s?.name || "").trim()).filter(Boolean);
+    const unique = Array.from(new Set(names));
+    unique.sort((a, b) => a.localeCompare(b, "ru"));
+    return unique;
+  }, [allSubjects]);
 
   async function loadJournal() {
     if (!token || !classId) return;
     setLoading(true);
     setErr(null);
     try {
-      const [byDates, bySubject, classInfo] = await Promise.all([
+      const [byDates, bySubject, classInfo, subjectsResp] = await Promise.all([
         trackedFetch(`/api/gradebook/classes/${classId}/journal`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then((r) => {
@@ -62,11 +70,13 @@ export function AdminClassJournalPage() {
           if (!r.ok) throw new Error("Failed to load class info");
           return r.json();
         }),
+        apiListSubjects(token),
       ]);
 
       setJournalByDates(byDates);
       setJournalBySubject(bySubject);
       setClassName(classInfo.class?.name || "");
+      setAllSubjects(subjectsResp.subjects || []);
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -155,7 +165,7 @@ export function AdminClassJournalPage() {
             <thead>
               <tr>
                 <th className={styles.stickyCol}>Ученик</th>
-                {journalBySubject.subjects.map((subj) => (
+                {(subjectColumns.length ? subjectColumns : journalBySubject.subjects).map((subj) => (
                   <th key={subj}>{subj}</th>
                 ))}
                 <th className={styles.avgCol}>Средний балл</th>
@@ -164,7 +174,8 @@ export function AdminClassJournalPage() {
             <tbody>
               {journalBySubject.students.map((student) => {
                 const studentData = journalBySubject.data[student.id] || {};
-                const allAverages = journalBySubject.subjects
+                const cols = subjectColumns.length ? subjectColumns : journalBySubject.subjects;
+                const allAverages = cols
                   .map((subj) => studentData[subj]?.average)
                   .filter((avg): avg is number => avg !== null && avg !== undefined);
                 const overallAvg = allAverages.length > 0 ? allAverages.reduce((a, b) => a + b, 0) / allAverages.length : null;
@@ -172,7 +183,7 @@ export function AdminClassJournalPage() {
                 return (
                   <tr key={student.id}>
                     <td className={styles.stickyCol}>{student.name}</td>
-                    {journalBySubject.subjects.map((subj) => {
+                    {cols.map((subj) => {
                       const subjData = studentData[subj];
                       return (
                         <td key={subj} title={subjData?.grades?.length ? `Оценки: ${subjData.grades.join(", ")}` : ""}>

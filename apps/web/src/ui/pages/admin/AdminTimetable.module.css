@@ -89,20 +89,27 @@
   overflow: auto;
 }
 
+.gridContainer {
+  --tt-time-col: 100px;
+  --tt-slot-col-min: 180px;
+  --tt-slot-col-max: 260px;
+}
+
 .grid {
   display: grid;
-  grid-template-columns: 100px repeat(5, minmax(140px, 1fr));
-  min-width: max-content;
+  grid-template-columns: var(--tt-time-col) repeat(5, minmax(var(--tt-slot-col-min), var(--tt-slot-col-max)));
+  width: max-content;
 }
 
 .timeHeader {
   display: grid;
-  grid-template-columns: 100px repeat(5, minmax(140px, 1fr));
+  grid-template-columns: var(--tt-time-col) repeat(5, minmax(var(--tt-slot-col-min), var(--tt-slot-col-max)));
   background: #1a2332;
   border-bottom: 1px solid #2a3542;
   position: sticky;
   top: 0;
   z-index: 10;
+  width: max-content;
 }
 
 .timeSlot {
@@ -110,6 +117,7 @@
   text-align: center;
   border-right: 1px solid #2a3542;
   font-size: 12px;
+  min-width: 0;
 }
 
 .timeSlot:first-child {
@@ -148,6 +156,7 @@
   border-bottom: 1px solid #2a3542;
   position: relative;
   min-height: 80px;
+  min-width: 0;
 }
 
 .lesson {
@@ -159,6 +168,7 @@
   flex-direction: column;
   cursor: pointer;
   transition: opacity 0.2s;
+  min-width: 0;
 }
 
 .lesson:hover {
@@ -175,12 +185,16 @@
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lessonTeacher {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.9);
   margin-top: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .addButton {
