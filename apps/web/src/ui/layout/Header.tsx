@@ -17,7 +17,8 @@ const FLAGS: Record<Lang, string> = {
 
 export function Header({ title, showLogo = true }: HeaderProps) {
   const { lang, setLang, t } = useI18n();
-  const { logout, user } = useAuth();
+  const { logout, state } = useAuth();
+  const user = state.user;
   const navigate = useNavigate();
 
   const toggleLang = () => {
