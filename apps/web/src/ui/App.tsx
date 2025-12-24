@@ -20,6 +20,7 @@ import { StudentHomePage } from './pages/student/StudentHomePage';
 import { StudentTimetablePage } from './pages/student/StudentTimetablePage';
 import { StudentGradesPage } from './pages/student/StudentGradesPage';
 import { StudentLibraryPage } from './pages/student/StudentLibraryPage';
+import StudentHomeworkPage from './pages/student/StudentHomeworkPage';
 import { ProfilePage } from './pages/ProfilePage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -236,6 +237,14 @@ export function App() {
           element={
             <RequireAuth>
               <StudentLibraryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/homework"
+          element={
+            <RequireAuth>
+              <StudentHomeworkPage />
             </RequireAuth>
           }
         />

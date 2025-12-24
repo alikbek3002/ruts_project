@@ -139,7 +139,7 @@ def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin
     
     journal_records = (
         sb.table("lesson_journal")
-        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment")
+        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment,lesson_topic,homework")
         .in_("timetable_entry_id", entry_ids)
         .order("lesson_date", desc=False)
         .execute()
@@ -147,8 +147,10 @@ def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin
         or []
     )
     
-    # Группируем уроки по датам
+    # Группируем уроки по датам и собираем темы/ДЗ
     lessons_by_date = {}
+    lesson_info = {}  # Храним тему и ДЗ для каждого урока
+    
     for record in journal_records:
         entry_id = record.get("timetable_entry_id")
         date = record.get("lesson_date")
@@ -165,9 +167,23 @@ def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin
                 "timetable_entry_id": entry_id,
                 "subject_name": entry.get("subject", "")
             }
+        
+        # Собираем тему урока и ДЗ (берем первое непустое значение)
+        if key not in lesson_info:
+            lesson_info[key] = {"lesson_topic": None, "homework": None}
+        
+        if record.get("lesson_topic") and not lesson_info[key]["lesson_topic"]:
+            lesson_info[key]["lesson_topic"] = record["lesson_topic"]
+        if record.get("homework") and not lesson_info[key]["homework"]:
+            lesson_info[key]["homework"] = record["homework"]
     
-    # Сортируем уроки по дате
+    # Сортируем уроки по дате и добавляем тему/ДЗ
     lessons = sorted(lessons_by_date.values(), key=lambda x: x["date"])
+    for lesson in lessons:
+        key = f"{lesson['date']}_{lesson['timetable_entry_id']}"
+        info = lesson_info.get(key, {})
+        lesson["lesson_topic"] = info.get("lesson_topic")
+        lesson["homework"] = info.get("homework")
     
     # Структура: grades[student_id][lesson_key] = {grades: [...], present: bool|null}
     grades = {}
@@ -420,3 +436,233 @@ def export_journal(class_id: str, user: dict = require_role("teacher", "admin", 
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+class UpdateLessonInfoIn(BaseModel):
+    timetable_entry_id: str
+    lesson_date: str  # YYYY-MM-DD
+    lesson_topic: str | None = None
+    homework: str | None = None
+
+
+@router.post("/classes/{class_id}/lesson-info")
+def update_lesson_info(
+    class_id: str,
+    payload: UpdateLessonInfoIn,
+    user: dict = require_role("teacher", "admin", "manager")
+):
+    """Обновить тему урока и домашнее задание"""
+    sb = get_supabase()
+    
+    # Проверяем урок
+    entry = (
+        sb.table("timetable_entries")
+        .select("id,class_id,teacher_id")
+        .eq("id", payload.timetable_entry_id)
+        .eq("class_id", class_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    entry_data = entry[0]
+    
+    # Проверяем права
+    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Not your lesson")
+    
+    # Проверяем есть ли уже записи для этого урока/даты
+    existing = (
+        sb.table("lesson_journal")
+        .select("*")
+        .eq("timetable_entry_id", payload.timetable_entry_id)
+        .eq("lesson_date", payload.lesson_date)
+        .execute()
+        .data or []
+    )
+    
+    update_data = {}
+    if payload.lesson_topic is not None:
+        update_data["lesson_topic"] = payload.lesson_topic
+    if payload.homework is not None:
+        update_data["homework"] = payload.homework
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+    
+    if existing:
+        # Обновляем все существующие записи для этого урока
+        sb.table("lesson_journal").update(update_data).eq("timetable_entry_id", payload.timetable_entry_id).eq("lesson_date", payload.lesson_date).execute()
+    else:
+        # Если нет записей, создаем их для всех студентов класса
+        students_resp = (
+            sb.table("class_enrollments")
+            .select("student_id")
+            .eq("class_id", class_id)
+            .execute()
+        )
+        students = students_resp.data or []
+        
+        if students:
+            insert_records = [
+                {
+                    "timetable_entry_id": payload.timetable_entry_id,
+                    "lesson_date": payload.lesson_date,
+                    "student_id": s["student_id"],
+                    "created_by": user["id"],
+                    **update_data
+                }
+                for s in students
+            ]
+            sb.table("lesson_journal").insert(insert_records).execute()
+    
+    return {"success": True, "message": "Lesson info updated"}
+
+
+@router.get("/classes/{class_id}/lesson-info")
+def get_lesson_info(
+    class_id: str,
+    timetable_entry_id: str,
+    lesson_date: str,
+    user: CurrentUser
+):
+    """Получить тему урока и домашнее задание для конкретного урока"""
+    sb = get_supabase()
+    
+    # Проверяем урок
+    entry = (
+        sb.table("timetable_entries")
+        .select("id,class_id,subject,teacher_id,subject_id,subjects(name)")
+        .eq("id", timetable_entry_id)
+        .eq("class_id", class_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    entry_data = entry[0]
+    subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
+    
+    # Проверяем доступ
+    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Not your lesson")
+    
+    if user["role"] == "student":
+        # Студент может видеть только если он в этом классе
+        enrollment = (
+            sb.table("class_enrollments")
+            .select("id")
+            .eq("class_id", class_id)
+            .eq("student_id", user["id"])
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not enrollment:
+            raise HTTPException(status_code=403, detail="Not in this class")
+    
+    # Получаем тему и ДЗ
+    records = (
+        sb.table("lesson_journal")
+        .select("lesson_topic,homework")
+        .eq("timetable_entry_id", timetable_entry_id)
+        .eq("lesson_date", lesson_date)
+        .execute()
+        .data
+        or []
+    )
+    
+    # Берем первую запись с непустыми полями
+    lesson_topic = None
+    homework = None
+    
+    for record in records:
+        if record.get("lesson_topic") and not lesson_topic:
+            lesson_topic = record["lesson_topic"]
+        if record.get("homework") and not homework:
+            homework = record["homework"]
+    
+    return {
+        "lesson_topic": lesson_topic,
+        "homework": homework,
+        "subject": entry_data.get("subject"),
+        "subject_name": subject_name,
+        "lesson_date": lesson_date
+    }
+
+
+@router.get("/student/homework")
+def get_student_homework(user: dict = require_role("student")):
+    """Получить все домашние задания для студента"""
+    sb = get_supabase()
+    
+    # Получаем классы студента
+    enrollments = (
+        sb.table("class_enrollments")
+        .select("class_id")
+        .eq("student_id", user["id"])
+        .execute()
+        .data
+        or []
+    )
+    
+    class_ids = [e.get("class_id") for e in enrollments if e.get("class_id")]
+    if not class_ids:
+        return {"homework": []}
+    
+    # Получаем расписание этих классов
+    timetable = (
+        sb.table("timetable_entries")
+        .select("id,class_id,subject,weekday,start_time,subject_id,classes(name),subjects(name)")
+        .in_("class_id", class_ids)
+        .execute()
+        .data
+        or []
+    )
+    
+    timetable_ids = [e.get("id") for e in timetable]
+    if not timetable_ids:
+        return {"homework": []}
+    
+    # Получаем все ДЗ за последние 30 дней
+    from datetime import date, timedelta
+    date_from = (date.today() - timedelta(days=30)).isoformat()
+    
+    homework_records = (
+        sb.table("lesson_journal")
+        .select("timetable_entry_id,lesson_date,homework,lesson_topic")
+        .in_("timetable_entry_id", timetable_ids)
+        .gte("lesson_date", date_from)
+        .not_.is_("homework", "null")
+        .order("lesson_date", desc=True)
+        .execute()
+        .data
+        or []
+    )
+    
+    # Группируем и форматируем
+    result = []
+    for record in homework_records:
+        entry_id = record.get("timetable_entry_id")
+        entry = next((e for e in timetable if e.get("id") == entry_id), None)
+        if not entry:
+            continue
+        
+        class_name = entry.get("classes", {}).get("name", "Unknown") if entry.get("classes") else "Unknown"
+        subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject", "Unknown")
+        
+        result.append({
+            "lesson_date": record.get("lesson_date"),
+            "subject": entry.get("subject", "Unknown"),
+            "subject_name": subject_name,
+            "class_name": class_name,
+            "lesson_topic": record.get("lesson_topic"),
+            "homework": record.get("homework"),
+            "timetable_entry_id": entry_id
+        })
+    
+    return {"homework": result}

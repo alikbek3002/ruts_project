@@ -641,3 +641,55 @@ export async function apiDeleteProfilePhoto(token: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// Lesson topic and homework
+export type LessonInfo = {
+  lesson_topic: string | null;
+  homework: string | null;
+  subject: string;
+  lesson_date: string;
+};
+
+export async function apiUpdateLessonInfo(
+  token: string,
+  classId: string,
+  data: {
+    timetable_entry_id: string;
+    lesson_date: string;
+    lesson_topic?: string | null;
+    homework?: string | null;
+  }
+) {
+  return http<{ success: boolean; message: string }>(`/journal/classes/${classId}/lesson-info`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiGetLessonInfo(
+  token: string,
+  classId: string,
+  timetableEntryId: string,
+  lessonDate: string
+) {
+  const params = new URLSearchParams({
+    timetable_entry_id: timetableEntryId,
+    lesson_date: lessonDate,
+  });
+  return apiGet<LessonInfo>(`/journal/classes/${classId}/lesson-info?${params}`, token);
+}
+
+export type HomeworkItem = {
+  lesson_date: string;
+  subject: string;
+  subject_name: string;
+  class_name: string;
+  lesson_topic: string | null;
+  homework: string;
+  timetable_entry_id: string;
+};
+
+export async function apiGetStudentHomework(token: string) {
+  return apiGet<{ homework: HomeworkItem[] }>("/journal/student/homework", token);
+}

@@ -26,7 +26,9 @@ type Lesson = {
   date: string;
   timetable_entry_id: string;
   subject_name: string;
-  subject_id: string;
+  subject_id?: string;
+  lesson_topic?: string | null;
+  homework?: string | null;
 };
 
 type JournalData = {
@@ -57,6 +59,11 @@ export function TeacherJournalPage() {
   const [addingGrade, setAddingGrade] = useState<{ studentId: string; lessonKey: string; lesson: Lesson } | null>(null);
   const [newGrade, setNewGrade] = useState<number>(5);
   const [newComment, setNewComment] = useState<string>("");
+
+  // Для темы урока и ДЗ
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
+  const [lessonTopic, setLessonTopic] = useState<string>("");
+  const [homework, setHomework] = useState<string>("");
 
   useEffect(() => {
     if (!token) return;
@@ -160,6 +167,50 @@ export function TeacherJournalPage() {
     }
   }
 
+  function openLessonEditor(lesson: Lesson) {
+    setEditingLesson(lesson);
+    setLessonTopic(lesson.lesson_topic || "");
+    setHomework(lesson.homework || "");
+  }
+
+  async function saveLessonInfo() {
+    if (!token || !selectedClassId || !editingLesson) return;
+    setErr(null);
+    try {
+      const resp = await fetch(`/api/journal/classes/${selectedClassId}/lesson-info`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          timetable_entry_id: editingLesson.timetable_entry_id,
+          lesson_date: editingLesson.date,
+          lesson_topic: lessonTopic || null,
+          homework: homework || null,
+        }),
+      });
+      if (!resp.ok) throw new Error("Failed to save lesson info");
+      
+      // Обновляем локально
+      setJournal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          lessons: prev.lessons.map((l) =>
+            l.date === editingLesson.date && l.timetable_entry_id === editingLesson.timetable_entry_id
+              ? { ...l, lesson_topic: lessonTopic, homework: homework }
+              : l
+          ),
+        };
+      });
+      
+      setEditingLesson(null);
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+
   function calculateAverage(studentId: string): number | null {
     if (!journal) return null;
     const allGrades: number[] = [];
@@ -238,8 +289,35 @@ export function TeacherJournalPage() {
                   const colClass = idx % 2 === 0 ? styles.dateCol : styles.dateColAlt;
                   return (
                     <th key={key} className={colClass}>
-                      <div>{lesson.date}</div>
-                      <div className={styles.subjectName}>{lesson.subject_name}</div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
+                        <div style={{ flex: 1 }}>
+                          <div>{lesson.date}</div>
+                          <div className={styles.subjectName}>{lesson.subject_name}</div>
+                        </div>
+                        <button
+                          onClick={() => openLessonEditor(lesson)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "16px",
+                            padding: "2px 4px",
+                          }}
+                          title="Тема и ДЗ"
+                        >
+                          📝
+                        </button>
+                      </div>
+                      {lesson.lesson_topic && (
+                        <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
+                          📖 {lesson.lesson_topic}
+                        </div>
+                      )}
+                      {lesson.homework && (
+                        <div style={{ fontSize: "11px", color: "#0066cc", marginTop: "2px" }}>
+                          📚 ДЗ
+                        </div>
+                      )}
                     </th>
                   );
                 })}
@@ -313,6 +391,110 @@ export function TeacherJournalPage() {
 
       {!loading && !selectedClassId && (
         <p style={{ color: "#666" }}>{t("journal.selectClass")}</p>
+      )}
+
+      {/* Модалка для редактирования темы урока и ДЗ */}
+      {editingLesson && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setEditingLesson(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              padding: "24px",
+              borderRadius: "8px",
+              maxWidth: "600px",
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              {editingLesson.subject_name} - {editingLesson.date}
+            </h3>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "4px", fontWeight: "bold" }}>
+                Тема урока:
+              </label>
+              <textarea
+                value={lessonTopic}
+                onChange={(e) => setLessonTopic(e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: "60px",
+                  padding: "8px",
+                  fontSize: "14px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  fontFamily: "inherit",
+                }}
+                placeholder="Введите тему урока..."
+              />
+            </div>
+
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", marginBottom: "4px", fontWeight: "bold" }}>
+                Домашнее задание:
+              </label>
+              <textarea
+                value={homework}
+                onChange={(e) => setHomework(e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: "80px",
+                  padding: "8px",
+                  fontSize: "14px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  fontFamily: "inherit",
+                }}
+                placeholder="Введите домашнее задание..."
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setEditingLesson(null)}
+                style={{
+                  padding: "8px 16px",
+                  border: "1px solid #ccc",
+                  backgroundColor: "white",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={saveLessonInfo}
+                style={{
+                  padding: "8px 16px",
+                  border: "none",
+                  backgroundColor: "#0066cc",
+                  color: "white",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                }}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

@@ -18,6 +18,7 @@ export function StudentHomePage() {
         { to: "/app", label: "Dashboard" },
         { to: "/app/student/timetable", label: "Расписание" },
         { to: "/app/student/grades", label: "Оценки" },
+        { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
       ]}
     >
