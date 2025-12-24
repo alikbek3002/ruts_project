@@ -4,6 +4,7 @@ import {
   apiTeacherLessonJournalGet,
   apiTeacherLessonJournalSave,
   apiTimetableWeek,
+  apiCreateZoomMeetingNew,
   type LessonJournalStudentRow,
   type WeekTimetableItem,
 } from "../../../api/client";
@@ -84,6 +85,15 @@ export function TeacherTimetablePage() {
   } | null>(null);
   const [journalRows, setJournalRows] = useState<LessonJournalStudentRow[]>([]);
 
+  // Zoom meeting states
+  const [zoomModalOpen, setZoomModalOpen] = useState(false);
+  const [zoomLesson, setZoomLesson] = useState<WeekTimetableItem | null>(null);
+  const [zoomDay, setZoomDay] = useState<Date | null>(null);
+  const [zoomTime, setZoomTime] = useState("");
+  const [zoomCreating, setZoomCreating] = useState(false);
+  const [zoomErr, setZoomErr] = useState<string | null>(null);
+  const [zoomSuccess, setZoomSuccess] = useState<string | null>(null);
+
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
@@ -141,6 +151,36 @@ export function TeacherTimetablePage() {
       setJournalErr(String(e));
     } finally {
       setJournalLoading(false);
+    }
+  }
+
+  async function openZoomModal(lesson: WeekTimetableItem, day: Date) {
+    const timeStr = `${lesson.start_time.slice(0, 5)}`;
+    setZoomLesson(lesson);
+    setZoomDay(day);
+    setZoomTime(timeStr);
+    setZoomErr(null);
+    setZoomSuccess(null);
+    setZoomModalOpen(true);
+  }
+
+  async function createZoomMeeting() {
+    if (!token || !zoomLesson || !zoomDay || !zoomTime) return;
+    
+    setZoomCreating(true);
+    setZoomErr(null);
+    setZoomSuccess(null);
+
+    try {
+      const startsAtISO = `${ymd(zoomDay)}T${zoomTime}:00`;
+      await apiCreateZoomMeetingNew(token, zoomLesson.id, startsAtISO);
+      setZoomSuccess("Zoom встреча создана!");
+      await reload(); // Refresh to show zoom link
+      setTimeout(() => setZoomModalOpen(false), 1500);
+    } catch (e) {
+      setZoomErr(`Ошибка создания встречи: ${String(e)}`);
+    } finally {
+      setZoomCreating(false);
     }
   }
 
@@ -210,19 +250,69 @@ export function TeacherTimetablePage() {
                 return (
                   <div key={ts.slot} className={styles.cell}>
                     {lesson ? (
-                      <div
-                        className={styles.lesson}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => openJournal(lesson, day)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") openJournal(lesson, day);
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        {lesson.room && <div className={styles.lessonRoom}>{lesson.room}</div>}
-                        <div className={styles.lessonSubject}>{lesson.subject}</div>
-                        <div className={styles.lessonTeacher}>{lesson.class_name}</div>
+                      <div className={styles.lesson}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openJournal(lesson, day)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") openJournal(lesson, day);
+                          }}
+                          style={{ cursor: "pointer", flex: 1 }}
+                        >
+                          {lesson.room && <div className={styles.lessonRoom}>{lesson.room}</div>}
+                          <div className={styles.lessonSubject}>{lesson.subject}</div>
+                          <div className={styles.lessonTeacher}>{lesson.class_name}</div>
+                          {lesson.zoom && (
+                            <div style={{ marginTop: 4, fontSize: 12, color: "#0066cc" }}>
+                              📹 Zoom встреча
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ 
+                          display: "flex", 
+                          gap: 4, 
+                          marginTop: 8, 
+                          justifyContent: "center",
+                          flexWrap: "wrap"
+                        }}>
+                          {lesson.zoom ? (
+                            <a
+                              href={lesson.zoom.join_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                padding: "4px 8px",
+                                background: "#0066cc",
+                                color: "white",
+                                textDecoration: "none",
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Войти в Zoom
+                            </a>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openZoomModal(lesson, day);
+                              }}
+                              style={{
+                                padding: "4px 8px",
+                                background: "#f0f0f0",
+                                border: "1px solid #ccc",
+                                borderRadius: 4,
+                                fontSize: 11,
+                                cursor: "pointer",
+                              }}
+                            >
+                              📹 Создать Zoom
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className={styles.readonlyEmpty} />
@@ -306,6 +396,65 @@ export function TeacherTimetablePage() {
               </button>
               <button className={styles.saveButton} onClick={saveJournal} disabled={journalLoading || !journalLesson}>
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {zoomModalOpen && (
+        <div className={styles.modal} onClick={() => !zoomCreating && setZoomModalOpen(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalTitle}>Создать Zoom встречу</div>
+            {zoomLesson && zoomDay && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <strong>{zoomLesson.class_name}</strong> — {zoomLesson.subject}
+                </div>
+                <div style={{ fontSize: 14, opacity: 0.8 }}>
+                  {formatDate(zoomDay)}, {zoomLesson.start_time.slice(0, 5)}-{zoomLesson.end_time.slice(0, 5)}
+                  {zoomLesson.room && ` • ${zoomLesson.room}`}
+                </div>
+              </div>
+            )}
+
+            {zoomErr && <div style={{ padding: 12, background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 12 }}>{zoomErr}</div>}
+            {zoomSuccess && <div style={{ padding: 12, background: "#efe", color: "#060", borderRadius: 8, marginBottom: 12 }}>{zoomSuccess}</div>}
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
+                Время начала встречи:
+              </label>
+              <input
+                type="time"
+                value={zoomTime}
+                onChange={(e) => setZoomTime(e.target.value)}
+                disabled={zoomCreating}
+                style={{ width: "100%", padding: "8px 12px", fontSize: 14 }}
+              />
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                Встреча будет создана на {zoomDay ? formatDate(zoomDay) : ""} в {zoomTime}
+              </div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button 
+                className={styles.cancelButton} 
+                onClick={() => !zoomCreating && setZoomModalOpen(false)}
+                disabled={zoomCreating}
+              >
+                Отмена
+              </button>
+              <button 
+                className={styles.saveButton} 
+                onClick={createZoomMeeting} 
+                disabled={zoomCreating || !zoomTime}
+                style={{
+                  background: zoomCreating ? "#ccc" : "#0066cc",
+                  cursor: zoomCreating || !zoomTime ? "not-allowed" : "pointer",
+                }}
+              >
+                {zoomCreating ? "Создание..." : "📹 Создать встречу"}
               </button>
             </div>
           </div>

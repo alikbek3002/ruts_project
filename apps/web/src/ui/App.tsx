@@ -20,6 +20,7 @@ import { StudentHomePage } from './pages/student/StudentHomePage';
 import { StudentTimetablePage } from './pages/student/StudentTimetablePage';
 import { StudentGradesPage } from './pages/student/StudentGradesPage';
 import { StudentLibraryPage } from './pages/student/StudentLibraryPage';
+import { ProfilePage } from './pages/ProfilePage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { state } = useAuth();
@@ -235,6 +236,16 @@ export function App() {
           element={
             <RequireAuth>
               <StudentLibraryPage />
+            </RequireAuth>
+          }
+        />
+
+        {/* Profile page - available for all roles */}
+        <Route
+          path="/app/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
             </RequireAuth>
           }
         />

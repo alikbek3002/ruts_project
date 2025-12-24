@@ -17,7 +17,7 @@ const FLAGS: Record<Lang, string> = {
 
 export function Header({ title, showLogo = true }: HeaderProps) {
   const { lang, setLang, t } = useI18n();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const toggleLang = () => {
@@ -27,6 +27,10 @@ export function Header({ title, showLogo = true }: HeaderProps) {
   const handleLogout = () => {
     logout();
     navigate("/login");
+  };
+
+  const handleProfile = () => {
+    navigate("/app/profile");
   };
 
   return (
@@ -49,6 +53,13 @@ export function Header({ title, showLogo = true }: HeaderProps) {
           >
             <span className={styles.langFlag}>{FLAGS[lang]}</span>
             <span className={styles.langCode}>{lang.toUpperCase()}</span>
+          </button>
+          <button
+            className={styles.langBtn}
+            onClick={handleProfile}
+            title="Profile"
+          >
+            👤 {user?.username || "Profile"}
           </button>
           <button
             className={styles.logoutBtn}

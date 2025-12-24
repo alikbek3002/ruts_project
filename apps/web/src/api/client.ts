@@ -444,6 +444,7 @@ export type LibraryItem = {
   title: string;
   description: string | null;
   class_id: string | null;
+  storage_path: string;
   created_at: string;
 };
 export async function apiListLibrary(token: string, classId?: string) {
@@ -455,4 +456,188 @@ export async function apiCreateLibraryItem(
   body: { title: string; description?: string; class_id?: string | null; storage_path: string }
 ) {
   return apiPost<{ item: any }>("/library", body, token);
+}
+
+// Upload file to library
+export async function apiUploadLibraryFile(
+  token: string,
+  file: File,
+  title: string,
+  description?: string,
+  classId?: string | null,
+  onProgress?: (percent: number) => void
+): Promise<{ item: LibraryItem; originalFilename: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("title", title);
+  if (description) formData.append("description", description);
+  if (classId) formData.append("class_id", classId);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+    }
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } catch (e) {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error"));
+    });
+
+    xhr.open("POST", `${API_BASE}/library/upload`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+// Get download URL for library file
+export async function apiGetLibraryDownloadUrl(token: string, itemId: string) {
+  return apiGet<{ url: string }>(`/library/${encodeURIComponent(itemId)}/download-url`, token);
+}
+
+// Delete library item
+export async function apiDeleteLibraryItem(token: string, itemId: string) {
+  return http<{ ok: boolean }>(`/library/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Zoom meetings
+export type ZoomMeeting = {
+  id: string;
+  timetable_entry_id: string;
+  starts_at: string;
+  zoom_meeting_id: string;
+  join_url: string;
+  start_url?: string | null;
+  created_at: string;
+  timetable_entries?: {
+    subject: string;
+    start_time: string;
+    end_time: string;
+    classes?: { name: string };
+  };
+};
+
+export async function apiCreateZoomMeetingNew(token: string, timetableEntryId: string, startsAtLocalISO: string) {
+  const body = { timetableEntryId, startsAt: startsAtLocalISO };
+  return apiPost<{ meeting: ZoomMeeting }>("/zoom/meetings", body, token);
+}
+
+export async function apiListZoomMeetings(token: string) {
+  return apiGet<{ meetings: ZoomMeeting[] }>("/zoom/meetings", token);
+}
+
+export async function apiDeleteZoomMeeting(token: string, meetingId: string) {
+  return http<{ ok: boolean }>(`/zoom/meetings/${encodeURIComponent(meetingId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Profile
+export type UserProfile = {
+  id: string;
+  role: string;
+  username: string;
+  full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  phone?: string | null;
+  birth_date?: string | null;
+  photo_data_url?: string | null;
+  teacher_subject?: string | null;
+  teacher_subject_name?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export async function apiGetProfile(token: string) {
+  return apiGet<{ profile: UserProfile }>("/profile", token);
+}
+
+export async function apiUpdateProfile(token: string, data: Partial<UserProfile>) {
+  return http<{ profile: UserProfile }>("/profile", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiChangePasswordProfile(token: string, currentPassword: string, newPassword: string) {
+  return apiPost<{ success: boolean; message: string }>(
+    "/profile/change-password",
+    { current_password: currentPassword, new_password: newPassword },
+    token
+  );
+}
+
+export async function apiUploadProfilePhoto(
+  token: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ photo_url: string }> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("photo", file);
+
+    const xhr = new XMLHttpRequest();
+
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+    }
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } catch {
+          reject(new Error("Invalid response"));
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error"));
+    });
+
+    xhr.open("POST", `${API_BASE}/profile/upload-photo`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+export async function apiDeleteProfilePhoto(token: string) {
+  return http<{ success: boolean; message: string }>("/profile/photo", {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }

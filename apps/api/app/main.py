@@ -14,6 +14,7 @@ from app.modules.subjects.router import router as subjects_router
 from app.modules.directions.router import router as directions_router
 from app.modules.library.router import router as library_router
 from app.modules.zoom.router import router as zoom_router
+from app.modules.profile.router import router as profile_router
 
 app = FastAPI(title="RUTS Journal API", version="0.1.0")
 
@@ -39,6 +40,7 @@ app.include_router(subjects_router, prefix="/api/subjects", tags=["subjects"])
 app.include_router(directions_router, prefix="/api/directions", tags=["directions"])
 app.include_router(library_router, prefix="/api/library", tags=["library"])
 app.include_router(zoom_router, prefix="/api/zoom", tags=["zoom"])
+app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
 
 
 @app.get("/api/health")
