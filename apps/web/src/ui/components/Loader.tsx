@@ -4,11 +4,12 @@ import styles from "./Loader.module.css";
 type LoaderProps = {
   text?: string;
   fullScreen?: boolean;
+  size?: "sm" | "md" | "lg";
 };
 
-export function Loader({ text = "Загрузка...", fullScreen = false }: LoaderProps) {
+export function Loader({ text = "Загрузка...", fullScreen = false, size = "md" }: LoaderProps) {
   const content = (
-    <div className={styles.loaderContainer}>
+    <div className={`${styles.loaderContainer} ${styles[`size_${size}`] ?? ""}`.trim()}>
       <div className={styles.logoWrapper}>
         <img 
           src="/assets/rob-logo.png" 

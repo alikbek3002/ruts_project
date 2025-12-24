@@ -6,6 +6,7 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { Loader } from "../../components/Loader";
 
 export function AdminDirectionsPage() {
   const { state } = useAuth();
@@ -15,11 +16,17 @@ export function AdminDirectionsPage() {
 
   const [directions, setDirections] = useState<Direction[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function reload() {
     if (!token) return;
-    const resp = await apiListDirections(token);
-    setDirections(resp.directions || []);
+    setLoading(true);
+    try {
+      const resp = await apiListDirections(token);
+      setDirections(resp.directions || []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -45,6 +52,8 @@ export function AdminDirectionsPage() {
       ]}
     >
       {err && <p style={{ color: "crimson" }}>{err}</p>}
+
+      {loading && <Loader text="Загрузка..." />}
       
       <h3>🏢 Направления</h3>
       <p style={{ color: "#666", marginBottom: 16 }}>
@@ -52,7 +61,7 @@ export function AdminDirectionsPage() {
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-        {directions.map((d) => (
+        {!loading && directions.map((d) => (
           <div
             key={d.id}
             style={{

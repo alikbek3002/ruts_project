@@ -1,4 +1,38 @@
 const API_BASE = import.meta.env.VITE_API_BASE as string;
+const AUTH_STORAGE_KEY = "ruts_auth";
+
+type LoadingListener = (isLoading: boolean) => void;
+
+let inFlightRequests = 0;
+const loadingListeners = new Set<LoadingListener>();
+
+function emitLoading() {
+  const isLoading = inFlightRequests > 0;
+  for (const listener of loadingListeners) listener(isLoading);
+}
+
+export function getApiLoading(): boolean {
+  return inFlightRequests > 0;
+}
+
+export function subscribeApiLoading(listener: LoadingListener): () => void {
+  loadingListeners.add(listener);
+  listener(inFlightRequests > 0);
+  return () => {
+    loadingListeners.delete(listener);
+  };
+}
+
+export async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  inFlightRequests += 1;
+  emitLoading();
+  try {
+    return await fetch(input, init);
+  } finally {
+    inFlightRequests = Math.max(0, inFlightRequests - 1);
+    emitLoading();
+  }
+}
 
 type HttpError = Error & { status?: number; bodyText?: string };
 
@@ -12,14 +46,32 @@ async function readErrorText(res: Response): Promise<string> {
 
 async function refreshAccessToken(): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
+    const res = await trackedFetch(`${API_BASE}/auth/refresh`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { accessToken?: string };
-    return data.accessToken ?? null;
+    const next = data.accessToken ?? null;
+    if (next) {
+      // Keep stored accessToken in sync so a page reload doesn't fall back to an expired token.
+      try {
+        const update = (store: Storage): boolean => {
+          const raw = store.getItem(AUTH_STORAGE_KEY);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          store.setItem(AUTH_STORAGE_KEY, JSON.stringify({ ...parsed, accessToken: next }));
+          return true;
+        };
+
+        // Prefer updating whichever storage currently holds auth.
+        if (!update(localStorage)) update(sessionStorage);
+      } catch {
+        // ignore
+      }
+    }
+    return next;
   } catch {
     return null;
   }
@@ -33,7 +85,7 @@ function hasAuthHeader(init?: RequestInit): boolean {
 }
 
 async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await trackedFetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -127,12 +179,25 @@ export type Subject = {
   photo_url?: string | null;
 };
 
+export type SubjectTeacher = {
+  id: string;
+  name: string;
+};
+
+export type SubjectWithTeachers = Subject & {
+  teachers: SubjectTeacher[];
+};
+
 export async function apiListDirections(token: string) {
   return apiGet<{ directions: Direction[] }>("/directions", token);
 }
 
 export async function apiListSubjects(token: string) {
   return apiGet<{ subjects: Subject[] }>("/subjects/subjects", token);
+}
+
+export async function apiListSubjectsWithTeachers(token: string) {
+  return apiGet<{ subjects: SubjectWithTeachers[] }>("/subjects/subjects-with-teachers", token);
 }
 
 export async function apiCreateSubject(token: string, name: string, photoUrl?: string | null) {
@@ -210,6 +275,29 @@ export async function apiAdminGetUser(token: string, userId: string) {
   );
 }
 
+export async function apiAdminUpdateUser(
+  token: string,
+  userId: string,
+  body: {
+    first_name?: string | null;
+    last_name?: string | null;
+    middle_name?: string | null;
+    phone?: string | null;
+    birth_date?: string | null; // YYYY-MM-DD
+    photo_data_url?: string | null;
+    class_id?: string | null;
+  }
+) {
+  return http<{ user: AdminUserDetails; class: { id: string; name: string | null } | null }>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
 export async function apiAdminResetStudentPassword(token: string, userId: string, actorPassword: string) {
   return apiPost<{ tempPassword: string }>(
     `/admin/users/${encodeURIComponent(userId)}/reset-student-password`,
@@ -283,6 +371,14 @@ export async function apiUpdateClass(token: string, classId: string, body: { nam
   });
 }
 
+export async function apiDeleteClass(token: string, classId: string, actorPassword: string) {
+  return http<{ ok: boolean }>(`/classes/${encodeURIComponent(classId)}/delete`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ actor_password: actorPassword }),
+  });
+}
+
 export type ClassStudent = { id: string; username: string; full_name: string | null; student_number?: number | null };
 export async function apiGetClass(token: string, classId: string) {
   return apiGet<{ class: ClassItem | null; students: ClassStudent[] }>(`/classes/${classId}`, token);
@@ -295,7 +391,7 @@ export async function apiEnrollStudent(token: string, body: { class_id: string; 
 export type TimetableEntry = {
   id: string;
   class_id: string;
-  teacher_id: string;
+  teacher_id: string | null;
   subject: string;
   subject_id?: string | null;
   weekday: number;
@@ -340,7 +436,7 @@ export type WeekTimetableItem = {
   id: string;
   class_id: string;
   class_name: string;
-  teacher_id: string;
+  teacher_id: string | null;
   teacher_name: string;
   subject: string;
   weekday: number;

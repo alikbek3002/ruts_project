@@ -15,8 +15,23 @@ export function LoginPage() {
     e.preventDefault();
     setError(null);
     try {
-      await login(username.trim(), password, rememberMe);
-      navigate("/app");
+      const user = await login(username.trim(), password, rememberMe);
+
+      if (user?.must_change_password) {
+        navigate('/change-password', { replace: true });
+        return;
+      }
+
+      const panelLink =
+        user?.role === 'manager'
+          ? '/app/manager'
+          : user?.role === 'admin'
+          ? '/app/admin'
+          : user?.role === 'teacher'
+          ? '/app/teacher'
+          : '/app/student';
+
+      navigate(panelLink, { replace: true });
     } catch (err: any) {
       setError(err.message || "Ошибка авторизации");
     }

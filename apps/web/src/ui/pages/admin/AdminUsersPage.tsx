@@ -4,6 +4,7 @@ import {
   apiAdminCreateUser,
   apiAdminGenerateCredentials,
   apiAdminGetUser,
+  apiAdminUpdateUser,
   apiAdminResetStudentPassword,
   apiAdminResetTeacherPassword,
   apiAdminListUsers,
@@ -51,6 +52,16 @@ export function AdminUsersPage() {
   const [viewTempPassword, setViewTempPassword] = useState<string | null>(null);
   const [viewTeacherSubjectIds, setViewTeacherSubjectIds] = useState<string[]>([]);
   const [viewTeacherSaving, setViewTeacherSaving] = useState(false);
+  const [viewEdit, setViewEdit] = useState(false);
+  const [viewSaving, setViewSaving] = useState(false);
+
+  const [viewEditFirstName, setViewEditFirstName] = useState("");
+  const [viewEditLastName, setViewEditLastName] = useState("");
+  const [viewEditMiddleName, setViewEditMiddleName] = useState("");
+  const [viewEditPhone, setViewEditPhone] = useState("+996");
+  const [viewEditBirthDate, setViewEditBirthDate] = useState("");
+  const [viewEditClassId, setViewEditClassId] = useState("");
+  const [viewEditPhotoDataUrl, setViewEditPhotoDataUrl] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [role, setRole] = useState<Exclude<UserRole, "manager">>("student");
@@ -519,12 +530,29 @@ export function AdminUsersPage() {
                   setViewClass(null);
                   setViewTempPassword(null);
                   setViewTeacherSubjectIds([]);
+                  setViewEdit(false);
+                  setViewSaving(false);
+                  setViewEditFirstName("");
+                  setViewEditLastName("");
+                  setViewEditMiddleName("");
+                  setViewEditPhone("+996");
+                  setViewEditBirthDate("");
+                  setViewEditClassId("");
+                  setViewEditPhotoDataUrl(null);
                   setViewOpen(true);
                   setViewLoading(true);
                   try {
                     const resp = await apiAdminGetUser(token, u.id);
                     setViewUser(resp.user);
                     setViewClass(resp.class);
+
+                    setViewEditFirstName(resp.user.first_name || "");
+                    setViewEditLastName(resp.user.last_name || "");
+                    setViewEditMiddleName(resp.user.middle_name || "");
+                    setViewEditPhone(resp.user.phone || "+996");
+                    setViewEditBirthDate(resp.user.birth_date || "");
+                    setViewEditClassId(resp.class?.id || "");
+                    setViewEditPhotoDataUrl(resp.user.photo_data_url || null);
 
                     if (resp.user.role === "teacher") {
                       try {
@@ -579,9 +607,32 @@ export function AdminUsersPage() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-md)" }}>
               <h3 style={{ margin: 0 }}>Карточка пользователя</h3>
-              <button className="secondary" onClick={() => setViewOpen(false)}>
-                Закрыть
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                {!viewLoading && !viewErr && viewUser && (
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      setViewErr(null);
+                      setViewEdit((v) => !v);
+                      // reset fields from current user when opening edit mode
+                      if (!viewEdit) {
+                        setViewEditFirstName(viewUser.first_name || "");
+                        setViewEditLastName(viewUser.last_name || "");
+                        setViewEditMiddleName(viewUser.middle_name || "");
+                        setViewEditPhone(viewUser.phone || "+996");
+                        setViewEditBirthDate(viewUser.birth_date || "");
+                        setViewEditClassId(viewClass?.id || "");
+                        setViewEditPhotoDataUrl(viewUser.photo_data_url || null);
+                      }
+                    }}
+                  >
+                    {viewEdit ? "Отмена" : "Редактировать"}
+                  </button>
+                )}
+                <button className="secondary" onClick={() => setViewOpen(false)}>
+                  Закрыть
+                </button>
+              </div>
             </div>
 
             {viewLoading && <Loader text="Загрузка..." />}
@@ -602,17 +653,63 @@ export function AdminUsersPage() {
                     justifyContent: "center",
                   }}
                 >
-                  {viewUser.photo_data_url ? (
-                    <img src={viewUser.photo_data_url} alt="Фото" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) ? (
+                    <img
+                      src={(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) || ""}
+                      alt="Фото"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
                   ) : (
                     <span style={{ fontSize: 12, color: "var(--color-text-light)" }}>Нет фото</span>
                   )}
                 </div>
 
+                {viewEdit && (
+                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          const dataUrl = await fileToDataUrl(f);
+                          setViewEditPhotoDataUrl(dataUrl);
+                        } catch (err) {
+                          setViewErr(String(err));
+                        }
+                      }}
+                    />
+                    <button className="secondary" onClick={() => setViewEditPhotoDataUrl(null)}>
+                      Удалить фото
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
                   <div>
                     <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>ФИО</div>
-                    <div style={{ fontWeight: 600 }}>{viewUser.full_name || "—"}</div>
+                    {!viewEdit ? (
+                      <div style={{ fontWeight: 600 }}>{viewUser.full_name || "—"}</div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 4 }}>
+                        <input
+                          placeholder="Фамилия"
+                          value={viewEditLastName}
+                          onChange={(e) => setViewEditLastName(e.target.value)}
+                        />
+                        <input
+                          placeholder="Имя"
+                          value={viewEditFirstName}
+                          onChange={(e) => setViewEditFirstName(e.target.value)}
+                        />
+                        <input
+                          placeholder="Отчество"
+                          value={viewEditMiddleName}
+                          onChange={(e) => setViewEditMiddleName(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Логин</div>
@@ -621,17 +718,69 @@ export function AdminUsersPage() {
 
                   <div>
                     <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Телефон</div>
-                    <div>{viewUser.phone || "—"}</div>
+                    {!viewEdit ? (
+                      <div>{viewUser.phone || "—"}</div>
+                    ) : (
+                      <input value={viewEditPhone} onChange={(e) => setViewEditPhone(e.target.value)} placeholder="+996..." />
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Дата рождения</div>
-                    <div>{viewUser.birth_date || "—"}</div>
+                    {!viewEdit ? (
+                      <div>{viewUser.birth_date || "—"}</div>
+                    ) : (
+                      <input type="date" value={viewEditBirthDate} onChange={(e) => setViewEditBirthDate(e.target.value)} />
+                    )}
                   </div>
 
                   {viewUser.role === "student" && (
                     <div style={{ gridColumn: "1 / -1" }}>
                       <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Группа</div>
-                      <div>{viewClass?.name || "—"}</div>
+                      {!viewEdit ? (
+                        <div>{viewClass?.name || "—"}</div>
+                      ) : (
+                        <select value={viewEditClassId} onChange={(e) => setViewEditClassId(e.target.value)}>
+                          <option value="">(без группы)</option>
+                          {classes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {viewEdit && (
+                    <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+                      <button
+                        disabled={viewSaving}
+                        onClick={async () => {
+                          if (!token) return;
+                          setViewErr(null);
+                          setViewSaving(true);
+                          try {
+                            const resp = await apiAdminUpdateUser(token, viewUser.id, {
+                              first_name: viewEditFirstName.trim() || null,
+                              last_name: viewEditLastName.trim() || null,
+                              middle_name: viewEditMiddleName.trim() || null,
+                              phone: viewEditPhone.trim() || null,
+                              birth_date: viewEditBirthDate || null,
+                              photo_data_url: viewEditPhotoDataUrl,
+                              class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
+                            });
+                            setViewUser(resp.user);
+                            setViewClass(resp.class);
+                            setViewEdit(false);
+                          } catch (e) {
+                            setViewErr(String(e));
+                          } finally {
+                            setViewSaving(false);
+                          }
+                        }}
+                      >
+                        {viewSaving ? "Сохранение..." : "Сохранить изменения"}
+                      </button>
                     </div>
                   )}
                   {viewUser.role === "student" && (

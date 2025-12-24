@@ -26,9 +26,19 @@ WHERE ce.class_id = ranked.class_id
   AND ce.student_id = ranked.student_id;
 
 -- Enforce numbering rules for new/updated rows (existing rows are not validated)
-ALTER TABLE public.class_enrollments
-  ADD CONSTRAINT IF NOT EXISTS chk_class_enrollments_student_number_range
-  CHECK (student_number IS NULL OR (student_number >= 1 AND student_number <= 35)) NOT VALID;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'chk_class_enrollments_student_number_range'
+  ) THEN
+    ALTER TABLE public.class_enrollments
+      ADD CONSTRAINT chk_class_enrollments_student_number_range
+      CHECK (student_number IS NULL OR (student_number >= 1 AND student_number <= 35)) NOT VALID;
+  END IF;
+END
+$$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_class_enrollments_student_number
   ON public.class_enrollments(class_id, student_number)

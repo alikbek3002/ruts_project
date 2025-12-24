@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
+import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
 
 const timeSlots = [
@@ -72,6 +73,7 @@ export function AdminTimetablePage() {
   const [classId, setClassId] = useState("");
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const [weekStart, setWeekStart] = useState<Date>(getMonday(new Date()));
 
@@ -93,19 +95,24 @@ export function AdminTimetablePage() {
 
   async function reload() {
     if (!token) return;
-    const [c, t, s] = await Promise.all([
-      apiListClasses(token), 
-      apiAdminListUsers(token, "teacher"),
-      apiListSubjects(token),
-    ]);
-    setClasses(c.classes);
-    setTeachers(t.users);
-    setSubjects(s.subjects || []);
-    if (classId) {
-      const e = await apiListTimetableEntries(token, classId);
-      setEntries(e.entries);
-    } else {
-      setEntries([]);
+    setLoading(true);
+    try {
+      const [c, t, s] = await Promise.all([
+        apiListClasses(token),
+        apiAdminListUsers(token, "teacher"),
+        apiListSubjects(token),
+      ]);
+      setClasses(c.classes);
+      setTeachers(t.users);
+      setSubjects(s.subjects || []);
+      if (classId) {
+        const e = await apiListTimetableEntries(token, classId);
+        setEntries(e.entries);
+      } else {
+        setEntries([]);
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -122,9 +129,11 @@ export function AdminTimetablePage() {
       setEntries([]);
       return;
     }
+    setLoading(true);
     apiListTimetableEntries(token, classId)
       .then((e) => setEntries(e.entries))
-      .catch((e) => setErr(String(e)));
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
   }, [classId, can, token]);
 
   if (!user) return <Navigate to="/login" replace />;
@@ -224,7 +233,8 @@ export function AdminTimetablePage() {
     );
   }
 
-  function getTeacherName(teacherId: string): string {
+  function getTeacherName(teacherId: string | null | undefined): string {
+    if (!teacherId) return "---";
     const teacher = teachers.find((t) => t.id === teacherId);
     const fullName = teacher?.full_name?.trim();
     if (fullName) return fullName;
@@ -249,6 +259,8 @@ export function AdminTimetablePage() {
     >
       <div className={styles.container}>
         {err && <div className={styles.error}>{err}</div>}
+
+        {loading && <Loader text={t("common.loading") || "Загрузка..."} />}
 
         <div className={styles.header}>
           <div className={styles.headerLeft}>
@@ -378,7 +390,7 @@ export function AdminTimetablePage() {
                 ))}
               </select>
               <small style={{ color: "#666", display: "block", marginTop: 4 }}>
-                Учитель подставится автоматически по предмету
+                Учитель подставится автоматически по предмету (если назначен), иначе будет "---"
               </small>
             </div>
 

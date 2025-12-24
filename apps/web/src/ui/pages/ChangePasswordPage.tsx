@@ -21,7 +21,18 @@ export function ChangePasswordPage() {
       await apiChangePassword(state.accessToken!, oldPassword, newPassword);
       await refreshMe();
       setSuccess(true);
-      setTimeout(() => navigate("/app"), 1500);
+      const role = state.user?.role;
+      const panelLink =
+        role === 'manager'
+          ? '/app/manager'
+          : role === 'admin'
+          ? '/app/admin'
+          : role === 'teacher'
+          ? '/app/teacher'
+          : role === 'student'
+          ? '/app/student'
+          : '/app';
+      setTimeout(() => navigate(panelLink, { replace: true }), 1500);
     } catch (err: any) {
       setError(err.message || "Ошибка смены пароля");
     }

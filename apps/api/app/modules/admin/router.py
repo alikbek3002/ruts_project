@@ -57,6 +57,19 @@ class CreateUserIn(BaseModel):
     subject_ids: list[str] | None = None
 
 
+class UpdateUserIn(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    phone: str | None = None
+    birth_date: date | None = None
+    photo_data_url: str | None = None
+
+    # Student-only: allow moving a student between classes.
+    # If provided as null/None -> unenroll from any class.
+    class_id: str | None = None
+
+
 @router.post("/users")
 def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin", "manager")):
     role = payload.role
@@ -298,6 +311,124 @@ def admin_get_user(user_id: str, _: dict = require_role("admin", "manager")):
 
     u = rows[0]
     extra: dict[str, object] = {"class": None}
+    if u.get("role") == "student":
+        enr = (
+            sb.table("class_enrollments")
+            .select("class_id")
+            .eq("student_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        class_id = enr[0]["class_id"] if enr else None
+        if class_id:
+            c = (
+                sb.table("classes")
+                .select("id,name")
+                .eq("id", class_id)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            extra["class"] = c[0] if c else {"id": class_id, "name": None}
+
+    return {"user": u, **extra}
+
+
+@router.put("/users/{user_id}")
+def admin_update_user(user_id: str, payload: UpdateUserIn, _: dict = require_role("admin", "manager")):
+    sb = get_supabase()
+    _require_users_schema(sb)
+
+    rows = (
+        sb.table("users")
+        .select(
+            "id,role,username,full_name,is_active,must_change_password,created_at,"
+            "first_name,last_name,middle_name,phone,birth_date,photo_data_url,teacher_subject"
+        )
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    current = rows[0]
+
+    update_data: dict[str, object] = {}
+
+    # Names
+    name_changed = False
+    first_name = current.get("first_name")
+    last_name = current.get("last_name")
+    middle_name = current.get("middle_name")
+
+    if payload.first_name is not None:
+        first_name = payload.first_name.strip() if payload.first_name.strip() else None
+        update_data["first_name"] = first_name
+        name_changed = True
+    if payload.last_name is not None:
+        last_name = payload.last_name.strip() if payload.last_name.strip() else None
+        update_data["last_name"] = last_name
+        name_changed = True
+    if payload.middle_name is not None:
+        middle_name = payload.middle_name.strip() if payload.middle_name.strip() else None
+        update_data["middle_name"] = middle_name
+        name_changed = True
+
+    if name_changed:
+        update_data["full_name"] = full_name_from_parts(
+            last_name=str(last_name or ""),
+            first_name=str(first_name or ""),
+            middle_name=(str(middle_name) if middle_name else None),
+        )
+
+    # Phone
+    if payload.phone is not None:
+        phone = payload.phone.strip() if payload.phone.strip() else None
+        if phone and not phone.startswith("+996"):
+            raise HTTPException(status_code=400, detail="Phone must start with +996")
+        update_data["phone"] = phone
+
+    # Birth date
+    if payload.birth_date is not None:
+        update_data["birth_date"] = payload.birth_date.isoformat()
+
+    # Photo (allow clear)
+    if "photo_data_url" in payload.model_fields_set:
+        update_data["photo_data_url"] = payload.photo_data_url
+
+    if update_data:
+        sb.table("users").update(update_data).eq("id", user_id).execute()
+
+    # Student class change
+    extra: dict[str, object] = {"class": None}
+    if current.get("role") == "student" and "class_id" in payload.model_fields_set:
+        sb.table("class_enrollments").delete().eq("student_id", user_id).execute()
+        if payload.class_id:
+            sb.table("class_enrollments").insert({"class_id": payload.class_id, "student_id": user_id}).execute()
+
+    # Return refreshed user
+    refreshed = (
+        sb.table("users")
+        .select(
+            "id,role,username,full_name,is_active,must_change_password,created_at,"
+            "first_name,last_name,middle_name,phone,birth_date,photo_data_url,teacher_subject"
+        )
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not refreshed:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    u = refreshed[0]
     if u.get("role") == "student":
         enr = (
             sb.table("class_enrollments")

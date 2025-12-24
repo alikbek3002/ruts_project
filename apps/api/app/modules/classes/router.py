@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.deps import CurrentUser, require_role
+from app.core.security import verify_password
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
@@ -69,6 +70,43 @@ def update_class(class_id: str, payload: UpdateClassIn, _: dict = require_role("
         raise HTTPException(status_code=500, detail="Failed to update class")
 
 
+@router.delete("/{class_id}")
+def delete_class(class_id: str, _: dict = require_role("admin", "manager")):
+    # Force password confirmation to avoid accidental deletions.
+    raise HTTPException(status_code=400, detail="Password confirmation required. Use POST /classes/{class_id}/delete")
+
+
+class DeleteClassIn(BaseModel):
+    actor_password: str
+
+
+@router.post("/{class_id}/delete")
+def delete_class_with_password(
+    class_id: str,
+    payload: DeleteClassIn,
+    actor: dict = require_role("admin", "manager"),
+):
+    """Удалить группу/взвод (с подтверждением паролем админа/менеджера)."""
+    sb = get_supabase()
+
+    # Verify actor password
+    a_rows = sb.table("users").select("id,password_hash").eq("id", actor["id"]).limit(1).execute().data or []
+    a = a_rows[0] if isinstance(a_rows, list) and a_rows else None
+    if not a or not verify_password(payload.actor_password, a["password_hash"]):
+        raise HTTPException(status_code=400, detail="Wrong admin/manager password")
+
+    try:
+        existing = sb.table("classes").select("id").eq("id", class_id).limit(1).execute().data
+        if not existing:
+            raise HTTPException(status_code=404, detail="Class not found")
+        sb.table("classes").delete().eq("id", class_id).execute()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete class")
+
+
 @router.get("")
 def list_classes(user: CurrentUser):
     sb = get_supabase()
@@ -129,8 +167,9 @@ def list_classes(user: CurrentUser):
             status_code=500,
             detail=(
                 f"Failed to list classes: {e}. "
-                "Ensure the base DB schema is applied "
-                "(see supabase/migrations/20251222_000001_mvp.sql) and restart the API."
+                "Ensure DB migrations are applied (at minimum supabase/migrations/20251222_000001_mvp.sql, "
+                "and for curator_id specifically supabase/migrations/20251224_000009_curators_and_student_numbers.sql), "
+                "then restart the API."
             ),
         )
 
