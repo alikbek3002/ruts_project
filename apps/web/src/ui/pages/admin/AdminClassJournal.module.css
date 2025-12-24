@@ -1,0 +1,72 @@
+.tableWrapper {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+}
+
+.journalTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.journalTable thead {
+  background: #4472c4;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.journalTable th,
+.journalTable td {
+  padding: 10px 12px;
+  text-align: center;
+  border: 1px solid #ddd;
+  min-width: 100px;
+}
+
+.journalTable tbody tr:nth-child(even) {
+  background: #f9f9f9;
+}
+
+.journalTable tbody tr:hover {
+  background: #f0f4ff;
+}
+
+.stickyCol {
+  position: sticky;
+  left: 0;
+  background: white;
+  font-weight: 500;
+  text-align: left !important;
+  z-index: 5;
+  min-width: 200px !important;
+  max-width: 250px;
+}
+
+.journalTable thead .stickyCol {
+  background: #4472c4;
+  z-index: 15;
+}
+
+.journalTable tbody tr:nth-child(even) .stickyCol {
+  background: #f9f9f9;
+}
+
+.journalTable tbody tr:hover .stickyCol {
+  background: #f0f4ff;
+}
+
+.avgCol {
+  background: #fff4e6 !important;
+  font-weight: bold;
+  color: #d97706;
+}
+
+.journalTable thead .avgCol {
+  background: #ffc000 !important;
+  color: white;
+}

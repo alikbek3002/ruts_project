@@ -1,0 +1,14 @@
+# Node
+node_modules/
+apps/web/dist/
+apps/web/.env
+apps/web/tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+apps/api/.env
+
+# OS
+.DS_Store

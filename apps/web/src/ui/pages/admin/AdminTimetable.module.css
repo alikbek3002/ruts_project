@@ -1,0 +1,332 @@
+.container {
+  background: #1a2332;
+  min-height: 100vh;
+  padding: 16px;
+  color: #ffffff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 12px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.backButton {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.className {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.viewButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.viewButton {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.viewButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.viewButton.active {
+  background: #6ba92c;
+}
+
+.weekNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.navButton {
+  background: transparent;
+  border: 1px solid #ffffff;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.navButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.weekLabel {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.gridContainer {
+  background: #0f1621;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 100px repeat(5, minmax(140px, 1fr));
+  min-width: max-content;
+}
+
+.timeHeader {
+  display: grid;
+  grid-template-columns: 100px repeat(5, minmax(140px, 1fr));
+  background: #1a2332;
+  border-bottom: 1px solid #2a3542;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.timeSlot {
+  padding: 12px 8px;
+  text-align: center;
+  border-right: 1px solid #2a3542;
+  font-size: 12px;
+}
+
+.timeSlot:first-child {
+  background: #0f1621;
+}
+
+.slotNumber {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.slotTime {
+  display: block;
+  color: #8a93a0;
+  font-size: 11px;
+}
+
+.dayRow {
+  display: contents;
+}
+
+.dateCell {
+  padding: 16px 8px;
+  border-right: 1px solid #2a3542;
+  border-bottom: 1px solid #2a3542;
+  background: #0f1621;
+  font-size: 13px;
+  text-align: center;
+}
+
+.cell {
+  padding: 8px;
+  border-right: 1px solid #2a3542;
+  border-bottom: 1px solid #2a3542;
+  position: relative;
+  min-height: 80px;
+}
+
+.lesson {
+  background: #8a7aa0;
+  border-radius: 6px;
+  padding: 8px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.lesson:hover {
+  opacity: 0.85;
+}
+
+.lessonRoom {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 4px;
+}
+
+.lessonSubject {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.lessonTeacher {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: auto;
+}
+
+.addButton {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 24px;
+  transition: all 0.2s;
+}
+
+.addButton:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.addButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.addButton:disabled:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+}
+
+.readonlyEmpty {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  opacity: 0.35;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modalContent {
+  background: #1a2332;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalTitle {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.formGroup {
+  margin-bottom: 16px;
+}
+
+.formLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #8a93a0;
+}
+
+.formInput,
+.formSelect {
+  width: 100%;
+  padding: 10px;
+  background: #0f1621;
+  border: 1px solid #2a3542;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.formInput:focus,
+.formSelect:focus {
+  outline: none;
+  border-color: #6ba92c;
+}
+
+.modalActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.saveButton,
+.cancelButton,
+.deleteButton {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.saveButton {
+  background: #6ba92c;
+  color: #ffffff;
+}
+
+.cancelButton {
+  background: #2a3542;
+  color: #ffffff;
+}
+
+.deleteButton {
+  background: #dc3545;
+  color: #ffffff;
+}
+
+.saveButton:hover,
+.cancelButton:hover,
+.deleteButton:hover {
+  opacity: 0.85;
+}
+
+.saveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  background: #dc3545;
+  color: #ffffff;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}

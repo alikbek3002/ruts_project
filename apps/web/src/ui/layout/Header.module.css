@@ -1,0 +1,136 @@
+.header {
+  background: var(--color-primary);
+  color: white;
+  box-shadow: var(--shadow-md);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-md) var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.logoLink:hover {
+  opacity: 0.9;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+}
+
+/* Header actions container */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Language button - compact with flag */
+.langBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: white;
+}
+
+.langBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.langFlag {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.langCode {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Logout button */
+.logoutBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.logoutBtn:hover {
+  background: rgba(255, 100, 100, 0.3);
+  border-color: rgba(255, 100, 100, 0.5);
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+  
+  .logo {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .logoText {
+    font-size: 14px;
+  }
+  
+  .title {
+    font-size: 16px;
+  }
+
+  .langBtn {
+    padding: 3px 6px;
+  }
+
+  .langFlag {
+    font-size: 14px;
+  }
+
+  .langCode {
+    font-size: 10px;
+  }
+}

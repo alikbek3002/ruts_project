@@ -1,0 +1,295 @@
+/* Google Sheets style journal */
+.tableWrapper {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-top: 16px;
+  border: 1px solid #c0c0c0;
+  background: white;
+}
+
+.journalTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+}
+
+.journalTable thead {
+  background: #f3f3f3;
+  color: #333;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.journalTable th {
+  padding: 8px 12px;
+  text-align: center;
+  border: 1px solid #c0c0c0;
+  font-weight: 500;
+  background: #f3f3f3;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.journalTable td {
+  padding: 6px 10px;
+  text-align: center;
+  border: 1px solid #e0e0e0;
+  min-width: 120px;
+  height: 32px;
+  vertical-align: middle;
+}
+
+.journalTable tbody tr:hover {
+  background: #e8f0fe;
+}
+
+/* Sticky first column - student names */
+.stickyCol {
+  position: sticky;
+  left: 0;
+  background: #fff !important;
+  font-weight: 400;
+  text-align: left !important;
+  z-index: 5;
+  min-width: 180px !important;
+  max-width: 220px;
+  border-right: 2px solid #c0c0c0 !important;
+}
+
+.journalTable thead .stickyCol {
+  background: #e8eaed !important;
+  z-index: 15;
+  font-weight: 600;
+  color: #333;
+}
+
+.journalTable tbody tr:hover .stickyCol {
+  background: #e8f0fe !important;
+}
+
+/* Date columns - alternating colors */
+.dateCol {
+  background: #e3f2fd !important;
+}
+
+.dateColAlt {
+  background: #fff3e0 !important;
+}
+
+.journalTable thead .dateCol {
+  background: #bbdefb !important;
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.journalTable thead .dateColAlt {
+  background: #ffe0b2 !important;
+  color: #e65100;
+  font-weight: 600;
+}
+
+/* Average column */
+.avgCol {
+  background: #e8f5e9 !important;
+  font-weight: 600;
+  color: #2e7d32;
+  min-width: 100px !important;
+  border-left: 2px solid #c0c0c0 !important;
+}
+
+.journalTable thead .avgCol {
+  background: #a5d6a7 !important;
+  color: #1b5e20;
+  font-weight: 700;
+}
+
+/* Grade cell */
+.gradeCell {
+  vertical-align: middle;
+  padding: 4px !important;
+  position: relative;
+}
+
+.grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  align-items: center;
+  min-height: 24px;
+}
+
+.gradeItem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a73e8;
+  color: white;
+  min-width: 24px;
+  height: 24px;
+  font-weight: 600;
+  font-size: 12px;
+  border: none;
+}
+
+.gradeItem:hover {
+  background: #1557b0;
+}
+
+/* Add grade button */
+.addBtn {
+  background: #34a853;
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addBtn:hover {
+  background: #2d8e47;
+}
+
+/* Add grade form */
+.addForm {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+}
+
+.addForm select,
+.addForm input {
+  padding: 3px 6px;
+  border: 1px solid #c0c0c0;
+  font-size: 12px;
+  height: 24px;
+}
+
+.addForm input {
+  width: 60px;
+}
+
+.addForm button {
+  padding: 3px 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  height: 24px;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addForm button:first-of-type {
+  background: #34a853;
+  color: white;
+}
+
+.addForm button:first-of-type:hover {
+  background: #2d8e47;
+}
+
+.addForm button:last-of-type {
+  background: #ea4335;
+  color: white;
+}
+
+.addForm button:last-of-type:hover {
+  background: #c5221f;
+}
+
+/* Absent button in form */
+.absentBtn {
+  background: #ff9800 !important;
+  color: white !important;
+}
+
+.absentBtn:hover {
+  background: #f57c00 !important;
+}
+
+/* Absent mark */
+.absentMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff9800;
+  color: white;
+  min-width: 24px;
+  height: 24px;
+  font-weight: 600;
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+/* Absent cell background */
+.absentCell {
+  background: #fff3e0 !important;
+}
+
+/* Header buttons */
+.headerButtons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.headerButtons button {
+  padding: 8px 16px;
+  border: 1px solid #c0c0c0;
+  background: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.headerButtons button:hover {
+  background: #f3f3f3;
+}
+
+.headerButtons button:first-child {
+  background: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+
+.headerButtons button:first-child:hover {
+  background: #1557b0;
+}
+
+/* Subject name under date */
+.subjectName {
+  font-size: 10px;
+  color: #666;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* Class selector */
+.classSelect {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px 12px;
+  border: 1px solid #c0c0c0;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+  margin-bottom: 16px;
+}
+
+.classSelect:focus {
+  outline: 2px solid #1a73e8;
+  border-color: #1a73e8;
+}

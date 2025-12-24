@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.settings import settings
+from app.modules.auth.router import router as auth_router
+from app.modules.admin.router import router as admin_router
+from app.modules.classes.router import router as classes_router
+from app.modules.timetable.router import router as timetable_router
+from app.modules.gradebook.router import router as gradebook_router
+from app.modules.journal.router import router as journal_router
+from app.modules.subjects.router import router as subjects_router
+from app.modules.directions.router import router as directions_router
+from app.modules.library.router import router as library_router
+from app.modules.zoom.router import router as zoom_router
+
+app = FastAPI(title="RUTS Journal API", version="0.1.0")
+
+origins = [o.strip() for o in settings.app_cors_origins.split(",") if o.strip()]
+# In dev, Vite may auto-bump the port (5173 -> 5174, etc). Allow any localhost port.
+origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$" if settings.app_env == "dev" else None
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_origin_regex=origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+app.include_router(classes_router, prefix="/api/classes", tags=["classes"])
+app.include_router(timetable_router, prefix="/api/timetable", tags=["timetable"])
+app.include_router(gradebook_router, prefix="/api/gradebook", tags=["gradebook"])
+app.include_router(journal_router, prefix="/api/journal", tags=["journal"])
+app.include_router(subjects_router, prefix="/api/subjects", tags=["subjects"])
+app.include_router(directions_router, prefix="/api/directions", tags=["directions"])
+app.include_router(library_router, prefix="/api/library", tags=["library"])
+app.include_router(zoom_router, prefix="/api/zoom", tags=["zoom"])
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
