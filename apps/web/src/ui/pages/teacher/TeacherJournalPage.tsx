@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import { trackedFetch } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
 type Student = {
@@ -74,7 +75,7 @@ export function TeacherJournalPage() {
     if (!token) return;
     setErr(null);
     try {
-      const resp = await fetch("/api/journal/teacher/classes", {
+      const resp = await trackedFetch("/api/journal/teacher/classes", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) throw new Error("Failed to load classes");
@@ -90,7 +91,7 @@ export function TeacherJournalPage() {
     setLoading(true);
     setErr(null);
     try {
-      const resp = await fetch(`/api/journal/classes/${selectedClassId}/journal`, {
+      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/journal`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) throw new Error("Failed to load journal");
@@ -107,7 +108,7 @@ export function TeacherJournalPage() {
     if (!token || !selectedClassId) return;
     setErr(null);
     try {
-      const resp = await fetch(`/api/journal/classes/${selectedClassId}/grades`, {
+      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/grades`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -142,7 +143,7 @@ export function TeacherJournalPage() {
     if (!token || !selectedClassId) return;
     setErr(null);
     try {
-      const resp = await fetch(`/api/journal/classes/${selectedClassId}/export`, {
+      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/export`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) throw new Error("Failed to download Excel");

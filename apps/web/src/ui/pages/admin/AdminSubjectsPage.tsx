@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
-  apiListSubjects,
+  apiListSubjectsWithTeachers,
   apiCreateSubject,
   apiDeleteSubject,
-  type Subject,
+  type SubjectWithTeachers,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { Loader } from "../../components/Loader";
 import styles from "./AdminSubjects.module.css";
 
 export function AdminSubjectsPage() {
@@ -16,15 +17,26 @@ export function AdminSubjectsPage() {
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<SubjectWithTeachers[]>([]);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectPhotoUrl, setNewSubjectPhotoUrl] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function reloadAll() {
     if (!token) return;
-    const s = await apiListSubjects(token);
-    setSubjects(s.subjects || []);
+    setLoading(true);
+    try {
+      const s = await apiListSubjectsWithTeachers(token);
+      setSubjects(s.subjects || []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function teacherLine(s: SubjectWithTeachers): string {
+    const names = (s.teachers || []).map((t) => t.name).filter(Boolean);
+    return names.length ? names.join(", ") : "---";
   }
 
   useEffect(() => {
@@ -40,6 +52,7 @@ export function AdminSubjectsPage() {
   const handleCreateSubject = async () => {
     if (!token || !newSubjectName.trim()) return;
     setErr(null);
+    setLoading(true);
     try {
       // пока фото хранится как URL
       await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null);
@@ -48,6 +61,8 @@ export function AdminSubjectsPage() {
       await reloadAll();
     } catch (e) {
       setErr(String(e));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -55,11 +70,14 @@ export function AdminSubjectsPage() {
     if (!token) return;
     if (!window.confirm("Удалить предмет? Это также удалит все связи с учителями.")) return;
     setErr(null);
+    setLoading(true);
     try {
       await apiDeleteSubject(token, subjectId);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,6 +95,8 @@ export function AdminSubjectsPage() {
       ]}
     >
       {err && <p style={{ color: "crimson" }}>{err}</p>}
+
+      {loading && <Loader text="Загрузка..." />}
       
       <h3>📚 Предметы</h3>
       <div className={styles.createRow}>
@@ -92,13 +112,13 @@ export function AdminSubjectsPage() {
           onChange={(e) => setNewSubjectPhotoUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
         />
-        <button onClick={handleCreateSubject} disabled={!newSubjectName.trim()}>
+        <button onClick={handleCreateSubject} disabled={loading || !newSubjectName.trim()}>
           Создать предмет
         </button>
       </div>
 
       <div className={styles.cardsGrid}>
-        {subjects.map((s) => (
+        {!loading && subjects.map((s) => (
           <div key={s.id} className={styles.card}>
             <div className={styles.cardTop}>
               <img
@@ -112,8 +132,11 @@ export function AdminSubjectsPage() {
                   img.src = "/favicon.svg";
                 }}
               />
-              <div className={styles.title}>{s.name}</div>
-              <button className={styles.deleteBtn} onClick={() => handleDeleteSubject(s.id)} title="Удалить">
+              <div>
+                <div className={styles.title}>{s.name}</div>
+                <div className={styles.meta}>👨‍🏫 {teacherLine(s)}</div>
+              </div>
+              <button className={styles.deleteBtn} onClick={() => handleDeleteSubject(s.id)} title="Удалить" disabled={loading}>
                 ✕
               </button>
             </div>

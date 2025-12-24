@@ -9,6 +9,13 @@ from app.db.supabase_client import get_supabase
 router = APIRouter()
 
 
+def _teacher_display_name(row: dict) -> str:
+    name = (row.get("full_name") or "").strip()
+    if name:
+        return name
+    return (row.get("username") or "").strip() or "---"
+
+
 class CreateSubjectIn(BaseModel):
     name: str
     photo_url: str | None = None
@@ -29,6 +36,59 @@ def list_subjects(user: dict = require_role("admin", "manager", "teacher")):
     sb = get_supabase()
     resp = sb.table("subjects").select("*").order("name").execute()
     return {"subjects": resp.data or []}
+
+
+@router.get("/subjects-with-teachers")
+def list_subjects_with_teachers(user: dict = require_role("admin", "manager")):
+    """Список предметов + учителя, которым назначен предмет.
+
+    Нужен для админ-страницы "Предметы", чтобы отображать учителей на карточках.
+    """
+    sb = get_supabase()
+
+    subjects = sb.table("subjects").select("*").order("name").execute().data or []
+    links = sb.table("teacher_subjects").select("teacher_id,subject_id").execute().data or []
+
+    teacher_ids: list[str] = []
+    for r in links:
+        tid = r.get("teacher_id")
+        if tid:
+            teacher_ids.append(str(tid))
+    teacher_ids = list(dict.fromkeys(teacher_ids))
+
+    teachers_by_id: dict[str, dict] = {}
+    if teacher_ids:
+        teacher_rows = (
+            sb.table("users")
+            .select("id,role,full_name,username")
+            .in_("id", teacher_ids)
+            .execute()
+            .data
+            or []
+        )
+        for t in teacher_rows:
+            if t.get("id"):
+                teachers_by_id[str(t["id"])] = t
+
+    teachers_for_subject: dict[str, list[dict]] = {}
+    for link in links:
+        sid = link.get("subject_id")
+        tid = link.get("teacher_id")
+        if not sid or not tid:
+            continue
+        t = teachers_by_id.get(str(tid))
+        if not t or t.get("role") != "teacher":
+            continue
+        teachers_for_subject.setdefault(str(sid), []).append(
+            {"id": str(tid), "name": _teacher_display_name(t)}
+        )
+
+    enriched = []
+    for s in subjects:
+        sid = str(s.get("id")) if s.get("id") else ""
+        enriched.append({**s, "teachers": teachers_for_subject.get(sid, [])})
+
+    return {"subjects": enriched}
 
 
 @router.post("/subjects")

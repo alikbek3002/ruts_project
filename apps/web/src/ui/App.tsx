@@ -1,5 +1,8 @@
+import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../ui/auth/AuthProvider';
+import { getApiLoading, subscribeApiLoading } from '../api/client';
+import { Loader } from './components/Loader';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -29,8 +32,15 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 }
 
 export function App() {
+  const [isLoading, setIsLoading] = React.useState<boolean>(getApiLoading());
+
+  React.useEffect(() => {
+    return subscribeApiLoading(setIsLoading);
+  }, []);
+
   return (
     <AuthProvider>
+      {isLoading && <Loader fullScreen size="lg" text="" />}
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />

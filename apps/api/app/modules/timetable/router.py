@@ -11,7 +11,7 @@ from app.db.supabase_client import get_supabase
 router = APIRouter()
 
 
-def _infer_teacher_id_for_subject(sb, subject_id: str) -> str:
+def _infer_teacher_id_for_subject(sb, subject_id: str) -> str | None:
     rows = (
         sb.table("teacher_subjects")
         .select("teacher_id")
@@ -24,9 +24,8 @@ def _infer_teacher_id_for_subject(sb, subject_id: str) -> str:
     teacher_ids = list(dict.fromkeys(teacher_ids))
     if len(teacher_ids) == 1:
         return str(teacher_ids[0])
-    if len(teacher_ids) == 0:
-        raise HTTPException(status_code=400, detail="No teacher assigned to this subject")
-    raise HTTPException(status_code=400, detail="Multiple teachers assigned to this subject; cannot infer teacher")
+    # If none (or multiple), do not block timetable creation: just leave teacher_id empty.
+    return None
 
 
 def _room_supported(sb) -> bool:
@@ -58,7 +57,9 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
         if not data.get("teacher_id"):
             subject_id = data.get("subject_id")
             if subject_id:
-                data["teacher_id"] = _infer_teacher_id_for_subject(sb, str(subject_id))
+                inferred = _infer_teacher_id_for_subject(sb, str(subject_id))
+                if inferred:
+                    data["teacher_id"] = inferred
             else:
                 raise HTTPException(status_code=400, detail="teacher_id or subject_id is required")
         room = data.get("room")
@@ -98,16 +99,18 @@ class TimetableEntryUpdateIn(BaseModel):
 @router.put("/entries/{entry_id}")
 def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = require_role("admin", "manager")):
     update: dict[str, object] = {}
-    if payload.teacher_id is not None:
+    # Allow explicitly clearing teacher_id by sending null.
+    if "teacher_id" in payload.model_fields_set:
         update["teacher_id"] = payload.teacher_id
     if payload.subject is not None:
         update["subject"] = payload.subject
     if payload.subject_id is not None:
         update["subject_id"] = payload.subject_id if payload.subject_id else None
-        # If subject is changed and teacher is not explicitly set, infer teacher
-        if payload.subject_id:
-            if payload.teacher_id is None:
-                update["teacher_id"] = _infer_teacher_id_for_subject(get_supabase(), str(payload.subject_id))
+        # If subject is changed and teacher is not explicitly set, infer teacher.
+        # If we cannot infer (none or multiple), clear teacher_id so UI shows "---".
+        if payload.subject_id and ("teacher_id" not in payload.model_fields_set):
+            inferred = _infer_teacher_id_for_subject(get_supabase(), str(payload.subject_id))
+            update["teacher_id"] = inferred
     if payload.room is not None:
         update["room"] = payload.room
     if payload.lesson_type is not None:
@@ -244,13 +247,17 @@ def get_week(weekStart: str, user: CurrentUser):
         cls = classes.get(e.get("class_id")) or {}
         tch = teachers.get(e.get("teacher_id")) or {}
 
+        teacher_name = tch.get("full_name") or tch.get("username")
+        if not teacher_name:
+            teacher_name = "---"
+
         enriched.append(
             {
                 "id": e.get("id"),
                 "class_id": e.get("class_id"),
                 "class_name": cls.get("name"),
                 "teacher_id": e.get("teacher_id"),
-                "teacher_name": tch.get("full_name") or tch.get("username"),
+                "teacher_name": teacher_name,
                 "subject": e.get("subject"),
                 "weekday": weekday,
                 "start_time": start_time,

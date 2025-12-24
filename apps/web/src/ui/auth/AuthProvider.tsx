@@ -27,7 +27,7 @@ type AuthState = {
 
 type AuthContextValue = {
   state: AuthState;
-  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<User>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 };
@@ -41,18 +41,51 @@ const AuthContext: React.Context<AuthContextValue | null> =
 (globalThis as any)[AUTH_CONTEXT_KEY] = AuthContext;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(() => {
-    // Load from localStorage on initial render
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
+  const loadSavedState = (): AuthState => {
+    // Prefer localStorage (remember-me), fallback to sessionStorage.
+    const tryLoad = (store: Storage): AuthState | null => {
+      try {
+        const saved = store.getItem(STORAGE_KEY);
+        if (!saved) return null;
         const parsed = JSON.parse(saved);
         return { accessToken: parsed.accessToken || null, user: parsed.user || null };
+      } catch {
+        return null;
       }
-    } catch (e) {
-      // Ignore parse errors
+    };
+
+    return tryLoad(localStorage) ?? tryLoad(sessionStorage) ?? { accessToken: null, user: null };
+  };
+
+  const clearSavedState = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
     }
-    return { accessToken: null, user: null };
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const persistState = (nextState: AuthState, rememberMe: boolean) => {
+    try {
+      if (rememberMe) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        sessionStorage.removeItem(STORAGE_KEY);
+      } else {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const [state, setState] = useState<AuthState>(() => {
+    return loadSavedState();
   });
 
   // Validate token on mount
@@ -60,10 +93,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (state.accessToken) {
       apiMe(state.accessToken)
         .then((me) => setState((prev) => ({ ...prev, user: me.user })))
-        .catch(() => {
-          // Token invalid, clear state
-          localStorage.removeItem(STORAGE_KEY);
-          setState({ accessToken: null, user: null });
+        .catch((err: any) => {
+          // Clear auth only if token is actually invalid.
+          // If backend is temporarily down (ERR_CONNECTION_REFUSED), don't log the user out.
+          const status = err?.status;
+          if (status === 401 || status === 403) {
+            clearSavedState();
+            setState({ accessToken: null, user: null });
+          }
         });
     }
   }, []);
@@ -72,15 +109,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await apiLogin(username, password);
     const newState = { accessToken: res.accessToken, user: res.user };
     setState(newState);
-    if (rememberMe) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    // Keep session alive on reload even when rememberMe=false.
+    persistState(newState, rememberMe);
+    return res.user as User;
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    clearSavedState();
     setState({ accessToken: null, user: null });
   }, []);
 

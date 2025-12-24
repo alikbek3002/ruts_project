@@ -49,6 +49,13 @@
   line-height: 1.2;
 }
 
+.meta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--color-text-light);
+  line-height: 1.2;
+}
+
 .deleteBtn {
   background: transparent;
   color: var(--color-error);

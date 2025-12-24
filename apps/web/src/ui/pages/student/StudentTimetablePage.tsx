@@ -144,7 +144,7 @@ export function StudentTimetablePage() {
                       <div className={styles.lesson}>
                         {lesson.room && <div className={styles.lessonRoom}>{lesson.room}</div>}
                         <div className={styles.lessonSubject}>{lesson.subject}</div>
-                        <div className={styles.lessonTeacher}>{lesson.teacher_name}</div>
+                        <div className={styles.lessonTeacher}>{lesson.teacher_name || "---"}</div>
                       </div>
                     ) : (
                       <div className={styles.readonlyEmpty} />

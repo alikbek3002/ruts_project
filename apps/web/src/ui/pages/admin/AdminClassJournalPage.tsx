@@ -3,6 +3,7 @@ import { Navigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import { trackedFetch } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
 
 type Student = {
@@ -43,19 +44,19 @@ export function AdminClassJournalPage() {
     setErr(null);
     try {
       const [byDates, bySubject, classInfo] = await Promise.all([
-        fetch(`/api/gradebook/classes/${classId}/journal`, {
+        trackedFetch(`/api/gradebook/classes/${classId}/journal`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then((r) => {
           if (!r.ok) throw new Error("Failed to load journal by dates");
           return r.json();
         }),
-        fetch(`/api/gradebook/classes/${classId}/journal/by-subject`, {
+        trackedFetch(`/api/gradebook/classes/${classId}/journal/by-subject`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then((r) => {
           if (!r.ok) throw new Error("Failed to load journal by subject");
           return r.json();
         }),
-        fetch(`/api/classes/${classId}`, {
+        trackedFetch(`/api/classes/${classId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then((r) => {
           if (!r.ok) throw new Error("Failed to load class info");
@@ -93,7 +94,7 @@ export function AdminClassJournalPage() {
         : `/api/gradebook/classes/${classId}/journal/export/grades`;
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await trackedFetch(endpoint, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to download Excel");

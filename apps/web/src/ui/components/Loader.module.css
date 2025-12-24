@@ -13,7 +13,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--color-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,11 +53,40 @@
 }
 
 .text {
-  font-family: Arial, sans-serif;
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-light);
   margin: 0;
   animation: pulse 1.5s ease-in-out infinite;
+}
+
+.size_sm .logoWrapper {
+  width: 56px;
+  height: 56px;
+}
+
+.size_sm .logo {
+  width: 56px;
+  height: 56px;
+}
+
+.size_md .logoWrapper {
+  width: 80px;
+  height: 80px;
+}
+
+.size_md .logo {
+  width: 80px;
+  height: 80px;
+}
+
+.size_lg .logoWrapper {
+  width: 140px;
+  height: 140px;
+}
+
+.size_lg .logo {
+  width: 140px;
+  height: 140px;
 }
 
 @keyframes pulse {

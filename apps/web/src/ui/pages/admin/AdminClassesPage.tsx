@@ -3,6 +3,7 @@ import { Navigate, Link } from "react-router-dom";
 import {
   apiAdminListUsers,
   apiCreateClass,
+  apiDeleteClass,
   apiEnrollStudent,
   apiGetClass,
   apiListClasses,
@@ -142,6 +143,25 @@ export function AdminClassesPage() {
     await reloadClassStudents(classId);
   };
 
+  const handleDeleteClass = async (cls: ClassItem) => {
+    if (!token) return;
+    const ok = window.confirm(
+      `Удалить взвод "${cls.name}"?\n\nБудут удалены записи расписания/журнала этого взвода. Ученики останутся, но будут отвязаны от взвода.`
+    );
+    if (!ok) return;
+
+    const actorPassword = window.prompt("Введите ваш пароль для подтверждения удаления:") || "";
+    if (!actorPassword.trim()) return;
+
+    setErr(null);
+    try {
+      await apiDeleteClass(token, cls.id, actorPassword.trim());
+      await reloadAll();
+    } catch (e) {
+      setErr(String(e));
+    }
+  };
+
   const handleEnroll = async () => {
     if (!token || !enrollingClassId || !studentId) return;
     if (classStudents.length >= 35) {
@@ -197,13 +217,16 @@ export function AdminClassesPage() {
 
             <div className={styles.cardActions}>
               <Link to={`${base}/classes/${cls.id}/journal`}>
-                <button className={styles.primaryBtn}>📊 Журнал</button>
+                <button>📊 Журнал</button>
               </Link>
-              <button onClick={() => handleOpenEnroll(cls.id)}>
+              <button className="secondary" onClick={() => handleOpenEnroll(cls.id)}>
                 ➕ Студенты
               </button>
-              <button onClick={() => handleEditClass(cls)}>
+              <button className="secondary" onClick={() => handleEditClass(cls)}>
                 ✏️
+              </button>
+              <button className="danger" onClick={() => handleDeleteClass(cls)} title="Удалить взвод">
+                Удалить
               </button>
             </div>
           </div>
@@ -244,8 +267,8 @@ export function AdminClassesPage() {
               </select>
 
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setEditingClass(null)}>Отмена</button>
-                <button onClick={handleSaveEdit} className={styles.primaryBtn}>
+                <button className="secondary" onClick={() => setEditingClass(null)}>Отмена</button>
+                <button onClick={handleSaveEdit}>
                   Сохранить
                 </button>
               </div>
@@ -360,7 +383,7 @@ export function AdminClassesPage() {
               <button className="secondary" onClick={() => setCreateOpen(false)}>
                 Отмена
               </button>
-              <button className={styles.primaryBtn} disabled={!createName.trim()} onClick={handleCreate}>
+              <button disabled={!createName.trim()} onClick={handleCreate}>
                 Создать
               </button>
             </div>
