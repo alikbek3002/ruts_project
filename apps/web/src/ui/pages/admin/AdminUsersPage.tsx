@@ -121,10 +121,56 @@ export function AdminUsersPage() {
 
   async function reload() {
     if (!token) return;
-    const hasSearch = !!search.trim();
-    const role = hasSearch ? undefined : (tab === "teachers" ? "teacher" : "student");
-    const resp = await apiAdminListUsers(token, role as any, hasSearch ? search : undefined);
+    const role = tab === "teachers" ? "teacher" : "student";
+    const resp = await apiAdminListUsers(token, role as any, search.trim() ? search : undefined);
     setUsers(resp.users);
+  }
+
+  async function openUserCard(u: AdminUser) {
+    if (!token) return;
+    setViewErr(null);
+    setViewUser(null);
+    setViewClass(null);
+    setViewTempPassword(null);
+    setViewTeacherSubjectIds([]);
+    setViewEdit(false);
+    setViewSaving(false);
+    setViewEditFirstName("");
+    setViewEditLastName("");
+    setViewEditMiddleName("");
+    setViewEditPhone("+996");
+    setViewEditBirthDate("");
+    setViewEditClassId("");
+    setViewEditPhotoDataUrl(null);
+    setViewOpen(true);
+    setViewLoading(true);
+    try {
+      const resp = await apiAdminGetUser(token, u.id);
+      setViewUser(resp.user);
+      setViewClass(resp.class);
+
+      setViewEditFirstName(resp.user.first_name || "");
+      setViewEditLastName(resp.user.last_name || "");
+      setViewEditMiddleName(resp.user.middle_name || "");
+      setViewEditPhone(resp.user.phone || "+996");
+      setViewEditBirthDate(resp.user.birth_date || "");
+      setViewEditClassId(resp.class?.id || "");
+      setViewEditPhotoDataUrl(resp.user.photo_data_url || null);
+
+      if (resp.user.role === "teacher") {
+        try {
+          const ts = await apiGetTeacherSubjects(token, resp.user.id);
+          const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
+          setViewTeacherSubjectIds(ids.slice(0, 2));
+        } catch {
+          setViewTeacherSubjectIds([]);
+        }
+      }
+    } catch (e) {
+      setViewErr(String(e));
+    } finally {
+      setViewLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -509,75 +555,96 @@ export function AdminUsersPage() {
         </button>
       </div>
       <div style={{ marginTop: 8 }}>
-        <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th align="left">username</th>
-              {search.trim() && <th align="left">role</th>}
-              <th align="left">full_name</th>
-              <th align="left">created_at</th>
-            </tr>
-          </thead>
-          <tbody>
+        {tab === "teachers" ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+              gap: "var(--spacing-md)",
+            }}
+          >
             {users.map((u) => (
-              <tr
+              <div
                 key={u.id}
-                style={{ borderTop: "1px solid #eee", cursor: "pointer" }}
-                onClick={async () => {
-                  if (!token) return;
-                  setViewErr(null);
-                  setViewUser(null);
-                  setViewClass(null);
-                  setViewTempPassword(null);
-                  setViewTeacherSubjectIds([]);
-                  setViewEdit(false);
-                  setViewSaving(false);
-                  setViewEditFirstName("");
-                  setViewEditLastName("");
-                  setViewEditMiddleName("");
-                  setViewEditPhone("+996");
-                  setViewEditBirthDate("");
-                  setViewEditClassId("");
-                  setViewEditPhotoDataUrl(null);
-                  setViewOpen(true);
-                  setViewLoading(true);
-                  try {
-                    const resp = await apiAdminGetUser(token, u.id);
-                    setViewUser(resp.user);
-                    setViewClass(resp.class);
-
-                    setViewEditFirstName(resp.user.first_name || "");
-                    setViewEditLastName(resp.user.last_name || "");
-                    setViewEditMiddleName(resp.user.middle_name || "");
-                    setViewEditPhone(resp.user.phone || "+996");
-                    setViewEditBirthDate(resp.user.birth_date || "");
-                    setViewEditClassId(resp.class?.id || "");
-                    setViewEditPhotoDataUrl(resp.user.photo_data_url || null);
-
-                    if (resp.user.role === "teacher") {
-                      try {
-                        const ts = await apiGetTeacherSubjects(token, resp.user.id);
-                        const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
-                        setViewTeacherSubjectIds(ids.slice(0, 2));
-                      } catch {
-                        setViewTeacherSubjectIds([]);
-                      }
-                    }
-                  } catch (e) {
-                    setViewErr(String(e));
-                  } finally {
-                    setViewLoading(false);
-                  }
+                onClick={() => openUserCard(u)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") openUserCard(u);
+                }}
+                style={{
+                  background: "var(--color-card)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-lg)",
+                  boxShadow: "var(--shadow-sm)",
+                  overflow: "hidden",
+                  cursor: "pointer",
                 }}
               >
-                <td>{u.username}</td>
-                {search.trim() && <td>{u.role}</td>}
-                <td>{u.full_name || ""}</td>
-                <td>{new Date(u.created_at).toLocaleString()}</td>
-              </tr>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "64px 1fr",
+                    gap: "var(--spacing-sm)",
+                    alignItems: "center",
+                    padding: "var(--spacing-md)",
+                  }}
+                >
+                  <img
+                    src={u.photo_data_url || "/favicon.svg"}
+                    alt="Фото"
+                    loading="lazy"
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-border)",
+                      objectFit: "cover",
+                      background: "var(--color-bg)",
+                    }}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      if (img.src.endsWith("/favicon.svg")) return;
+                      img.src = "/favicon.svg";
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 700, color: "var(--color-text)", lineHeight: 1.2 }}>
+                      {u.full_name || u.username}
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: "var(--color-text-light)", lineHeight: 1.2 }}>
+                      📚 {u.teacher_subject || "---"}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+            {users.length === 0 && <div style={{ color: "var(--color-text-light)" }}>Учителя не найдены</div>}
+          </div>
+        ) : (
+          <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th align="left">username</th>
+                <th align="left">full_name</th>
+                <th align="left">created_at</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr
+                  key={u.id}
+                  style={{ borderTop: "1px solid #eee", cursor: "pointer" }}
+                  onClick={() => openUserCard(u)}
+                >
+                  <td>{u.username}</td>
+                  <td>{u.full_name || ""}</td>
+                  <td>{new Date(u.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {viewOpen && (
@@ -610,7 +677,7 @@ export function AdminUsersPage() {
               <div style={{ display: "flex", gap: 8 }}>
                 {!viewLoading && !viewErr && viewUser && (
                   <button
-                    className="secondary"
+                    className={viewEdit ? "secondary" : ""}
                     onClick={() => {
                       setViewErr(null);
                       setViewEdit((v) => !v);
@@ -639,159 +706,115 @@ export function AdminUsersPage() {
             {viewErr && <div style={{ color: "var(--color-error)" }}>{viewErr}</div>}
 
             {!viewLoading && !viewErr && viewUser && (
-              <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
-                <div
-                  style={{
-                    width: 120,
-                    height: 120,
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--color-border)",
-                    background: "var(--color-bg)",
-                    overflow: "hidden",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) ? (
-                    <img
-                      src={(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) || ""}
-                      alt="Фото"
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: 12, color: "var(--color-text-light)" }}>Нет фото</span>
-                  )}
-                </div>
-
-                {viewEdit && (
-                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        try {
-                          const dataUrl = await fileToDataUrl(f);
-                          setViewEditPhotoDataUrl(dataUrl);
-                        } catch (err) {
-                          setViewErr(String(err));
-                        }
-                      }}
-                    />
-                    <button className="secondary" onClick={() => setViewEditPhotoDataUrl(null)}>
-                      Удалить фото
-                    </button>
-                  </div>
-                )}
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
-                  <div>
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>ФИО</div>
-                    {!viewEdit ? (
-                      <div style={{ fontWeight: 600 }}>{viewUser.full_name || "—"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+                  <div
+                    style={{
+                      width: 160,
+                      height: 160,
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-bg)",
+                      overflow: "hidden",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) ? (
+                      <img
+                        src={(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) || ""}
+                        alt="Фото"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
                     ) : (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 4 }}>
-                        <input
-                          placeholder="Фамилия"
-                          value={viewEditLastName}
-                          onChange={(e) => setViewEditLastName(e.target.value)}
-                        />
-                        <input
-                          placeholder="Имя"
-                          value={viewEditFirstName}
-                          onChange={(e) => setViewEditFirstName(e.target.value)}
-                        />
-                        <input
-                          placeholder="Отчество"
-                          value={viewEditMiddleName}
-                          onChange={(e) => setViewEditMiddleName(e.target.value)}
-                        />
-                      </div>
+                      <span style={{ fontSize: 12, color: "var(--color-text-light)" }}>Нет фото</span>
                     )}
                   </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Логин</div>
-                    <div style={{ fontWeight: 600 }}>{viewUser.username}</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Телефон</div>
-                    {!viewEdit ? (
-                      <div>{viewUser.phone || "—"}</div>
-                    ) : (
-                      <input value={viewEditPhone} onChange={(e) => setViewEditPhone(e.target.value)} placeholder="+996..." />
-                    )}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Дата рождения</div>
-                    {!viewEdit ? (
-                      <div>{viewUser.birth_date || "—"}</div>
-                    ) : (
-                      <input type="date" value={viewEditBirthDate} onChange={(e) => setViewEditBirthDate(e.target.value)} />
-                    )}
-                  </div>
-
-                  {viewUser.role === "student" && (
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Группа</div>
-                      {!viewEdit ? (
-                        <div>{viewClass?.name || "—"}</div>
-                      ) : (
-                        <select value={viewEditClassId} onChange={(e) => setViewEditClassId(e.target.value)}>
-                          <option value="">(без группы)</option>
-                          {classes.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  )}
 
                   {viewEdit && (
-                    <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-                      <button
-                        disabled={viewSaving}
-                        onClick={async () => {
-                          if (!token) return;
-                          setViewErr(null);
-                          setViewSaving(true);
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
                           try {
-                            const resp = await apiAdminUpdateUser(token, viewUser.id, {
-                              first_name: viewEditFirstName.trim() || null,
-                              last_name: viewEditLastName.trim() || null,
-                              middle_name: viewEditMiddleName.trim() || null,
-                              phone: viewEditPhone.trim() || null,
-                              birth_date: viewEditBirthDate || null,
-                              photo_data_url: viewEditPhotoDataUrl,
-                              class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
-                            });
-                            setViewUser(resp.user);
-                            setViewClass(resp.class);
-                            setViewEdit(false);
-                          } catch (e) {
-                            setViewErr(String(e));
-                          } finally {
-                            setViewSaving(false);
+                            const dataUrl = await fileToDataUrl(f);
+                            setViewEditPhotoDataUrl(dataUrl);
+                          } catch (err) {
+                            setViewErr(String(err));
                           }
                         }}
-                      >
-                        {viewSaving ? "Сохранение..." : "Сохранить изменения"}
+                      />
+                      <button className="danger" onClick={() => setViewEditPhotoDataUrl(null)}>
+                        Удалить фото
                       </button>
                     </div>
                   )}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
+                  <div
+                    style={{
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "var(--spacing-md)",
+                      background: "var(--color-card)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Основное</div>
+
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>ФИО</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
+                        <input
+                          placeholder="Фамилия"
+                          value={viewEdit ? viewEditLastName : viewUser.last_name || ""}
+                          onChange={(e) => setViewEditLastName(e.target.value)}
+                          disabled={!viewEdit}
+                        />
+                        <input
+                          placeholder="Имя"
+                          value={viewEdit ? viewEditFirstName : viewUser.first_name || ""}
+                          onChange={(e) => setViewEditFirstName(e.target.value)}
+                          disabled={!viewEdit}
+                        />
+                        <input
+                          placeholder="Отчество"
+                          value={viewEdit ? viewEditMiddleName : viewUser.middle_name || ""}
+                          onChange={(e) => setViewEditMiddleName(e.target.value)}
+                          disabled={!viewEdit}
+                        />
+                      </div>
+
+                      <div style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-light)" }}>Логин</div>
+                      <div style={{ fontWeight: 700, marginTop: 4 }}>{viewUser.username}</div>
+                    </div>
+                  </div>
+
                   {viewUser.role === "student" && (
-                    <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+                    <div
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "var(--spacing-md)",
+                        background: "var(--color-card)",
+                        display: "flex",
+                        gap: "var(--spacing-md)",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
                       <div>
                         <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Пароль студента</div>
-                        <div style={{ fontWeight: 600 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Показывается только после подтверждения паролем админа/менеджера (пароль будет сброшен).</div>
+                        <div style={{ fontWeight: 700, marginTop: 4 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
+                        <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
+                          Показывается только после подтверждения паролем админа/менеджера (пароль будет сброшен).
+                        </div>
                       </div>
                       <button
-                        className="secondary"
                         onClick={async () => {
                           if (!token) return;
                           const actorPassword = window.prompt("Введите пароль админа/менеджера");
@@ -808,17 +831,28 @@ export function AdminUsersPage() {
                       </button>
                     </div>
                   )}
+
                   {viewUser.role === "teacher" && (
-                    <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+                    <div
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "var(--spacing-md)",
+                        background: "var(--color-card)",
+                        display: "flex",
+                        gap: "var(--spacing-md)",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
                       <div>
                         <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Пароль учителя</div>
-                        <div style={{ fontWeight: 600 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>
+                        <div style={{ fontWeight: 700, marginTop: 4 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
+                        <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
                           Показывается только после подтверждения паролем админа/менеджера (пароль будет сброшен).
                         </div>
                       </div>
                       <button
-                        className="secondary"
                         onClick={async () => {
                           if (!token) return;
                           const actorPassword = window.prompt("Введите пароль админа/менеджера");
@@ -835,10 +869,65 @@ export function AdminUsersPage() {
                       </button>
                     </div>
                   )}
+
+                  <div
+                    style={{
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "var(--spacing-md)",
+                      background: "var(--color-card)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Контакты</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Телефон</div>
+                        {!viewEdit ? (
+                          <div style={{ marginTop: 4 }}>{viewUser.phone || "—"}</div>
+                        ) : (
+                          <input style={{ marginTop: 8 }} value={viewEditPhone} onChange={(e) => setViewEditPhone(e.target.value)} placeholder="+996..." />
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Дата рождения</div>
+                        {!viewEdit ? (
+                          <div style={{ marginTop: 4 }}>{viewUser.birth_date || "—"}</div>
+                        ) : (
+                          <input style={{ marginTop: 8 }} type="date" value={viewEditBirthDate} onChange={(e) => setViewEditBirthDate(e.target.value)} />
+                        )}
+                      </div>
+
+                      {viewUser.role === "student" && (
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Группа</div>
+                          {!viewEdit ? (
+                            <div style={{ marginTop: 4 }}>{viewClass?.name || "—"}</div>
+                          ) : (
+                            <select style={{ marginTop: 8 }} value={viewEditClassId} onChange={(e) => setViewEditClassId(e.target.value)}>
+                              <option value="">(без группы)</option>
+                              {classes.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {viewUser.role === "teacher" && (
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Предмет</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end", marginTop: 4 }}>
+                    <div
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "var(--spacing-md)",
+                        background: "var(--color-card)",
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Предметы учителя</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
                         <select
                           value={viewTeacherSubjectIds[0] || ""}
                           onChange={(e) => {
@@ -880,7 +969,6 @@ export function AdminUsersPage() {
                         </select>
 
                         <button
-                          className="secondary"
                           disabled={viewTeacherSaving || viewTeacherSubjectIds.length < 1}
                           onClick={async () => {
                             if (!token || !viewUser) return;
@@ -903,6 +991,39 @@ export function AdminUsersPage() {
                       <div style={{ marginTop: 6, fontSize: 12, color: "var(--color-text-light)" }}>
                         Сейчас: {viewUser.teacher_subject || "—"}
                       </div>
+                    </div>
+                  )}
+
+                  {viewEdit && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+                      <button
+                        disabled={viewSaving}
+                        onClick={async () => {
+                          if (!token) return;
+                          setViewErr(null);
+                          setViewSaving(true);
+                          try {
+                            const resp = await apiAdminUpdateUser(token, viewUser.id, {
+                              first_name: viewEditFirstName.trim() || null,
+                              last_name: viewEditLastName.trim() || null,
+                              middle_name: viewEditMiddleName.trim() || null,
+                              phone: viewEditPhone.trim() || null,
+                              birth_date: viewEditBirthDate || null,
+                              photo_data_url: viewEditPhotoDataUrl,
+                              class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
+                            });
+                            setViewUser(resp.user);
+                            setViewClass(resp.class);
+                            setViewEdit(false);
+                          } catch (e) {
+                            setViewErr(String(e));
+                          } finally {
+                            setViewSaving(false);
+                          }
+                        }}
+                      >
+                        {viewSaving ? "Сохранение..." : "Сохранить изменения"}
+                      </button>
                     </div>
                   )}
                 </div>

@@ -234,6 +234,8 @@ export type AdminUser = {
   first_name?: string | null;
   last_name?: string | null;
   middle_name?: string | null;
+  photo_data_url?: string | null;
+  teacher_subject?: string | null;
   is_active: boolean;
   must_change_password: boolean;
   created_at: string;

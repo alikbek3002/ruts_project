@@ -277,7 +277,7 @@ def admin_list_users(role: str | None = None, q: str | None = None, _: dict = re
     # Listing users should still work; schema is enforced on create/credentials endpoints.
     try:
         query = sb.table("users").select(
-            "id,role,username,full_name,is_active,must_change_password,created_at,first_name,last_name,middle_name"
+            "id,role,username,full_name,is_active,must_change_password,created_at,first_name,last_name,middle_name,photo_data_url,teacher_subject"
         )
         query = _apply_filters(query)
         resp = query.order("created_at", desc=True).execute()
