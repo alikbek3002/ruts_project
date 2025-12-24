@@ -13,8 +13,10 @@ import { AdminClassJournalPage } from './pages/admin/AdminClassJournalPage';
 import { AdminTimetablePage } from './pages/admin/AdminTimetablePage';
 import { AdminSubjectsPage } from './pages/admin/AdminSubjectsPage';
 import { AdminDirectionsPage } from './pages/admin/AdminDirectionsPage';
+import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
 import { TeacherHomePage } from './pages/teacher/TeacherHomePage';
 import { TeacherJournalPage } from './pages/teacher/TeacherJournalPage';
+import { TeacherJournalNewPage } from './pages/teacher/TeacherJournalNewPage';
 import { TeacherMyVzvodyPage } from './pages/teacher/TeacherMyVzvodyPage';
 import { TeacherTimetablePage } from './pages/teacher/TeacherTimetablePage';
 import { TeacherGradebookPage } from './pages/teacher/TeacherGradebookPage';
@@ -153,6 +155,22 @@ export function App() {
           }
         />
         <Route
+          path="/app/admin/notifications"
+          element={
+            <RequireAuth>
+              <AdminNotificationsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/manager/notifications"
+          element={
+            <RequireAuth>
+              <AdminNotificationsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/app/admin/classes/:classId/journal"
           element={
             <RequireAuth>
@@ -195,6 +213,14 @@ export function App() {
         />
         <Route
           path="/app/teacher/journal"
+          element={
+            <RequireAuth>
+              <TeacherJournalNewPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/teacher/journal-old"
           element={
             <RequireAuth>
               <TeacherJournalPage />
