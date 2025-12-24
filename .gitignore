@@ -3,6 +3,7 @@ node_modules/
 apps/web/dist/
 apps/web/.env
 apps/web/tsconfig.tsbuildinfo
+apps/web/.vite/
 
 # Python
 __pycache__/
