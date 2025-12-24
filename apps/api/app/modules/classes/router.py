@@ -174,6 +174,37 @@ def list_classes(user: CurrentUser):
         )
 
 
+@router.get("/curated")
+def list_curated_classes(user: dict = require_role("teacher")):
+    """Список взводов, где текущий учитель назначен куратором."""
+    sb = get_supabase()
+    try:
+        # Ensure user_id is a valid UUID string
+        user_id = str(user["id"])
+        resp = (
+            sb.table("classes")
+            .select("id,name,direction_id,curator_id,directions(id,name,code)")
+            .eq("curator_id", user_id)
+            .order("name")
+            .execute()
+        )
+        classes = resp.data or []
+        for cls in classes:
+            count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
+            cls["student_count"] = count_resp.count or 0
+            cls["direction"] = cls.get("directions") or None
+            cls.pop("directions", None)
+        return {"classes": classes}
+    except Exception as e:
+        # Log the actual error for debugging
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load curated classes: {str(e)}"
+        )
+
+
 @router.get("/{class_id}")
 def get_class(class_id: str, user: CurrentUser):
     sb = get_supabase()
@@ -296,23 +327,3 @@ def enroll_student(class_id: str, payload: EnrollIn, _: dict = require_role("adm
                 "(see supabase/migrations/20251222_000001_mvp.sql) and restart the API."
             ),
         )
-
-
-@router.get("/curated")
-def list_curated_classes(user: dict = require_role("teacher")):
-    """Список взводов, где текущий учитель назначен куратором."""
-    sb = get_supabase()
-    resp = (
-        sb.table("classes")
-        .select("id,name,direction_id,curator_id,directions(id,name,code)")
-        .eq("curator_id", user["id"])
-        .order("name")
-        .execute()
-    )
-    classes = resp.data or []
-    for cls in classes:
-        count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
-        cls["student_count"] = count_resp.count or 0
-        cls["direction"] = cls.get("directions") or None
-        cls.pop("directions", None)
-    return {"classes": classes}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -75,6 +75,306 @@ def get_teacher_classes(user: dict = require_role("teacher")):
         })
     
     return {"classes": result}
+
+
+@router.get("/teacher/schedule")
+def get_teacher_schedule(
+    date_from: str,
+    date_to: str,
+    user: dict = require_role("teacher")
+):
+    """Получить расписание учителя на диапазон дат с уроками"""
+    sb = get_supabase()
+    
+    # Получаем все уроки учителя из расписания
+    timetable = (
+        sb.table("timetable_entries")
+        .select("id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)")
+        .eq("teacher_id", user["id"])
+        .execute()
+        .data
+        or []
+    )
+    
+    if not timetable:
+        return {"lessons": []}
+    
+    # Генерируем даты в диапазоне
+    start_date = date.fromisoformat(date_from)
+    end_date = date.fromisoformat(date_to)
+    
+    lessons = []
+    current_date = start_date
+    
+    while current_date <= end_date:
+        weekday = current_date.isoweekday()  # 1=Mon, 7=Sun
+        
+        # Находим уроки на этот день недели
+        day_lessons = [e for e in timetable if e.get("weekday") == weekday]
+        
+        for entry in day_lessons:
+            subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject")
+            class_name = entry.get("classes", {}).get("name") if entry.get("classes") else ""
+            
+            lessons.append({
+                "timetable_entry_id": entry.get("id"),
+                "date": current_date.isoformat(),
+                "weekday": weekday,
+                "start_time": entry.get("start_time"),
+                "end_time": entry.get("end_time"),
+                "subject": entry.get("subject"),
+                "subject_name": subject_name,
+                "class_id": entry.get("class_id"),
+                "class_name": class_name,
+                "room": entry.get("room")
+            })
+        
+        current_date += timedelta(days=1)
+    
+    # Сортируем по дате и времени
+    lessons.sort(key=lambda x: (x["date"], x["start_time"] or ""))
+    
+    return {"lessons": lessons}
+
+
+@router.get("/teacher/lessons/{lesson_date}")
+def get_teacher_lessons_for_date(
+    lesson_date: str,
+    user: dict = require_role("teacher")
+):
+    """Получить все уроки учителя на конкретную дату"""
+    sb = get_supabase()
+    
+    # Определяем день недели
+    lesson_date_obj = date.fromisoformat(lesson_date)
+    weekday = lesson_date_obj.isoweekday()
+    
+    # Получаем расписание на этот день
+    timetable = (
+        sb.table("timetable_entries")
+        .select("id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)")
+        .eq("teacher_id", user["id"])
+        .eq("weekday", weekday)
+        .order("start_time")
+        .execute()
+        .data
+        or []
+    )
+    
+    lessons = []
+    for entry in timetable:
+        subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject")
+        class_name = entry.get("classes", {}).get("name") if entry.get("classes") else ""
+        
+        # Проверяем, есть ли записи в журнале для этого урока
+        journal_count = (
+            sb.table("lesson_journal")
+            .select("timetable_entry_id", count="exact")
+            .eq("timetable_entry_id", entry.get("id"))
+            .eq("lesson_date", lesson_date)
+            .execute()
+            .count or 0
+        )
+        
+        lessons.append({
+            "timetable_entry_id": entry.get("id"),
+            "date": lesson_date,
+            "start_time": entry.get("start_time"),
+            "end_time": entry.get("end_time"),
+            "subject": entry.get("subject"),
+            "subject_name": subject_name,
+            "class_id": entry.get("class_id"),
+            "class_name": class_name,
+            "room": entry.get("room"),
+            "has_journal_entries": journal_count > 0
+        })
+    
+    return {"lessons": lessons}
+
+
+class BulkAttendanceIn(BaseModel):
+    timetable_entry_id: str
+    lesson_date: str
+    student_ids: list[str]
+    present: bool
+
+
+@router.post("/bulk-attendance")
+def bulk_mark_attendance(
+    payload: BulkAttendanceIn,
+    user: dict = require_role("teacher", "admin", "manager")
+):
+    """Массовая отметка посещаемости"""
+    sb = get_supabase()
+    
+    # Проверяем урок
+    entry = (
+        sb.table("timetable_entries")
+        .select("id,class_id,teacher_id")
+        .eq("id", payload.timetable_entry_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    entry_data = entry[0]
+    
+    # Проверяем доступ для учителя
+    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Создаем/обновляем записи для всех студентов
+    records = []
+    for student_id in payload.student_ids:
+        records.append({
+            "timetable_entry_id": payload.timetable_entry_id,
+            "lesson_date": payload.lesson_date,
+            "student_id": student_id,
+            "present": payload.present,
+            "created_by": user["id"],
+            "updated_at": datetime.utcnow().isoformat()
+        })
+    
+    if records:
+        sb.table("lesson_journal").upsert(
+            records,
+            on_conflict="timetable_entry_id,lesson_date,student_id"
+        ).execute()
+    
+    return {"ok": True, "updated": len(records)}
+
+
+@router.get("/lesson-details")
+def get_lesson_details(
+    timetable_entry_id: str,
+    lesson_date: str,
+    user: dict = require_role("teacher", "admin", "manager")
+):
+    """Получить детальную информацию об уроке со списком студентов и их оценками"""
+    sb = get_supabase()
+    
+    # Получаем информацию об уроке
+    entry = (
+        sb.table("timetable_entries")
+        .select("id,class_id,subject,teacher_id,start_time,end_time,room,subject_id,classes(name),subjects(name)")
+        .eq("id", timetable_entry_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    entry_data = entry[0]
+    
+    # Проверяем доступ для учителя
+    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    class_id = entry_data.get("class_id")
+    subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
+    class_name = entry_data.get("classes", {}).get("name") if entry_data.get("classes") else ""
+    
+    # Получаем студентов класса с их номерами
+    enrollments = (
+        sb.table("class_enrollments")
+        .select("student_id,student_number")
+        .eq("class_id", class_id)
+        .execute()
+        .data
+        or []
+    )
+    
+    student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+    student_numbers = {e.get("student_id"): e.get("student_number") for e in enrollments}
+    
+    if not student_ids:
+        return {
+            "lesson": {
+                "timetable_entry_id": timetable_entry_id,
+                "date": lesson_date,
+                "subject": entry_data.get("subject"),
+                "subject_name": subject_name,
+                "class_name": class_name,
+                "start_time": entry_data.get("start_time"),
+                "end_time": entry_data.get("end_time"),
+                "room": entry_data.get("room"),
+                "lesson_topic": None,
+                "homework": None
+            },
+            "students": []
+        }
+    
+    # Получаем информацию о студентах
+    students_resp = (
+        sb.table("users")
+        .select("id,username,full_name")
+        .in_("id", student_ids)
+        .execute()
+        .data
+        or []
+    )
+    
+    # Получаем записи из журнала для этого урока
+    journal_records = (
+        sb.table("lesson_journal")
+        .select("student_id,grade,present,comment,lesson_topic,homework")
+        .eq("timetable_entry_id", timetable_entry_id)
+        .eq("lesson_date", lesson_date)
+        .execute()
+        .data
+        or []
+    )
+    
+    # Индексируем записи по student_id
+    journal_by_student = {r.get("student_id"): r for r in journal_records}
+    
+    # Собираем тему и ДЗ (берем первое непустое значение)
+    lesson_topic = None
+    homework = None
+    for record in journal_records:
+        if record.get("lesson_topic") and not lesson_topic:
+            lesson_topic = record["lesson_topic"]
+        if record.get("homework") and not homework:
+            homework = record["homework"]
+    
+    # Формируем список студентов
+    students = []
+    for s in students_resp:
+        sid = s.get("id")
+        journal = journal_by_student.get(sid, {})
+        
+        students.append({
+            "id": sid,
+            "name": s.get("full_name") or s.get("username"),
+            "username": s.get("username"),
+            "student_number": student_numbers.get(sid),
+            "grade": journal.get("grade"),
+            "present": journal.get("present"),
+            "comment": journal.get("comment")
+        })
+    
+    # Сортируем по номеру студента
+    students.sort(key=lambda x: (x["student_number"] is None, x["student_number"] or 0, x["name"] or "", x["username"] or ""))
+    
+    return {
+        "lesson": {
+            "timetable_entry_id": timetable_entry_id,
+            "date": lesson_date,
+            "subject": entry_data.get("subject"),
+            "subject_name": subject_name,
+            "class_id": class_id,
+            "class_name": class_name,
+            "start_time": entry_data.get("start_time"),
+            "end_time": entry_data.get("end_time"),
+            "room": entry_data.get("room"),
+            "lesson_topic": lesson_topic,
+            "homework": homework
+        },
+        "students": students
+    }
 
 
 @router.get("/classes/{class_id}/journal")

@@ -16,7 +16,7 @@ export function TeacherHomePage() {
       title="Панель преподавателя"
       nav={[
         { to: "/app", label: "🏠 Dashboard" },
-        { to: "/app/teacher/journal", label: "📖 Журнал" },
+        { to: "/app/teacher/journal", label: "📓 Журнал" },
           { to: "/app/teacher/vzvody", label: "👥 Мои взводы" },
         { to: "/app/teacher/timetable", label: "📅 Расписание" },
         { to: "/app/teacher/library", label: "📚 Библиотека" },

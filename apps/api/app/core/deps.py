@@ -28,6 +28,10 @@ def get_current_user(request: Request) -> dict:
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Validate UUID format (36 chars with dashes)
+        if not (len(user_id) == 36 and user_id.count("-") == 4):
+            raise HTTPException(status_code=401, detail="Invalid token format - please re-login")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 

@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthProvider";
+import { NotificationBell } from "../components/NotificationBell";
 import type { Lang } from "../i18n/i18n";
 import styles from "./Header.module.css";
 
@@ -46,6 +47,7 @@ export function Header({ title, showLogo = true }: HeaderProps) {
         )}
         <h1 className={styles.title}>{title}</h1>
         <div className={styles.headerActions}>
+          {state.accessToken && <NotificationBell token={state.accessToken} />}
           <button
             className={styles.langBtn}
             onClick={toggleLang}

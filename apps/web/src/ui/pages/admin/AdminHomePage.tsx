@@ -22,6 +22,7 @@ export function AdminHomePage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
       <div style={{ maxWidth: 520 }}>

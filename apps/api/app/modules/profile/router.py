@@ -44,10 +44,21 @@ def get_profile(user: CurrentUser):
     user_data.pop("password_fingerprint", None)
     
     # Если есть subject_id для учителя, получаем название предмета
-    if user_data.get("teacher_subject"):
-        subject_resp = sb.table("subjects").select("name").eq("id", user_data["teacher_subject"]).limit(1).execute()
-        if subject_resp.data:
-            user_data["teacher_subject_name"] = subject_resp.data[0]["name"]
+    # teacher_subject может быть UUID или строкой (legacy data)
+    teacher_subject = user_data.get("teacher_subject")
+    if teacher_subject:
+        # Проверяем, является ли это UUID (36 символов с дефисами)
+        if len(str(teacher_subject)) == 36 and "-" in str(teacher_subject):
+            try:
+                subject_resp = sb.table("subjects").select("name").eq("id", teacher_subject).limit(1).execute()
+                if subject_resp.data:
+                    user_data["teacher_subject_name"] = subject_resp.data[0]["name"]
+            except Exception:
+                # Если ошибка, просто используем значение как есть
+                user_data["teacher_subject_name"] = str(teacher_subject)
+        else:
+            # Старый формат - просто строка
+            user_data["teacher_subject_name"] = str(teacher_subject)
     
     return {"profile": user_data}
 

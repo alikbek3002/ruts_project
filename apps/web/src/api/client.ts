@@ -789,3 +789,52 @@ export type HomeworkItem = {
 export async function apiGetStudentHomework(token: string) {
   return apiGet<{ homework: HomeworkItem[] }>("/journal/student/homework", token);
 }
+
+// Notifications
+export type Notification = {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "success" | "warning" | "error" | "announcement";
+  target_role?: string | null;
+  target_user_id?: string | null;
+  created_at: string;
+  expires_at?: string | null;
+  is_read: boolean;
+};
+
+export async function apiGetNotifications(token: string) {
+  return apiGet<{ notifications: Notification[] }>("/notifications", token);
+}
+
+export async function apiGetUnreadNotificationCount(token: string) {
+  return apiGet<{ count: number }>("/notifications/unread-count", token);
+}
+
+export async function apiMarkNotificationRead(token: string, notificationId: string) {
+  return http<{ success: boolean }>(`/notifications/${notificationId}/read`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiCreateNotification(
+  token: string,
+  data: {
+    title: string;
+    message: string;
+    type?: "info" | "success" | "warning" | "error" | "announcement";
+    target_role?: "teacher" | "student" | "admin" | "manager" | "all" | null;
+    target_user_id?: string | null;
+    expires_at?: string | null;
+  }
+) {
+  return apiPost<{ notification: Notification }>("/notifications", data, token);
+}
+
+export async function apiDeleteNotification(token: string, notificationId: string) {
+  return http<{ success: boolean }>(`/notifications/${notificationId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
