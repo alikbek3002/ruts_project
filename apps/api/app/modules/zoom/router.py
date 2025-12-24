@@ -153,7 +153,6 @@ def _get_valid_access_token(teacher_id: str) -> str:
     return access_token
 
 
-@router.post("/meetings")
 class ZoomMeetingCreateIn(BaseModel):
     timetableEntryId: str
     startsAt: str
@@ -161,6 +160,7 @@ class ZoomMeetingCreateIn(BaseModel):
 
 @router.post("/meetings")
 def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("teacher", "admin")):
+    """Create a Zoom meeting for a timetable entry"""
     # startsAt: local ISO datetime (e.g. 2025-12-22T09:00:00) interpreted in settings.app_timezone
     access_token = _get_valid_access_token(user["id"])
 
@@ -211,13 +211,13 @@ def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("t
         )
 
     if resp.status_code >= 400:
-        raise HTTPException(status_code=400, detail="Zoom meeting create failed")
+        raise HTTPException(status_code=400, detail=f"Zoom meeting create failed: {resp.text}")
 
     m = resp.json()
     zoom_meeting_id = str(m.get("id"))
     join_url = m.get("join_url")
 
-    sb.table("zoom_meetings").insert(
+    db_resp = sb.table("zoom_meetings").insert(
         {
             "timetable_entry_id": timetableEntryId,
             "starts_at": startsAt,
@@ -228,4 +228,98 @@ def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("t
         }
     ).execute()
 
-    return {"zoom_meeting_id": zoom_meeting_id, "join_url": join_url}
+    meeting = db_resp.data[0] if isinstance(db_resp.data, list) and db_resp.data else db_resp.data
+    return {"meeting": meeting}
+
+
+@router.get("/meetings")
+def list_meetings(user: dict = require_role("teacher", "admin", "student")):
+    """List all upcoming Zoom meetings for the user"""
+    sb = get_supabase()
+    
+    # Get current time in UTC
+    now = datetime.now(tz=timezone.utc)
+    
+    if user["role"] == "teacher":
+        # Get meetings created by this teacher
+        resp = (
+            sb.table("zoom_meetings")
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
+            .eq("created_by", user["id"])
+            .gte("starts_at", now.isoformat())
+            .order("starts_at", desc=False)
+            .limit(50)
+            .execute()
+        )
+    elif user["role"] == "student":
+        # Get meetings for classes the student is enrolled in
+        # First get student's classes
+        enrollments = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
+        class_ids = [e["class_id"] for e in (enrollments.data or [])]
+        
+        if not class_ids:
+            return {"meetings": []}
+        
+        # Get timetable entries for those classes
+        timetable_resp = sb.table("timetable_entries").select("id").in_("class_id", class_ids).execute()
+        timetable_ids = [t["id"] for t in (timetable_resp.data or [])]
+        
+        if not timetable_ids:
+            return {"meetings": []}
+        
+        # Get meetings for those timetable entries
+        resp = (
+            sb.table("zoom_meetings")
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
+            .in_("timetable_entry_id", timetable_ids)
+            .gte("starts_at", now.isoformat())
+            .order("starts_at", desc=False)
+            .limit(50)
+            .execute()
+        )
+    else:  # admin
+        # Get all meetings
+        resp = (
+            sb.table("zoom_meetings")
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
+            .gte("starts_at", now.isoformat())
+            .order("starts_at", desc=False)
+            .limit(50)
+            .execute()
+        )
+    
+    return {"meetings": resp.data or []}
+
+
+@router.delete("/meetings/{meeting_id}")
+def delete_meeting(meeting_id: str, user: dict = require_role("teacher", "admin")):
+    """Delete a Zoom meeting"""
+    sb = get_supabase()
+    
+    # Get meeting info
+    resp = sb.table("zoom_meetings").select("zoom_meeting_id,created_by,timetable_entries(teacher_id)").eq("id", meeting_id).single().execute()
+    meeting = resp.data
+    
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Check permissions: teacher can only delete own meetings
+    timetable_teacher_id = (meeting.get("timetable_entries") or {}).get("teacher_id")
+    if user["role"] == "teacher" and meeting.get("created_by") != user["id"] and timetable_teacher_id != user["id"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Try to delete from Zoom (best effort)
+    try:
+        access_token = _get_valid_access_token(user["id"])
+        with httpx.Client(timeout=20) as client:
+            client.delete(
+                f"{ZOOM_API_BASE}/meetings/{meeting['zoom_meeting_id']}",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+    except Exception as e:
+        print(f"Warning: Failed to delete Zoom meeting: {e}")
+    
+    # Delete from database
+    sb.table("zoom_meetings").delete().eq("id", meeting_id).execute()
+    
+    return {"ok": True}
