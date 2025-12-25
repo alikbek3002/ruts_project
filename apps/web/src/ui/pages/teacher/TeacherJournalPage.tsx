@@ -1,132 +1,157 @@
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  BookOpen, 
+  Check, 
+  X as XIcon, 
+  Save, 
+  User,
+  MoreHorizontal
+} from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
-import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import { trackedFetch } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
+type Lesson = {
+  timetable_entry_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  subject: string;
+  subject_name: string;
+  class_id: string;
+  class_name: string;
+  room?: string;
+  has_journal_entries?: boolean;
+};
+
 type Student = {
   id: string;
   name: string;
   username: string;
-};
-
-type Grade = {
-  grade: number;
+  student_number: number | null;
+  grade: number | null;
+  present: boolean | null;
   comment: string | null;
 };
 
-type CellData = {
-  grades: Grade[];
-  present: boolean | null;
-};
-
-type Lesson = {
-  date: string;
-  timetable_entry_id: string;
-  subject_name: string;
-  subject_id?: string;
-  lesson_topic?: string | null;
-  homework?: string | null;
-};
-
-type JournalData = {
+type LessonDetails = {
+  lesson: {
+    timetable_entry_id: string;
+    date: string;
+    subject: string;
+    subject_name: string;
+    class_id: string;
+    class_name: string;
+    start_time: string;
+    end_time: string;
+    room?: string;
+    lesson_topic: string | null;
+    homework: string | null;
+  };
   students: Student[];
-  lessons: Lesson[];
-  grades: Record<string, Record<string, CellData>>;
-};
-
-type SubjectInfo = {
-  id: string;
-  name: string;
-};
-
-type ClassInfo = {
-  id: string;
-  name: string;
-  subjects: SubjectInfo[];
 };
 
 export function TeacherJournalPage() {
   const { state } = useAuth();
-  const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
 
-  const [classes, setClasses] = useState<ClassInfo[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
-  const [journal, setJournal] = useState<JournalData | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [lessonDetails, setLessonDetails] = useState<LessonDetails | null>(null);
+  
+  const [lessonTopic, setLessonTopic] = useState("");
+  const [homework, setHomework] = useState("");
+  
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
-  // Для добавления оценки
-  const [addingGrade, setAddingGrade] = useState<{ studentId: string; lessonKey: string; lesson: Lesson } | null>(null);
-  const [newGrade, setNewGrade] = useState<number>(5);
-  const [newComment, setNewComment] = useState<string>("");
-
-  // Для темы урока и ДЗ
-  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
-  const [lessonTopic, setLessonTopic] = useState<string>("");
-  const [homework, setHomework] = useState<string>("");
+  // Local state for editing comments before blur
+  const [editingComment, setEditingComment] = useState<{id: string, value: string} | null>(null);
 
   useEffect(() => {
     if (!token) return;
-    loadClasses();
+    loadLessonsForDate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [selectedDate, token]);
 
   useEffect(() => {
-    if (!token || !selectedClassId) return;
-    loadJournal();
+    if (!selectedLesson || !token) return;
+    loadLessonDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedClassId, selectedSubjectId]);
+  }, [selectedLesson, token]);
 
-  async function loadClasses() {
+  async function loadLessonsForDate() {
     if (!token) return;
-    setErr(null);
-    try {
-      const resp = await trackedFetch("/api/journal/teacher/classes", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error("Failed to load classes");
-      const data = await resp.json();
-      setClasses(data.classes || []);
-    } catch (e) {
-      setErr(String(e));
-    }
-  }
-
-  async function loadJournal() {
-    if (!token || !selectedClassId) return;
     setLoading(true);
-    setErr(null);
     try {
-      const url = new URL(`/api/journal/classes/${selectedClassId}/journal`, window.location.origin);
-      if (selectedSubjectId) {
-        url.searchParams.append("subject_id", selectedSubjectId);
-      }
-
-      const resp = await trackedFetch(url.toString(), {
+      const resp = await trackedFetch(`/api/journal/teacher/lessons/${selectedDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!resp.ok) throw new Error("Failed to load journal");
+      if (!resp.ok) throw new Error("Failed to load lessons");
       const data = await resp.json();
-      setJournal(data);
+      setLessons(data.lessons || []);
     } catch (e) {
-      setErr(String(e));
+      console.error(e);
     } finally {
       setLoading(false);
     }
   }
 
-  async function addGrade(studentId: string, lessonKey: string, lesson: Lesson, gradeValue: number | null, present: boolean = true) {
-    if (!token || !selectedClassId) return;
-    setErr(null);
+  async function loadLessonDetails() {
+    if (!token || !selectedLesson) return;
+    setLoading(true);
     try {
-      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/grades`, {
+      const resp = await trackedFetch(
+        `/api/journal/lesson-details?timetable_entry_id=${selectedLesson.timetable_entry_id}&lesson_date=${selectedDate}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!resp.ok) throw new Error("Failed to load lesson details");
+      const data = await resp.json();
+      setLessonDetails(data);
+      setLessonTopic(data.lesson.lesson_topic || "");
+      setHomework(data.lesson.homework || "");
+      setSelectedStudents(new Set());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveGrade(studentId: string, grade: number | null, present: boolean | null, comment?: string) {
+    if (!token || !selectedLesson) return;
+    // Optimistic update
+    setLessonDetails(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        students: prev.students.map(s => {
+          if (s.id === studentId) {
+            return { 
+              ...s, 
+              grade: grade !== undefined ? grade : s.grade,
+              present: present !== undefined ? present : s.present,
+              comment: comment !== undefined ? comment : s.comment
+            };
+          }
+          return s;
+        })
+      };
+    });
+
+    try {
+      const resp = await trackedFetch(`/api/journal/classes/${lessonDetails?.lesson.class_id}/grades`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -134,118 +159,116 @@ export function TeacherJournalPage() {
         },
         body: JSON.stringify({
           student_id: studentId,
-          timetable_entry_id: lesson.timetable_entry_id,
-          lesson_date: lesson.date,
-          grade: gradeValue,
-          present: present,
-          comment: newComment || null,
+          timetable_entry_id: selectedLesson.timetable_entry_id,
+          lesson_date: selectedDate,
+          grade,
+          present: present ?? true,
+          comment,
         }),
       });
-      if (!resp.ok) throw new Error("Failed to add grade");
-      setAddingGrade(null);
-      setNewGrade(5);
-      setNewComment("");
-      await loadJournal();
+      if (!resp.ok) throw new Error("Failed to save grade");
     } catch (e) {
-      setErr(String(e));
+      console.error(e);
+      // Revert on error would be ideal, but for now just log
+      loadLessonDetails();
     }
-  }
-
-  async function deleteGrade(gradeId: string) {
-    // Удаление пока не реализовано для lesson_journal
-    // Можно добавить отдельный endpoint если нужно
-    alert("Удаление оценок временно недоступно");
-  }
-
-  async function downloadExcel() {
-    if (!token || !selectedClassId) return;
-    setErr(null);
-    try {
-      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/export`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error("Failed to download Excel");
-      const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `journal_${selectedClass?.name || "class"}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (e) {
-      setErr(String(e));
-    }
-  }
-
-  function openLessonEditor(lesson: Lesson) {
-    setEditingLesson(lesson);
-    setLessonTopic(lesson.lesson_topic || "");
-    setHomework(lesson.homework || "");
   }
 
   async function saveLessonInfo() {
-    if (!token || !selectedClassId || !editingLesson) return;
-    setErr(null);
+    if (!token || !selectedLesson || !lessonDetails) return;
+    setSaving(true);
     try {
-      const resp = await fetch(`/api/journal/classes/${selectedClassId}/lesson-info`, {
+      const resp = await trackedFetch(`/api/journal/classes/${lessonDetails.lesson.class_id}/lesson-info`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          timetable_entry_id: editingLesson.timetable_entry_id,
-          lesson_date: editingLesson.date,
+          timetable_entry_id: selectedLesson.timetable_entry_id,
+          lesson_date: selectedDate,
           lesson_topic: lessonTopic || null,
           homework: homework || null,
         }),
       });
       if (!resp.ok) throw new Error("Failed to save lesson info");
-      
-      // Обновляем локально
-      setJournal((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          lessons: prev.lessons.map((l) =>
-            l.date === editingLesson.date && l.timetable_entry_id === editingLesson.timetable_entry_id
-              ? { ...l, lesson_topic: lessonTopic, homework: homework }
-              : l
-          ),
-        };
-      });
-      
-      setEditingLesson(null);
     } catch (e) {
-      setErr(String(e));
+      console.error(e);
+    } finally {
+      setSaving(false);
     }
   }
 
-  function calculateAverage(studentId: string): number | null {
-    if (!journal) return null;
-    const allGrades: number[] = [];
-    for (const lesson of journal.lessons) {
-      const key = `${lesson.date}_${lesson.timetable_entry_id}`;
-      const cellData = journal.grades[studentId]?.[key];
-      const gradesList = cellData?.grades || [];
-      for (const g of gradesList) {
-        allGrades.push(g.grade);
-      }
+  async function bulkMarkAttendance(present: boolean) {
+    if (!token || !selectedLesson || selectedStudents.size === 0) return;
+    setSaving(true);
+    try {
+      const resp = await trackedFetch(`/api/journal/bulk-attendance`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          timetable_entry_id: selectedLesson.timetable_entry_id,
+          lesson_date: selectedDate,
+          student_ids: Array.from(selectedStudents),
+          present,
+        }),
+      });
+      if (!resp.ok) throw new Error("Failed to mark attendance");
+      await loadLessonDetails();
+      setSelectedStudents(new Set());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
     }
-    if (allGrades.length === 0) return null;
-    return allGrades.reduce((a, b) => a + b, 0) / allGrades.length;
+  }
+
+  function toggleStudentSelection(studentId: string) {
+    const newSet = new Set(selectedStudents);
+    if (newSet.has(studentId)) {
+      newSet.delete(studentId);
+    } else {
+      newSet.add(studentId);
+    }
+    setSelectedStudents(newSet);
+  }
+
+  function selectAll() {
+    if (!lessonDetails) return;
+    setSelectedStudents(new Set(lessonDetails.students.map((s) => s.id)));
+  }
+
+  function deselectAll() {
+    setSelectedStudents(new Set());
+  }
+
+  function handleGradeInput(studentId: string, value: string) {
+    const grade = value ? parseInt(value, 10) : null;
+    if (grade !== null && (grade < 1 || grade > 5)) return;
+    saveGrade(studentId, grade, null);
+  }
+
+  function handlePresentToggle(studentId: string, currentPresent: boolean | null) {
+    const newPresent = currentPresent === true ? false : true;
+    saveGrade(studentId, null, newPresent);
+  }
+
+  function handleCommentBlur(studentId: string, value: string) {
+    setEditingComment(null);
+    saveGrade(studentId, null, null, value);
   }
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "teacher") return <Navigate to="/app" replace />;
 
-  const selectedClass = classes.find((c) => c.id === selectedClassId);
+  const today = new Date().toISOString().split("T")[0];
 
   return (
     <AppShell
-      title={`${t("teacher.title")} → ${t("nav.journal")}`}
+      title="Учитель → Журнал"
       nav={[
         { to: "/app/teacher", label: "Главная" },
         { to: "/app/teacher/journal", label: "Журнал" },
@@ -254,282 +277,259 @@ export function TeacherJournalPage() {
         { to: "/app/teacher/library", label: "Библиотека" },
       ]}
     >
-      <h2 style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, marginBottom: 16 }}>{t("journal.title")}</h2>
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>
+            <BookOpen size={28} />
+            Классный журнал
+          </h1>
 
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-      <div style={{ marginBottom: 16, display: "flex", gap: "1rem", alignItems: "center" }}>
-        <label style={{ fontFamily: 'Arial, sans-serif', fontSize: 14 }}>
-          <strong>{t("journal.selectClass")}:</strong>
-          <select
-            className={styles.classSelect}
-            value={selectedClassId}
-            onChange={(e) => {
-              setSelectedClassId(e.target.value);
-              setSelectedSubjectId("");
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            <option value="">-- {t("common.select")} --</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {selectedClass && selectedClass.subjects.length > 0 && (
-          <label style={{ fontFamily: 'Arial, sans-serif', fontSize: 14 }}>
-            <strong>Предмет:</strong>
-            <select
-              className={styles.classSelect}
-              value={selectedSubjectId}
-              onChange={(e) => setSelectedSubjectId(e.target.value)}
-              style={{ marginLeft: 8 }}
+          <div className={styles.dateSelector}>
+            <button 
+              className={styles.navBtn} 
+              onClick={() => setSelectedDate(new Date(new Date(selectedDate).getTime() - 86400000).toISOString().split("T")[0])}
             >
-              <option value="">Все предметы</option>
-              {selectedClass.subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-
-      {selectedClassId && (
-        <div className={styles.headerButtons}>
-          <button onClick={loadJournal} disabled={loading}>
-            {loading ? "⭮" : "↻"} {loading ? t("common.loading") : t("common.refresh")}
-          </button>
-          <button onClick={downloadExcel} disabled={loading}>
-            ⬇ {t("journal.downloadExcel")}
-          </button>
-        </div>
-      )}
-
-      {loading && <Loader text={t("common.loading")} />}
-
-      {!loading && journal && selectedClass && (
-        <div className={styles.tableWrapper}>
-          <table className={styles.journalTable}>
-            <thead>
-              <tr>
-                <th className={styles.stickyCol}>{t("journal.student")}</th>
-                {journal.lessons.map((lesson, idx) => {
-                  const key = `${lesson.date}_${lesson.timetable_entry_id}`;
-                  const colClass = idx % 2 === 0 ? styles.dateCol : styles.dateColAlt;
-                  return (
-                    <th key={key} className={colClass}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
-                        <div style={{ flex: 1 }}>
-                          <div>{lesson.date}</div>
-                          <div className={styles.subjectName}>{lesson.subject_name}</div>
-                        </div>
-                        <button
-                          onClick={() => openLessonEditor(lesson)}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "16px",
-                            padding: "2px 4px",
-                          }}
-                          title="Тема и ДЗ"
-                        >
-                          📝
-                        </button>
-                      </div>
-                      {lesson.lesson_topic && (
-                        <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
-                          📖 {lesson.lesson_topic}
-                        </div>
-                      )}
-                      {lesson.homework && (
-                        <div style={{ fontSize: "11px", color: "#0066cc", marginTop: "2px" }}>
-                          📚 ДЗ
-                        </div>
-                      )}
-                    </th>
-                  );
-                })}
-                <th className={styles.avgCol}>{t("journal.average")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {journal.students.map((student) => {
-                const avg = calculateAverage(student.id);
-                return (
-                  <tr key={student.id}>
-                    <td className={styles.stickyCol}>{student.name}</td>
-                    {journal.lessons.map((lesson, idx) => {
-                      const key = `${lesson.date}_${lesson.timetable_entry_id}`;
-                      const cellData = journal.grades[student.id]?.[key] || { grades: [], present: null };
-                      const gradesList = cellData.grades || [];
-                      const isAbsent = cellData.present === false;
-                      const isAdding = addingGrade?.studentId === student.id && addingGrade?.lessonKey === key;
-                      const colClass = idx % 2 === 0 ? styles.dateCol : styles.dateColAlt;
-
-                      return (
-                        <td key={key} className={`${styles.gradeCell} ${colClass} ${isAbsent ? styles.absentCell : ''}`}>
-                          {isAdding ? (
-                            <div className={styles.addForm}>
-                              <select value={newGrade} onChange={(e) => setNewGrade(Number(e.target.value))}>
-                                <option value={5}>5</option>
-                                <option value={4}>4</option>
-                                <option value={3}>3</option>
-                                <option value={2}>2</option>
-                                <option value={1}>1</option>
-                              </select>
-                              <button onClick={() => addGrade(student.id, key, lesson, newGrade, true)}>✓</button>
-                              <button 
-                                className={styles.absentBtn}
-                                onClick={() => addGrade(student.id, key, lesson, null, false)}
-                                title="Отсутствует"
-                              >
-                                Н
-                              </button>
-                              <button onClick={() => setAddingGrade(null)}>✗</button>
-                            </div>
-                          ) : (
-                            <div className={styles.grades}>
-                              {isAbsent && <span className={styles.absentMark}>Н</span>}
-                              {gradesList.map((g, i) => (
-                                <span key={i} className={styles.gradeItem} title={g.comment || ""}>
-                                  {g.grade}
-                                </span>
-                              ))}
-                              <button
-                                className={styles.addBtn}
-                                onClick={() => setAddingGrade({ studentId: student.id, lessonKey: key, lesson })}
-                              >
-                                +
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className={styles.avgCol}>
-                      {avg !== null ? <strong>{avg.toFixed(2)}</strong> : "—"}
-                    </td>
-                  </tr>
-                );
+              <ChevronLeft size={20} />
+            </button>
+            
+            <div className={styles.dateDisplay}>
+              {new Date(selectedDate).toLocaleDateString("ru-RU", { 
+                weekday: "short", 
+                day: "numeric", 
+                month: "long"
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && !selectedClassId && (
-        <p style={{ color: "#666" }}>{t("journal.selectClass")}</p>
-      )}
-
-      {/* Модалка для редактирования темы урока и ДЗ */}
-      {editingLesson && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={() => setEditingLesson(null)}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "24px",
-              borderRadius: "8px",
-              maxWidth: "600px",
-              width: "90%",
-              maxHeight: "80vh",
-              overflow: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0 }}>
-              {editingLesson.subject_name} - {editingLesson.date}
-            </h3>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "4px", fontWeight: "bold" }}>
-                Тема урока:
-              </label>
-              <textarea
-                value={lessonTopic}
-                onChange={(e) => setLessonTopic(e.target.value)}
-                style={{
-                  width: "100%",
-                  minHeight: "60px",
-                  padding: "8px",
-                  fontSize: "14px",
-                  border: "1px solid #ccc",
-                  borderRadius: "4px",
-                  fontFamily: "inherit",
-                }}
-                placeholder="Введите тему урока..."
-              />
             </div>
 
-            <div style={{ marginBottom: "24px" }}>
-              <label style={{ display: "block", marginBottom: "4px", fontWeight: "bold" }}>
-                Домашнее задание:
-              </label>
-              <textarea
-                value={homework}
-                onChange={(e) => setHomework(e.target.value)}
-                style={{
-                  width: "100%",
-                  minHeight: "80px",
-                  padding: "8px",
-                  fontSize: "14px",
-                  border: "1px solid #ccc",
-                  borderRadius: "4px",
-                  fontFamily: "inherit",
-                }}
-                placeholder="Введите домашнее задание..."
-              />
-            </div>
+            <button 
+              className={styles.navBtn} 
+              onClick={() => setSelectedDate(new Date(new Date(selectedDate).getTime() + 86400000).toISOString().split("T")[0])}
+            >
+              <ChevronRight size={20} />
+            </button>
 
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setEditingLesson(null)}
-                style={{
-                  padding: "8px 16px",
-                  border: "1px solid #ccc",
-                  backgroundColor: "white",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                }}
-              >
-                Отмена
-              </button>
-              <button
-                onClick={saveLessonInfo}
-                style={{
-                  padding: "8px 16px",
-                  border: "none",
-                  backgroundColor: "#0066cc",
-                  color: "white",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                }}
-              >
-                Сохранить
-              </button>
-            </div>
+            <button className={styles.todayBtn} onClick={() => setSelectedDate(today)}>
+              Сегодня
+            </button>
+            
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{ marginLeft: 8, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px' }}
+            />
           </div>
         </div>
-      )}
+
+        {loading && !lessonDetails && <Loader text="Загрузка..." />}
+
+        {!selectedLesson && !loading && (
+          <>
+            <h3 className={styles.sectionTitle}>Уроки на сегодня:</h3>
+            {lessons.length === 0 ? (
+              <div className={styles.emptyState}>На эту дату уроков нет</div>
+            ) : (
+              <div className={styles.grid}>
+                {lessons.map((lesson) => (
+                  <div
+                    key={lesson.timetable_entry_id}
+                    className={styles.card}
+                    onClick={() => setSelectedLesson(lesson)}
+                  >
+                    <div className={styles.cardHeader}>
+                      <div className={styles.timeTag}>
+                        {lesson.start_time?.substring(0, 5)} - {lesson.end_time?.substring(0, 5)}
+                      </div>
+                      <div className={`${styles.statusTag} ${lesson.has_journal_entries ? styles.statusDone : styles.statusPending}`}>
+                        {lesson.has_journal_entries ? "Заполнен" : "Ожидает"}
+                      </div>
+                    </div>
+                    <div className={styles.subjectName}>{lesson.subject_name || lesson.subject}</div>
+                    <div className={styles.className}>
+                      <User size={16} /> {lesson.class_name}
+                    </div>
+                    {lesson.room && (
+                      <div className={styles.roomInfo}>
+                        <MapPin size={14} /> Ауд. {lesson.room}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedLesson && (
+          <div className={styles.detailsContainer}>
+            <div className={styles.detailsHeader}>
+              <div className={styles.detailsTitle}>
+                <h2>{selectedLesson.subject_name || selectedLesson.subject}</h2>
+                <div className={styles.detailsMeta}>
+                  <span>{selectedLesson.class_name}</span>
+                  <span>•</span>
+                  <span>{new Date(selectedDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</span>
+                  <span>•</span>
+                  <span>{selectedLesson.start_time?.substring(0, 5)} - {selectedLesson.end_time?.substring(0, 5)}</span>
+                </div>
+              </div>
+              <button 
+                className={styles.closeBtn} 
+                onClick={() => { setSelectedLesson(null); setLessonDetails(null); }}
+              >
+                <XIcon size={20} />
+              </button>
+            </div>
+
+            <div className={styles.detailsContent}>
+              {loading ? (
+                <Loader text="Загрузка списка..." />
+              ) : lessonDetails ? (
+                <>
+                  <div className={styles.infoGrid}>
+                    <div className={styles.inputGroup}>
+                      <label>Тема урока</label>
+                      <input
+                        className={styles.textInput}
+                        value={lessonTopic}
+                        onChange={(e) => setLessonTopic(e.target.value)}
+                        placeholder="Введите тему урока..."
+                      />
+                    </div>
+                    <div className={styles.inputGroup}>
+                      <label>Домашнее задание</label>
+                      <textarea
+                        className={styles.textArea}
+                        rows={1}
+                        value={homework}
+                        onChange={(e) => setHomework(e.target.value)}
+                        placeholder="Введите домашнее задание..."
+                      />
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button 
+                      className={styles.saveBtn} 
+                      onClick={saveLessonInfo} 
+                      disabled={saving}
+                    >
+                      <Save size={18} />
+                      Сохранить тему и ДЗ
+                    </button>
+                  </div>
+
+                  <div className={styles.tableControls}>
+                    <div className={styles.bulkActions}>
+                      {selectedStudents.size > 0 ? (
+                        <>
+                          <button className={`${styles.actionBtn} ${styles.btnGreen}`} onClick={() => bulkMarkAttendance(true)}>
+                            <Check size={14} /> Присутствуют
+                          </button>
+                          <button className={`${styles.actionBtn} ${styles.btnRed}`} onClick={() => bulkMarkAttendance(false)}>
+                            <XIcon size={14} /> Отсутствуют
+                          </button>
+                          <button className={`${styles.actionBtn} ${styles.btnGray}`} onClick={deselectAll}>
+                            Снять выделение ({selectedStudents.size})
+                          </button>
+                        </>
+                      ) : (
+                        <button className={`${styles.actionBtn} ${styles.btnGray}`} onClick={selectAll}>
+                          Выбрать всех
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>
+                      Всего учеников: {lessonDetails.students.length}
+                    </div>
+                  </div>
+
+                  <div className={styles.tableWrapper}>
+                    <table className={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 40 }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.size === lessonDetails.students.length && lessonDetails.students.length > 0}
+                              onChange={(e) => (e.target.checked ? selectAll() : deselectAll())}
+                            />
+                          </th>
+                          <th style={{ width: 50 }}>№</th>
+                          <th>Ученик</th>
+                          <th style={{ width: 100, textAlign: 'center' }}>Посещ.</th>
+                          <th style={{ width: 80, textAlign: 'center' }}>Оценка</th>
+                          <th>Комментарий / Статус</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lessonDetails.students.map((student) => (
+                          <tr key={student.id} className={selectedStudents.has(student.id) ? styles.selected : ""}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedStudents.has(student.id)}
+                                onChange={() => toggleStudentSelection(student.id)}
+                              />
+                            </td>
+                            <td style={{ color: '#9ca3af', textAlign: 'center' }}>{student.student_number || "—"}</td>
+                            <td>
+                              <div className={styles.studentInfo}>
+                                <div className={styles.avatar}>
+                                  {student.name.charAt(0)}
+                                </div>
+                                <span className={styles.name}>{student.name}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => handlePresentToggle(student.id, student.present)}
+                                  className={`${styles.attendanceBtn} ${
+                                    student.present === true ? styles.present : 
+                                    student.present === false ? styles.absent : ''
+                                  }`}
+                                  title={student.present === true ? "Присутствует" : student.present === false ? "Отсутствует" : "Не отмечено"}
+                                >
+                                  {student.present === true ? <Check size={18} /> : 
+                                   student.present === false ? <XIcon size={18} /> : 
+                                   <MoreHorizontal size={18} />}
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="5"
+                                  value={student.grade || ""}
+                                  onChange={(e) => handleGradeInput(student.id, e.target.value)}
+                                  className={`${styles.gradeInput} ${student.grade ? styles[`grade${student.grade}`] : ''}`}
+                                  placeholder="—"
+                                />
+                              </div>
+                            </td>
+                            <td>
+                              <input
+                                className={styles.commentInput}
+                                value={editingComment?.id === student.id ? editingComment.value : (student.comment || "")}
+                                onChange={(e) => setEditingComment({ id: student.id, value: e.target.value })}
+                                onFocus={() => setEditingComment({ id: student.id, value: student.comment || "" })}
+                                onBlur={(e) => handleCommentBlur(student.id, e.target.value)}
+                                placeholder="Примечание..."
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }

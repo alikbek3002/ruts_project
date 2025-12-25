@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { apiListZoomMeetings, type ZoomMeeting } from "../../api/client";
+import { apiListZoomMeetings, apiZoomStatus, apiZoomStart, type ZoomMeeting } from "../../api/client";
+import { Video, Link as LinkIcon } from "lucide-react";
 
 interface Props {
   token: string;
@@ -10,42 +11,97 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
   const [meetings, setMeetings] = useState<ZoomMeeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
-    apiListZoomMeetings(token)
-      .then((r) => {
-        setMeetings(r.meetings);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setErr(String(e));
-        setLoading(false);
-      });
+    checkStatusAndLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  async function checkStatusAndLoad() {
+    try {
+      setLoading(true);
+      // 1. Check connection status
+      const status = await apiZoomStatus(token);
+      setIsConnected(status.connected);
+
+      if (status.connected) {
+        // 2. If connected, load meetings
+        const r = await apiListZoomMeetings(token);
+        setMeetings(r.meetings);
+      }
+    } catch (e) {
+      console.error(e);
+      setErr("Не удалось загрузить информацию о Zoom");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConnect() {
+    try {
+      const res = await apiZoomStart(token);
+      window.location.href = res.authUrl;
+    } catch (e) {
+      alert("Ошибка при подключении Zoom: " + e);
+    }
+  }
 
   if (loading) {
     return (
-      <div style={{ padding: 16, border: "1px solid var(--color-border)", borderRadius: 8, background: "var(--color-card)" }}>
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 600 }}>📹 Zoom встречи</h3>
-        <div style={{ opacity: 0.7 }}>Загрузка...</div>
+      <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 16, background: "white" }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Video size={20} color="#2563eb" />
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Zoom встречи</h3>
+        </div>
+        <div style={{ opacity: 0.7, fontSize: 14 }}>Загрузка...</div>
       </div>
     );
   }
 
   if (err) {
     return (
-      <div style={{ padding: 16, border: "1px solid var(--color-border)", borderRadius: 8, background: "var(--color-card)" }}>
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 600 }}>📹 Zoom встречи</h3>
-        <div style={{ color: "#c00", fontSize: 14 }}>{err}</div>
+      <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 16, background: "white" }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Video size={20} color="#dc2626" />
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Zoom встречи</h3>
+        </div>
+        <div style={{ color: "#dc2626", fontSize: 14 }}>{err}</div>
       </div>
     );
   }
 
-  if (meetings.length === 0) {
+  if (!isConnected) {
     return (
-      <div style={{ padding: 16, border: "1px solid var(--color-border)", borderRadius: 8, background: "var(--color-card)" }}>
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 600 }}>📹 Zoom встречи</h3>
-        <div style={{ opacity: 0.7, fontSize: 14 }}>Предстоящих встреч нет</div>
+      <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 16, background: "white" }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Video size={20} color="#2563eb" />
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Zoom встречи</h3>
+        </div>
+        <div style={{ textAlign: 'center', padding: '10px 0' }}>
+          <p style={{ margin: '0 0 16px 0', fontSize: 14, color: '#4b5563' }}>
+            Аккаунт Zoom не подключен. Подключите его, чтобы создавать и видеть встречи.
+          </p>
+          <button
+            onClick={handleConnect}
+            style={{
+              background: '#2563eb',
+              color: 'white',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <LinkIcon size={16} />
+            Подключить Zoom
+          </button>
+        </div>
       </div>
     );
   }
@@ -66,11 +122,16 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
   const upcomingMeetings = meetings.filter(m => isUpcoming(m.starts_at));
 
   return (
-    <div style={{ padding: 16, border: "1px solid var(--color-border)", borderRadius: 8, background: "var(--color-card)" }}>
-      <h3 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 600 }}>📹 Предстоящие Zoom встречи</h3>
+    <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 16, background: "white" }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <Video size={20} color="#2563eb" />
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Предстоящие встречи</h3>
+      </div>
       
       {upcomingMeetings.length === 0 ? (
-        <div style={{ opacity: 0.7, fontSize: 14 }}>Нет предстоящих встреч</div>
+        <div style={{ opacity: 0.7, fontSize: 14, textAlign: 'center', padding: '20px 0' }}>
+          Нет запланированных встреч
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {upcomingMeetings.slice(0, 5).map((meeting) => {
@@ -83,9 +144,9 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
                 key={meeting.id}
                 style={{
                   padding: 12,
-                  background: "var(--color-background)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
+                  background: "#f9fafb",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
                   display: "flex",
                   flexDirection: "column",
                   gap: 8,
@@ -93,10 +154,10 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, color: '#111827' }}>
                       {className && `${className} — `}{subject}
                     </div>
-                    <div style={{ fontSize: 13, opacity: 0.8 }}>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>
                       🕐 {formatDateTime(meeting.starts_at)}
                     </div>
                   </div>
@@ -106,7 +167,7 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
                     rel="noopener noreferrer"
                     style={{
                       padding: "6px 12px",
-                      background: "#0066cc",
+                      background: "#2563eb",
                       color: "white",
                       textDecoration: "none",
                       borderRadius: 6,
@@ -125,11 +186,12 @@ export function ZoomMeetingsWidget({ token, userRole }: Props) {
                     rel="noopener noreferrer"
                     style={{
                       fontSize: 12,
-                      color: "#0066cc",
-                      textDecoration: "underline",
+                      color: "#2563eb",
+                      textDecoration: "none",
+                      fontWeight: 500
                     }}
                   >
-                    Начать встречу (как организатор)
+                    Начать встречу (организатор)
                   </a>
                 )}
               </div>

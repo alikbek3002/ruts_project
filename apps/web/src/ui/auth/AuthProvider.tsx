@@ -6,6 +6,7 @@ const STORAGE_KEY = 'ruts_auth';
 type Role = 'manager' | 'admin' | 'teacher' | 'student';
 
 type User = {
+  name: string;
   id: string;
   role: Role;
   username: string;
