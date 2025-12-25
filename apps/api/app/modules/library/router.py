@@ -4,11 +4,36 @@ import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from postgrest.exceptions import APIError
 
 from app.core.deps import CurrentUser, require_role
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
+
+
+def _is_missing_table_api_error(err: Exception, table: str) -> bool:
+    try:
+        payload = err.args[0] if getattr(err, "args", None) else None
+        if isinstance(payload, dict):
+            if payload.get("code") == "PGRST205" and table in (payload.get("message") or ""):
+                return True
+        msg = str(err)
+        return ("PGRST205" in msg) and (table in msg)
+    except Exception:
+        return False
+
+
+def _is_missing_column_api_error(err: Exception, column: str) -> bool:
+    try:
+        payload = err.args[0] if getattr(err, "args", None) else None
+        if isinstance(payload, dict):
+            if payload.get("code") == "42703" and column in (payload.get("message") or ""):
+                return True
+        msg = str(err)
+        return ("42703" in msg) and (column in msg)
+    except Exception:
+        return False
 
 
 class CreateLibraryItemIn(BaseModel):
@@ -32,17 +57,38 @@ class LibraryTopicOut(BaseModel):
 @router.post("")
 def create_item(payload: CreateLibraryItemIn, user: dict = require_role("teacher", "admin")):
     sb = get_supabase()
-    resp = sb.table("library_items").insert({**payload.model_dump(), "uploaded_by": user["id"]}).execute()
+    row = {**payload.model_dump(), "uploaded_by": user["id"]}
+    try:
+        resp = sb.table("library_items").insert(row).execute()
+    except APIError as e:
+        if _is_missing_column_api_error(e, "library_items.topic_id"):
+            row.pop("topic_id", None)
+            resp = sb.table("library_items").insert(row).execute()
+        else:
+            raise
     return {"item": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
 
 
 @router.get("")
 def list_items(classId: str | None = None, user: dict = require_role("admin", "teacher", "student")):
     sb = get_supabase()
-    q = sb.table("library_items").select("id,title,description,class_id,storage_bucket,storage_path,created_at,uploaded_by,topic_id")
-    if classId:
-        q = q.eq("class_id", classId)
-    resp = q.order("created_at", desc=True).execute()
+    try:
+        q = sb.table("library_items").select(
+            "id,title,description,class_id,storage_bucket,storage_path,created_at,uploaded_by,topic_id"
+        )
+        if classId:
+            q = q.eq("class_id", classId)
+        resp = q.order("created_at", desc=True).execute()
+    except APIError as e:
+        if _is_missing_column_api_error(e, "library_items.topic_id"):
+            q = sb.table("library_items").select(
+                "id,title,description,class_id,storage_bucket,storage_path,created_at,uploaded_by"
+            )
+            if classId:
+                q = q.eq("class_id", classId)
+            resp = q.order("created_at", desc=True).execute()
+        else:
+            raise
 
     items = resp.data or []
     if isinstance(items, list):
@@ -63,11 +109,17 @@ def list_topics(classId: str | None = None, user: dict = require_role("admin", "
     """List library topics (themes) with their files."""
     sb = get_supabase()
 
-    tq = sb.table("library_topics").select("id,title,description,class_id,created_by,created_at")
-    if classId:
-        tq = tq.eq("class_id", classId)
-    topics_resp = tq.order("created_at", desc=True).execute()
-    topics = topics_resp.data or []
+    try:
+        tq = sb.table("library_topics").select("id,title,description,class_id,created_by,created_at")
+        if classId:
+            tq = tq.eq("class_id", classId)
+        topics_resp = tq.order("created_at", desc=True).execute()
+        topics = topics_resp.data or []
+    except APIError as e:
+        if _is_missing_table_api_error(e, "public.library_topics"):
+            # Migration not applied yet; don't crash the whole app.
+            return {"topics": [], "schema_missing": True, "missing": "library_topics"}
+        raise
     if not isinstance(topics, list):
         topics = []
 
@@ -121,18 +173,26 @@ async def create_topic_with_file(
     """Create a topic (theme). If file is provided, upload it as the first file in the topic."""
     sb = get_supabase()
 
-    topic_resp = (
-        sb.table("library_topics")
-        .insert(
-            {
-                "title": title,
-                "description": description,
-                "class_id": class_id,
-                "created_by": user["id"],
-            }
+    try:
+        topic_resp = (
+            sb.table("library_topics")
+            .insert(
+                {
+                    "title": title,
+                    "description": description,
+                    "class_id": class_id,
+                    "created_by": user["id"],
+                }
+            )
+            .execute()
         )
-        .execute()
-    )
+    except APIError as e:
+        if _is_missing_table_api_error(e, "public.library_topics"):
+            raise HTTPException(
+                status_code=500,
+                detail="Library topics schema is missing. Apply migration supabase/migrations/20251225_000012_library_topics.sql",
+            )
+        raise
     topic = topic_resp.data[0] if isinstance(topic_resp.data, list) and topic_resp.data else topic_resp.data
     topic_id = topic.get("id") if isinstance(topic, dict) else None
     if not topic_id:
@@ -186,13 +246,21 @@ async def upload_file_to_topic(
 ):
     """Upload file into an existing topic."""
     sb = get_supabase()
-    topic_resp = (
-        sb.table("library_topics")
-        .select("id,class_id,created_by")
-        .eq("id", topic_id)
-        .single()
-        .execute()
-    )
+    try:
+        topic_resp = (
+            sb.table("library_topics")
+            .select("id,class_id,created_by")
+            .eq("id", topic_id)
+            .single()
+            .execute()
+        )
+    except APIError as e:
+        if _is_missing_table_api_error(e, "public.library_topics"):
+            raise HTTPException(
+                status_code=500,
+                detail="Library topics schema is missing. Apply migration supabase/migrations/20251225_000012_library_topics.sql",
+            )
+        raise
     topic = topic_resp.data
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -261,6 +329,30 @@ async def upload_file(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+    # Create library item record
+    item_row = {
+        "title": title,
+        "description": description,
+        "class_id": class_id,
+        "storage_bucket": "library",
+        "storage_path": storage_path,
+        "uploaded_by": user["id"],
+    }
+    if topic_id:
+        item_row["topic_id"] = topic_id
+
+    try:
+        resp = sb.table("library_items").insert(item_row).execute()
+    except APIError as e:
+        if _is_missing_column_api_error(e, "library_items.topic_id"):
+            item_row.pop("topic_id", None)
+            resp = sb.table("library_items").insert(item_row).execute()
+        else:
+            raise
+
+    item = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
+    return {"item": item, "originalFilename": file.filename}
     
     # Create library item record
     resp = sb.table("library_items").insert({

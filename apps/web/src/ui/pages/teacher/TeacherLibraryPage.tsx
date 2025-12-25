@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { 
   apiListClasses, 
+  apiListLibrary,
   apiListLibraryTopics,
   apiCreateLibraryTopic,
   apiUploadLibraryFileToTopic,
@@ -23,6 +24,7 @@ export function TeacherLibraryPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [classId, setClassId] = useState<string>("");
   const [topics, setTopics] = useState<LibraryTopic[]>([]);
+  const [topicsSchemaMissing, setTopicsSchemaMissing] = useState(false);
 
   const [showCreateTopic, setShowCreateTopic] = useState(false);
   const [topicTitle, setTopicTitle] = useState("");
@@ -43,7 +45,29 @@ export function TeacherLibraryPage() {
     try {
       const [c, t] = await Promise.all([apiListClasses(token), apiListLibraryTopics(token, classId || undefined)]);
       setClasses(c.classes);
-      setTopics(t.topics);
+      const schemaMissing = !!(t as any)?.schema_missing;
+      setTopicsSchemaMissing(schemaMissing);
+
+      if (schemaMissing) {
+        // Fallback: show flat library list until migration is applied.
+        const flat = await apiListLibrary(token, classId || undefined);
+        setTopics([
+          {
+            id: "__flat__",
+            title: "Файлы",
+            description: null,
+            class_id: classId || null,
+            created_at: new Date().toISOString(),
+            items: flat.items,
+          },
+        ]);
+        setErr(
+          "Темы библиотеки ещё не включены (не применена миграция library_topics). Пока показываю общий список файлов."
+        );
+      } else {
+        setErr(null);
+        setTopics(t.topics);
+      }
     } catch (e) {
       setErr(String(e));
     }
@@ -174,7 +198,17 @@ export function TeacherLibraryPage() {
             ))}
           </select>
         </label>
-        <button onClick={() => { setErr(null); setSuccess(null); setShowCreateTopic(true); }}>➕ Добавить тему</button>
+        <button
+          onClick={() => {
+            setErr(null);
+            setSuccess(null);
+            setShowCreateTopic(true);
+          }}
+          disabled={topicsSchemaMissing}
+          title={topicsSchemaMissing ? "Нужно применить миграцию library_topics в Supabase" : undefined}
+        >
+          ➕ Добавить тему
+        </button>
         <button onClick={() => reload()}>🔄 Обновить</button>
       </div>
 
@@ -332,7 +366,8 @@ export function TeacherLibraryPage() {
                   />
                   <button
                     onClick={() => handleTopicFilePick(topic.id)}
-                    disabled={uploading && uploadingTopicId === topic.id}
+                    disabled={topic.id === "__flat__" || (uploading && uploadingTopicId === topic.id)}
+                    title={topic.id === "__flat__" ? "Нужно применить миграцию library_topics" : undefined}
                     style={{
                       padding: "8px 12px",
                       background: "var(--color-primary)",

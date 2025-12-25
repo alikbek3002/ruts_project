@@ -1,4 +1,6 @@
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+// In dev, always use Vite proxy (/api -> http://localhost:8000) to avoid CORS issues
+// and accidental calls to production when VITE_API_URL is set locally.
+const API_BASE = import.meta.env.PROD ? ((import.meta.env.VITE_API_URL as string | undefined) ?? "") : "";
 
 function getApiBaseProblem(): string | null {
   if (!API_BASE) return "VITE_API_URL is not set";
