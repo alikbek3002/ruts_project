@@ -59,3 +59,8 @@ app.include_router(notifications_router, prefix="/api/notifications", tags=["not
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/")
+def root():
+    return {"ok": True}
