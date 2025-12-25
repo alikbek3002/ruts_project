@@ -37,7 +37,7 @@ export function NotificationBell({ token }: Props) {
   async function loadNotifications() {
     setLoading(true);
     try {
-      const data = await apiGetNotifications(token);
+      const data = await apiGetNotifications(token, 6, 0);
       setNotifications(data.notifications);
     } catch (err) {
       console.error("Failed to load notifications:", err);

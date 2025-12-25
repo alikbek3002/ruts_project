@@ -47,6 +47,9 @@ def create_notification(
 
 
 @router.get("")
+from app.core.monitor import timed
+
+@timed("list_notifications")
 def list_notifications(user: CurrentUser, limit: int = 30, offset: int = 0):
     """Get notifications for current user (supports pagination)."""
     sb = get_supabase()

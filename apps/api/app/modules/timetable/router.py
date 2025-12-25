@@ -177,6 +177,9 @@ def list_entries(class_id: str | None = None, user: dict = require_role("admin",
 
 
 @router.get("/week")
+from app.core.monitor import timed
+
+@timed("get_week")
 def get_week(weekStart: str, user: CurrentUser):
     # weekStart is YYYY-MM-DD, Monday preferred.
     start = date.fromisoformat(weekStart)

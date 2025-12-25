@@ -313,10 +313,12 @@ export type AdminUserDetails = AdminUser & {
   teacher_subject: string | null;
 };
 
-export async function apiAdminListUsers(token: string, role?: UserRole, searchQuery?: string) {
+export async function apiAdminListUsers(token: string, role?: UserRole, searchQuery?: string, limit: number = 50, offset: number = 0) {
   const params = new URLSearchParams();
   if (role) params.set("role", role);
   if (searchQuery && searchQuery.trim()) params.set("q", searchQuery.trim());
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const resp = await apiGet<{ users: AdminUser[] }>(`/admin/users${suffix}`, token);
   return {
@@ -962,8 +964,11 @@ export type Notification = {
   is_read: boolean;
 };
 
-export async function apiGetNotifications(token: string) {
-  return apiGet<{ notifications: Notification[] }>("/notifications", token);
+export async function apiGetNotifications(token: string, limit: number = 30, offset: number = 0) {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  return apiGet<{ notifications: Notification[] }>(`/notifications?${params.toString()}`, token);
 }
 
 export async function apiGetUnreadNotificationCount(token: string) {

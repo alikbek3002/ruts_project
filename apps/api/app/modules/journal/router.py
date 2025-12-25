@@ -32,9 +32,19 @@ class AddGradeIn(BaseModel):
 
 
 @router.get("/teacher/classes")
+from app.core.monitor import timed
+
+@timed("get_teacher_classes")
 def get_teacher_classes(user: dict = require_role("teacher")):
     """Получить все классы учителя"""
     sb = get_supabase()
+
+    # Short cache per teacher
+    from app.core.cache import cache
+    cache_key = f"teacher_classes:{user['id']}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return {"classes": cached}
     
     # Получаем уникальные классы из расписания учителя
     timetable = (
@@ -83,6 +93,9 @@ def get_teacher_classes(user: dict = require_role("teacher")):
 
 
 @router.get("/teacher/schedule")
+from app.core.monitor import timed
+
+@timed("get_teacher_schedule")
 def get_teacher_schedule(
     date_from: str,
     date_to: str,
@@ -143,6 +156,9 @@ def get_teacher_schedule(
 
 
 @router.get("/teacher/lessons/{lesson_date}")
+from app.core.monitor import timed
+
+@timed("get_teacher_lessons_for_date")
 def get_teacher_lessons_for_date(
     lesson_date: str,
     user: dict = require_role("teacher")

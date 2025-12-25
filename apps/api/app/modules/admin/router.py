@@ -259,14 +259,26 @@ def generate_credentials(payload: CredentialsIn, actor: dict = require_role("adm
     return {"username": username, "password": password}
 
 
+from app.core.monitor import timed
+
 @router.get("/users")
+@timed("admin_list_users")
 def admin_list_users(
     role: str | None = None,
     q: str | None = None,
     include_inactive: bool = False,
+    limit: int = 50,
+    offset: int = 0,
     _: dict = require_role("admin", "manager"),
 ):
     sb = get_supabase()
+
+    # Attempt to serve quick cached response when unfiltered (root page)
+    if not role and not q and not include_inactive and offset == 0:
+        from app.core.cache import cache
+        cached = cache.get("admin_users:root")
+        if cached is not None:
+            return {"users": cached}
 
     def _attach_student_class(users: list[dict]) -> list[dict]:
         try:
@@ -330,14 +342,19 @@ def admin_list_users(
             "id,role,username,full_name,is_active,must_change_password,created_at,first_name,last_name,middle_name,photo_data_url,teacher_subject"
         )
         query = _apply_filters(query)
-        resp = query.order("created_at", desc=True).execute()
+        # pagination
+        resp = query.order("created_at", desc=True).limit(limit).offset(offset).execute()
         users = resp.data or []
         users = _attach_student_class(users)
+        # Short cache when unfiltered to reduce DB load
+        from app.core.cache import cache
+        if not role and not q and not include_inactive and offset == 0:
+            cache.set("admin_users:root", users, ttl=10)
         return {"users": users}
     except Exception:
         query = sb.table("users").select("id,role,username,full_name,is_active,must_change_password,created_at")
         query = _apply_filters(query)
-        resp = query.order("created_at", desc=True).execute()
+        resp = query.order("created_at", desc=True).limit(limit).offset(offset).execute()
         users = resp.data or []
         users = _attach_student_class(users)
         return {"users": users}
