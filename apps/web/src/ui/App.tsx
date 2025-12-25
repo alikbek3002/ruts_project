@@ -1,28 +1,37 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../ui/auth/AuthProvider';
-import { LoginPage } from './pages/LoginPage';
-import { ChangePasswordPage } from './pages/ChangePasswordPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { AdminHomePage } from './pages/admin/AdminHomePage';
-import { AdminUsersPage } from './pages/admin/AdminUsersPage';
-import { AdminClassesPage } from './pages/admin/AdminClassesPage';
-import { AdminClassJournalPage } from './pages/admin/AdminClassJournalPage';
-import { AdminTimetablePage } from './pages/admin/AdminTimetablePage';
-import { AdminSubjectsPage } from './pages/admin/AdminSubjectsPage';
-import { AdminDirectionsPage } from './pages/admin/AdminDirectionsPage';
-import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
-import { TeacherHomePage } from './pages/teacher/TeacherHomePage';
-import { TeacherJournalPage } from './pages/teacher/TeacherJournalPage';
-import { TeacherMyVzvodyPage } from './pages/teacher/TeacherMyVzvodyPage';
-import { TeacherTimetablePage } from './pages/teacher/TeacherTimetablePage';
-import { TeacherLibraryPage } from './pages/teacher/TeacherLibraryPage';
-import { StudentHomePage } from './pages/student/StudentHomePage';
-import { StudentTimetablePage } from './pages/student/StudentTimetablePage';
-import { StudentGradesPage } from './pages/student/StudentGradesPage';
-import { StudentLibraryPage } from './pages/student/StudentLibraryPage';
-import StudentHomeworkPage from './pages/student/StudentHomeworkPage';
-import { ProfilePage } from './pages/ProfilePage';
+import { Loader } from './components/Loader';
+
+// Lazy load pages
+const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const ChangePasswordPage = React.lazy(() => import('./pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })));
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ProfilePage = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
+
+// Admin Pages
+const AdminHomePage = React.lazy(() => import('./pages/admin/AdminHomePage').then(m => ({ default: m.AdminHomePage })));
+const AdminUsersPage = React.lazy(() => import('./pages/admin/AdminUsersPage').then(m => ({ default: m.AdminUsersPage })));
+const AdminClassesPage = React.lazy(() => import('./pages/admin/AdminClassesPage').then(m => ({ default: m.AdminClassesPage })));
+const AdminClassJournalPage = React.lazy(() => import('./pages/admin/AdminClassJournalPage').then(m => ({ default: m.AdminClassJournalPage })));
+const AdminTimetablePage = React.lazy(() => import('./pages/admin/AdminTimetablePage').then(m => ({ default: m.AdminTimetablePage })));
+const AdminSubjectsPage = React.lazy(() => import('./pages/admin/AdminSubjectsPage').then(m => ({ default: m.AdminSubjectsPage })));
+const AdminDirectionsPage = React.lazy(() => import('./pages/admin/AdminDirectionsPage').then(m => ({ default: m.AdminDirectionsPage })));
+const AdminNotificationsPage = React.lazy(() => import('./pages/admin/AdminNotificationsPage').then(m => ({ default: m.AdminNotificationsPage })));
+
+// Teacher Pages
+const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
+const TeacherJournalPage = React.lazy(() => import('./pages/teacher/TeacherJournalPage').then(m => ({ default: m.TeacherJournalPage })));
+const TeacherMyVzvodyPage = React.lazy(() => import('./pages/teacher/TeacherMyVzvodyPage').then(m => ({ default: m.TeacherMyVzvodyPage })));
+const TeacherTimetablePage = React.lazy(() => import('./pages/teacher/TeacherTimetablePage').then(m => ({ default: m.TeacherTimetablePage })));
+const TeacherLibraryPage = React.lazy(() => import('./pages/teacher/TeacherLibraryPage').then(m => ({ default: m.TeacherLibraryPage })));
+
+// Student Pages
+const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage').then(m => ({ default: m.StudentHomePage })));
+const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTimetablePage').then(m => ({ default: m.StudentTimetablePage })));
+const StudentGradesPage = React.lazy(() => import('./pages/student/StudentGradesPage').then(m => ({ default: m.StudentGradesPage })));
+const StudentLibraryPage = React.lazy(() => import('./pages/student/StudentLibraryPage').then(m => ({ default: m.StudentLibraryPage })));
+const StudentHomeworkPage = React.lazy(() => import('./pages/student/StudentHomeworkPage')); // Default export
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { state } = useAuth();
@@ -34,70 +43,71 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 export function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/change-password" element={<ChangePasswordPage />} />
-        <Route
-          path="/app"
-          element={
-            <RequireAuth>
-              <DashboardPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="/" element={<Navigate to="/app" replace />} />
+      <Suspense fallback={<Loader fullScreen text="Загрузка..." />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route
+            path="/app"
+            element={
+              <RequireAuth>
+                <DashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="/" element={<Navigate to="/app" replace />} />
 
-        <Route
-          path="/app/admin"
-          element={
-            <RequireAuth>
-              <AdminHomePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager"
-          element={
-            <RequireAuth>
-              <AdminHomePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/users"
-          element={
-            <RequireAuth>
-              <AdminUsersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/users"
-          element={
-            <RequireAuth>
-              <AdminUsersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/classes"
-          element={
-            <RequireAuth>
-              <AdminClassesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/classes"
-          element={
-            <RequireAuth>
-              <AdminClassesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/timetable"
-          element={
+          <Route
+            path="/app/admin"
+            element={
+              <RequireAuth>
+                <AdminHomePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/manager"
+            element={
+              <RequireAuth>
+                <AdminHomePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/admin/users"
+            element={
+              <RequireAuth>
+                <AdminUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/manager/users"
+            element={
+              <RequireAuth>
+                <AdminUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/admin/classes"
+            element={
+              <RequireAuth>
+                <AdminClassesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/manager/classes"
+            element={
+              <RequireAuth>
+                <AdminClassesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/admin/timetable"
+            element={
             <RequireAuth>
               <AdminTimetablePage />
             </RequireAuth>
@@ -270,6 +280,7 @@ export function App() {
 
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }

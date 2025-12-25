@@ -246,7 +246,7 @@ export function AdminNotificationsPage() {
               </div>
               
               <div className={styles.cardMeta}>
-                <span>Для: {getRoleLabel(n.target_role)}</span>
+                <span>Для: {getRoleLabel(n.target_role || undefined)}</span>
                 <span>Создано: {new Date(n.created_at).toLocaleDateString()}</span>
                 {n.expires_at && (
                   <span>Истекает: {new Date(n.expires_at).toLocaleDateString()}</span>

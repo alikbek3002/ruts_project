@@ -166,20 +166,28 @@ def get_teacher_lessons_for_date(
         or []
     )
     
+    if not timetable:
+        return {"lessons": []}
+
+    # Оптимизация: получаем все записи журнала одним запросом
+    entry_ids = [e["id"] for e in timetable]
+    journal_entries = (
+        sb.table("lesson_journal")
+        .select("timetable_entry_id")
+        .in_("timetable_entry_id", entry_ids)
+        .eq("lesson_date", lesson_date)
+        .execute()
+        .data
+        or []
+    )
+    
+    # Создаем множество ID уроков, для которых есть записи в журнале
+    entries_with_journal = {e["timetable_entry_id"] for e in journal_entries}
+    
     lessons = []
     for entry in timetable:
         subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject")
         class_name = entry.get("classes", {}).get("name") if entry.get("classes") else ""
-        
-        # Проверяем, есть ли записи в журнале для этого урока
-        journal_count = (
-            sb.table("lesson_journal")
-            .select("timetable_entry_id", count="exact")
-            .eq("timetable_entry_id", entry.get("id"))
-            .eq("lesson_date", lesson_date)
-            .execute()
-            .count or 0
-        )
         
         lessons.append({
             "timetable_entry_id": entry.get("id"),
@@ -191,7 +199,7 @@ def get_teacher_lessons_for_date(
             "class_id": entry.get("class_id"),
             "class_name": class_name,
             "room": entry.get("room"),
-            "has_journal_entries": journal_count > 0
+            "has_journal_entries": entry.get("id") in entries_with_journal
         })
     
     return {"lessons": lessons}

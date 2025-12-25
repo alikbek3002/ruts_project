@@ -308,8 +308,8 @@ export function AdminUsersPage() {
               }}
             >
               <div className={styles.cardHeader}>
-                {u.photo_url ? (
-                  <img src={u.photo_url} alt={u.full_name} className={styles.avatar} />
+                {u.photo_data_url ? (
+                  <img src={u.photo_data_url} alt={u.full_name || ""} className={styles.avatar} />
                 ) : (
                   <div className={styles.avatarPlaceholder}>
                     {u.first_name?.[0] || u.username?.[0] || "?"}
@@ -327,10 +327,10 @@ export function AdminUsersPage() {
                   <User className={styles.infoIcon} />
                   <span>{u.username}</span>
                 </div>
-                {u.role === "student" && u.class_name && (
+                {u.role === "student" && u.class?.name && (
                   <div className={styles.infoRow}>
                     <GraduationCap className={styles.infoIcon} />
-                    <span>{u.class_name}</span>
+                    <span>{u.class.name}</span>
                   </div>
                 )}
                 {u.role === "teacher" && u.teacher_subject && (
@@ -687,8 +687,8 @@ export function AdminUsersPage() {
                           </div>
                         ) : (
                           <img 
-                            src={viewUser.photo_url || ""} 
-                            alt={viewUser.full_name} 
+                            src={viewUser.photo_data_url || ""} 
+                            alt={viewUser.full_name || ""} 
                             style={{ 
                               width: 120, 
                               height: 120, 
@@ -727,16 +727,17 @@ export function AdminUsersPage() {
                               style={{ fontSize: 13 }}
                               onClick={async () => {
                                 if (!token) return;
-                                if (!window.confirm("Сбросить пароль?")) return;
+                                const pwd = window.prompt("Введите ваш пароль администратора для подтверждения:");
+                                if (!pwd) return;
                                 setViewErr(null);
                                 try {
                                   let resp;
                                   if (viewUser.role === "student") {
-                                    resp = await apiAdminResetStudentPassword(token, viewUser.id);
+                                    resp = await apiAdminResetStudentPassword(token, viewUser.id, pwd);
                                   } else {
-                                    resp = await apiAdminResetTeacherPassword(token, viewUser.id);
+                                    resp = await apiAdminResetTeacherPassword(token, viewUser.id, pwd);
                                   }
-                                  setViewTempPassword(resp.temp_password);
+                                  setViewTempPassword(resp.tempPassword);
                                 } catch (e) {
                                   setViewErr(String(e));
                                 }
