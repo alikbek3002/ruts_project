@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
+
+# Configure logging for production
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 from app.modules.auth.router import router as auth_router
 from app.modules.admin.router import router as admin_router
 from app.modules.classes.router import router as classes_router
@@ -18,6 +26,9 @@ from app.modules.profile.router import router as profile_router
 from app.modules.notifications.router import router as notifications_router
 
 app = FastAPI(title="RUTS Journal API", version="0.1.0")
+
+logger.info(f"Starting app in {settings.app_env} mode")
+logger.info(f"CORS origins: {settings.app_cors_origins}")
 
 origins = [o.strip() for o in settings.app_cors_origins.split(",") if o.strip()]
 # In dev, Vite may auto-bump the port (5173 -> 5174, etc). Allow any localhost port.
