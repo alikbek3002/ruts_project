@@ -17,7 +17,6 @@ import { TeacherJournalPage } from './pages/teacher/TeacherJournalPage';
 import { TeacherJournalNewPage } from './pages/teacher/TeacherJournalNewPage';
 import { TeacherMyVzvodyPage } from './pages/teacher/TeacherMyVzvodyPage';
 import { TeacherTimetablePage } from './pages/teacher/TeacherTimetablePage';
-import { TeacherGradebookPage } from './pages/teacher/TeacherGradebookPage';
 import { TeacherLibraryPage } from './pages/teacher/TeacherLibraryPage';
 import { StudentHomePage } from './pages/student/StudentHomePage';
 import { StudentTimetablePage } from './pages/student/StudentTimetablePage';
@@ -215,14 +214,6 @@ export function App() {
           element={
             <RequireAuth>
               <TeacherJournalPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/gradebook"
-          element={
-            <RequireAuth>
-              <TeacherGradebookPage />
             </RequireAuth>
           }
         />

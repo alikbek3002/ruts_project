@@ -139,7 +139,6 @@ export const TeacherLibraryPage: React.FC = () => {
       nav={[
         { to: "/app/teacher", label: "Главная" },
         { to: "/app/teacher/journal", label: "Журнал" },
-        { to: "/app/teacher/gradebook", label: "Контрольные" },
         { to: "/app/teacher/vzvody", label: "Мои взводы" },
         { to: "/app/teacher/timetable", label: "Расписание" },
         { to: "/app/teacher/library", label: "Библиотека" },
