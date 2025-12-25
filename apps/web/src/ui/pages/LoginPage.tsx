@@ -7,6 +7,7 @@ export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
     try {
       const user = await login(username.trim(), password, rememberMe);
 
@@ -34,6 +36,7 @@ export function LoginPage() {
       navigate(panelLink, { replace: true });
     } catch (err: any) {
       setError(err.message || "Ошибка авторизации");
+      setIsLoading(false);
     }
   }
 
@@ -50,8 +53,10 @@ export function LoginPage() {
         <form onSubmit={handleSubmit} className={styles.loginForm}>
           {error && <div className={styles.errorMessage}>{error}</div>}
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Логин</label>
+            <label htmlFor="username" className={styles.formLabel}>Логин</label>
             <input
+              id="username"
+              type="text"
               className={styles.formInput}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -63,8 +68,9 @@ export function LoginPage() {
             />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Пароль</label>
+            <label htmlFor="password" className={styles.formLabel}>Пароль</label>
             <input
+              id="password"
               type="password"
               className={styles.formInput}
               value={password}
@@ -86,8 +92,8 @@ export function LoginPage() {
               <span>Запомнить меня</span>
             </label>
           </div>
-          <button type="submit" className={styles.loginButton}>
-            Войти
+          <button type="submit" className={styles.loginButton} disabled={isLoading}>
+            {isLoading ? "Вход..." : "Войти"}
           </button>
         </form>
       </div>

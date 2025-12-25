@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Bell, CheckCircle, AlertTriangle, XCircle, Megaphone, Info, X } from "lucide-react";
 import {
   apiGetNotifications,
   apiGetUnreadNotificationCount,
@@ -67,37 +68,37 @@ export function NotificationBell({ token }: Props) {
   function getTypeIcon(type: string) {
     switch (type) {
       case "success":
-        return "✅";
+        return <CheckCircle size={16} color="white" />;
       case "warning":
-        return "⚠️";
+        return <AlertTriangle size={16} color="white" />;
       case "error":
-        return "❌";
+        return <XCircle size={16} color="white" />;
       case "announcement":
-        return "📢";
+        return <Megaphone size={16} color="white" />;
       default:
-        return "ℹ️";
+        return <Info size={16} color="white" />;
     }
   }
 
   function getTypeColor(type: string) {
     switch (type) {
       case "success":
-        return "#4caf50";
+        return "#10b981"; // emerald-500
       case "warning":
-        return "#ff9800";
+        return "#f59e0b"; // amber-500
       case "error":
-        return "#f44336";
+        return "#ef4444"; // red-500
       case "announcement":
-        return "#2196f3";
+        return "#3b82f6"; // blue-500
       default:
-        return "#9e9e9e";
+        return "#6b7280"; // gray-500
     }
   }
 
   return (
     <div className={styles.container}>
       <button className={styles.bell} onClick={handleToggle}>
-        🔔
+        <Bell size={24} />
         {unreadCount > 0 && <span className={styles.badge}>{unreadCount}</span>}
       </button>
 
@@ -108,7 +109,7 @@ export function NotificationBell({ token }: Props) {
             <div className={styles.header}>
               <h3>Уведомления</h3>
               <button className={styles.closeBtn} onClick={() => setIsOpen(false)}>
-                ✕
+                <X size={18} />
               </button>
             </div>
 

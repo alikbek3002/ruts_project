@@ -1,7 +1,6 @@
-
 .container {
   padding: var(--spacing-lg);
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -9,47 +8,32 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
 }
 
 .header h2 {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
   margin: 0;
-}
-
-.createRow {
-  display: flex;
-  gap: var(--spacing-md);
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: var(--spacing-xl);
-  background: var(--color-card);
-  padding: var(--spacing-lg);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
-}
-
-.createRow input {
-  flex: 1;
-  min-width: 200px;
 }
 
 .cardsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
 }
 
 .card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
   transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
 .card:hover {
@@ -58,51 +42,20 @@
   border-color: var(--color-primary-light);
 }
 
-.cardTop {
-  display: flex;
-  gap: var(--spacing-md);
-  align-items: center;
-  padding: var(--spacing-md);
-}
-
-.photo {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  object-fit: cover;
-  background: var(--color-bg);
-}
-
-.cardInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.title {
-  font-size: 16px;
+.cardTitle {
+  font-size: 18px;
   font-weight: 600;
   color: var(--color-text);
-  margin-bottom: 4px;
 }
 
-.meta {
-  font-size: 13px;
+.cardCode {
+  font-size: 14px;
   color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.deleteBtn {
-  color: var(--color-error);
-  border-color: var(--color-error);
-  padding: 8px;
-  height: auto;
-}
-
-.deleteBtn:hover {
-  background: var(--color-error-bg);
+  background: var(--color-bg-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+  font-family: monospace;
 }
 
 .empty {
@@ -110,36 +63,38 @@
   text-align: center;
   padding: var(--spacing-xl);
   color: var(--color-text-light);
-  background: var(--color-bg-subtle);
+  background: var(--color-bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px dashed var(--color-border);
 }
 
 .error {
-  color: var(--color-error);
-  background: var(--color-error-bg);
+  background: #fee2e2;
+  color: #991b1b;
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-md);
+  border: 1px solid #fecaca;
 }
 
 .infoBox {
-  background: var(--color-bg-subtle);
+  margin-top: var(--spacing-xl);
   padding: var(--spacing-lg);
+  background: var(--color-bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  margin-top: var(--spacing-xl);
 }
 
 .infoBox h3 {
   font-size: 16px;
   font-weight: 600;
-  margin: 0 0 var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
   color: var(--color-text);
 }
 
 .infoBox p {
-  margin: 0;
   font-size: 14px;
   color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
 }

@@ -176,11 +176,12 @@ export function TeacherLibraryPage() {
     <AppShell
       title="Учитель → Библиотека"
       nav={[
-        { to: "/app/teacher", label: "🏠 Главная" },
-        { to: "/app/teacher/journal", label: "📖 Журнал" },
-        { to: "/app/teacher/vzvody", label: "👥 Мои взводы" },
-        { to: "/app/teacher/timetable", label: "📅 Расписание" },
-        { to: "/app/teacher/library", label: "📚 Библиотека" },
+        { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/gradebook", label: "Контрольные" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/library", label: "Библиотека" },
       ]}
     >
       {err && <div style={{ padding: "12px", background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 16 }}>{err}</div>}

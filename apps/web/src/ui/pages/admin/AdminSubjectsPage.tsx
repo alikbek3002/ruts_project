@@ -10,6 +10,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminSubjects.module.css";
+import { BookOpen, Trash2, Plus, Image as ImageIcon, User } from "lucide-react";
 
 export function AdminSubjectsPage() {
   const { state } = useAuth();
@@ -94,64 +95,80 @@ export function AdminSubjectsPage() {
         { to: `${base}/timetable`, label: "Расписание" },
       ]}
     >
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h2>Предметы</h2>
+        </div>
 
-      {loading && <Loader text="Загрузка..." />}
-      
-      <h3>📚 Предметы</h3>
-      <div className={styles.createRow}>
-        <input
-          placeholder="Название предмета"
-          value={newSubjectName}
-          onChange={(e) => setNewSubjectName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
-        />
-        <input
-          placeholder="Ссылка на фото (необязательно)"
-          value={newSubjectPhotoUrl}
-          onChange={(e) => setNewSubjectPhotoUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
-        />
-        <button onClick={handleCreateSubject} disabled={loading || !newSubjectName.trim()}>
-          Создать предмет
-        </button>
-      </div>
-
-      <div className={styles.cardsGrid}>
-        {!loading && subjects.map((s) => (
-          <div key={s.id} className={styles.card}>
-            <div className={styles.cardTop}>
-              <img
-                className={styles.photo}
-                src={(s as any).photo_url || "/favicon.svg"}
-                alt="Фото предмета"
-                loading="lazy"
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  if (img.src.endsWith("/favicon.svg")) return;
-                  img.src = "/favicon.svg";
-                }}
-              />
-              <div>
-                <div className={styles.title}>{s.name}</div>
-                <div className={styles.meta}>👨‍🏫 {teacherLine(s)}</div>
-              </div>
-              <button className={styles.deleteBtn} onClick={() => handleDeleteSubject(s.id)} title="Удалить" disabled={loading}>
-                ✕
-              </button>
-            </div>
+        {err && <div className={styles.error}>{err}</div>}
+        {loading && <Loader text="Загрузка..." />}
+        
+        <div className={styles.createRow}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <BookOpen size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
+            <input
+              placeholder="Название предмета"
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
+              style={{ paddingLeft: 40, width: "100%" }}
+            />
           </div>
-        ))}
+          <div style={{ position: "relative", flex: 1 }}>
+            <ImageIcon size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
+            <input
+              placeholder="Ссылка на фото (необязательно)"
+              value={newSubjectPhotoUrl}
+              onChange={(e) => setNewSubjectPhotoUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
+              style={{ paddingLeft: 40, width: "100%" }}
+            />
+          </div>
+          <button onClick={handleCreateSubject} disabled={loading || !newSubjectName.trim()} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Plus size={18} />
+            Создать предмет
+          </button>
+        </div>
 
-        {subjects.length === 0 && <div className={styles.empty}>Предметы не созданы</div>}
+        <div className={styles.cardsGrid}>
+          {!loading && subjects.map((s) => (
+            <div key={s.id} className={styles.card}>
+              <div className={styles.cardTop}>
+                <img
+                  className={styles.photo}
+                  src={(s as any).photo_url || "/favicon.svg"}
+                  alt="Фото предмета"
+                  loading="lazy"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.src.endsWith("/favicon.svg")) return;
+                    img.src = "/favicon.svg";
+                  }}
+                />
+                <div className={styles.cardInfo}>
+                  <div className={styles.title}>{s.name}</div>
+                  <div className={styles.meta}>
+                    <User size={14} />
+                    {teacherLine(s)}
+                  </div>
+                </div>
+                <button className={`secondary ${styles.deleteBtn}`} onClick={() => handleDeleteSubject(s.id)} title="Удалить" disabled={loading}>
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {subjects.length === 0 && <div className={styles.empty}>Предметы не созданы</div>}
+        </div>
+
+        <div className={styles.infoBox}>
+          <h3>👨‍🏫 Предметы учителям</h3>
+          <p>
+            Предметы назначаются при создании учителя в разделе “Пользователи”.
+          </p>
+        </div>
       </div>
-
-      <hr />
-
-      <h3>👨‍🏫 Предметы учителям</h3>
-      <p style={{ color: "#666", fontSize: 14 }}>
-        Предметы назначаются при создании учителя в разделе “Пользователи”.
-      </p>
     </AppShell>
   );
 }

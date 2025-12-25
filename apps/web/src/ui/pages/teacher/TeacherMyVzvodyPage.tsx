@@ -53,11 +53,12 @@ export function TeacherMyVzvodyPage() {
     <AppShell
       title="Мои взводы"
       nav={[
-        { to: "/app", label: "🏠 Dashboard" },
-        { to: "/app/teacher/journal", label: "📖 Журнал" },
-        { to: "/app/teacher/vzvody", label: "👥 Мои взводы" },
-        { to: "/app/teacher/timetable", label: "📅 Расписание" },
-        { to: "/app/teacher/library", label: "📚 Библиотека" },
+        { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/gradebook", label: "Контрольные" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/library", label: "Библиотека" },
       ]}
     >
       {err && <div style={{ color: "var(--color-error)", marginBottom: 12 }}>{err}</div>}

@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Save, X, Edit2 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import {
   apiGetProfile,
   apiUpdateProfile,
-  apiChangePasswordProfile,
-  apiUploadProfilePhoto,
-  apiDeleteProfilePhoto,
   type UserProfile,
 } from "../../api/client";
 import styles from "./ProfilePage.module.css";
 
 export function ProfilePage() {
   const { state } = useAuth();
+  const navigate = useNavigate();
   const token = state.accessToken;
   const authUser = state.user;
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -22,17 +22,6 @@ export function ProfilePage() {
   // Edit mode states
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [editData, setEditData] = useState<Partial<UserProfile>>({});
-  
-  // Password change states
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  
-  // Photo upload states
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (token) {
@@ -75,91 +64,6 @@ export function ProfilePage() {
     }
   }
 
-  async function handleChangePassword() {
-    try {
-      setError("");
-      setSuccess("");
-
-      if (!currentPassword || !newPassword || !confirmPassword) {
-        setError("Все поля пароля обязательны");
-        return;
-      }
-
-      if (newPassword !== confirmPassword) {
-        setError("Новые пароли не совпадают");
-        return;
-      }
-
-      if (newPassword.length < 6) {
-        setError("Новый пароль должен содержать не менее 6 символов");
-        return;
-      }
-
-      const data = await apiChangePasswordProfile(token!, currentPassword, newPassword);
-      setSuccess(data.message);
-      setIsChangingPassword(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
-      setError(err.message || "Не удалось изменить пароль");
-    }
-  }
-
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check file type
-    if (!file.type.startsWith("image/")) {
-      setError("Пожалуйста, выберите файл изображения");
-      return;
-    }
-
-    // Check file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Размер изображения должен быть менее 5 МБ");
-      return;
-    }
-
-    try {
-      setError("");
-      setIsUploading(true);
-      setUploadProgress(0);
-
-      const data = await apiUploadProfilePhoto(token!, file, (percent) => {
-        setUploadProgress(percent);
-      });
-
-      setProfile((prev) => (prev ? { ...prev, photo_data_url: data.photo_url } : prev));
-      setSuccess("Фото успешно загружено");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
-      setError(err.message || "Не удалось загрузить фото");
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  }
-
-  async function handleDeletePhoto() {
-    if (!confirm("Вы уверены, что хотите удалить фото профиля?")) return;
-
-    try {
-      setError("");
-      await apiDeleteProfilePhoto(token!);
-      setProfile((prev) => (prev ? { ...prev, photo_data_url: null } : prev));
-      setSuccess("Фото успешно удалено");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
-      setError(err.message || "Не удалось удалить фото");
-    }
-  }
-
   if (loading) {
     return (
       <div className={styles.profilePage}>
@@ -177,7 +81,6 @@ export function ProfilePage() {
   }
 
   const isStudent = authUser?.role === "student";
-  const canUploadPhoto = !isStudent;
   const initials = profile.full_name
     ? profile.full_name
         .split(" ")
@@ -189,6 +92,13 @@ export function ProfilePage() {
 
   return (
     <div className={styles.profilePage}>
+      <div className={styles.topBar}>
+        <button className={styles.backButton} onClick={() => navigate(-1)}>
+          <ArrowLeft size={20} />
+          <span>Назад</span>
+        </button>
+      </div>
+
       {error && <div className={styles.error}>{error}</div>}
       {success && <div className={styles.success}>{success}</div>}
 
@@ -200,42 +110,18 @@ export function ProfilePage() {
           ) : (
             <div className={styles.avatarPlaceholder}>{initials}</div>
           )}
-
-          {canUploadPhoto && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                style={{ display: "none" }}
-              />
-              <button
-                className={styles.uploadButton}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                title="Upload photo"
-              >
-                📷
-              </button>
-            </>
-          )}
-
-          {isUploading && (
-            <div className={styles.progressBar}>
-              <div className={styles.progressFill} style={{ width: `${uploadProgress}%` }} />
-            </div>
-          )}
         </div>
 
         <div className={styles.headerInfo}>
           <h1>{profile.full_name || profile.username}</h1>
           <span className={`${styles.role} ${styles[profile.role]}`}>
-            {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
+            {profile.role === "admin" ? "Администратор" : 
+             profile.role === "manager" ? "Менеджер" :
+             profile.role === "teacher" ? "Преподаватель" : "Студент"}
           </span>
           {profile.teacher_subject_name && (
-            <p style={{ marginTop: "0.5rem", color: "#6b7280" }}>
-              Subject: {profile.teacher_subject_name}
+            <p style={{ marginTop: "0.5rem", color: "var(--color-text-secondary)" }}>
+              Предмет: {profile.teacher_subject_name}
             </p>
           )}
         </div>
@@ -243,36 +129,42 @@ export function ProfilePage() {
 
       {/* Personal Information */}
       <div className={styles.section}>
-        <h2>Personal Information</h2>
+        <h2>Личная информация</h2>
 
         {!isEditingInfo ? (
           <div>
-            <p>
-              <strong>Full Name:</strong> {profile.full_name || "—"}
-            </p>
-            <p>
-              <strong>First Name:</strong> {profile.first_name || "—"}
-            </p>
-            <p>
-              <strong>Last Name:</strong> {profile.last_name || "—"}
-            </p>
-            <p>
-              <strong>Middle Name:</strong> {profile.middle_name || "—"}
-            </p>
-            <p>
-              <strong>Phone:</strong> {profile.phone || "—"}
-            </p>
-            <p>
-              <strong>Birth Date:</strong> {profile.birth_date || "—"}
-            </p>
-            <p>
-              <strong>Username:</strong> {profile.username}
-            </p>
+            <div className={styles.infoGrid}>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Имя</span>
+                <span className={styles.infoValue}>{profile.first_name || "—"}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Фамилия</span>
+                <span className={styles.infoValue}>{profile.last_name || "—"}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Отчество</span>
+                <span className={styles.infoValue}>{profile.middle_name || "—"}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Телефон</span>
+                <span className={styles.infoValue}>{profile.phone || "—"}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Дата рождения</span>
+                <span className={styles.infoValue}>{profile.birth_date || "—"}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Логин</span>
+                <span className={styles.infoValue}>{profile.username}</span>
+              </div>
+            </div>
 
             {authUser?.role !== "teacher" && (
               <div className={styles.formActions}>
                 <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={() => setIsEditingInfo(true)}>
-                  Edit Information
+                  <Edit2 size={16} style={{ marginRight: 8 }} />
+                  Редактировать
                 </button>
               </div>
             )}
@@ -280,16 +172,7 @@ export function ProfilePage() {
         ) : (
           <div className={styles.form}>
             <div className={styles.formGroup}>
-              <label>Full Name</label>
-              <input
-                type="text"
-                value={editData.full_name || ""}
-                onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>First Name</label>
+              <label>Имя</label>
               <input
                 type="text"
                 value={editData.first_name || ""}
@@ -298,7 +181,7 @@ export function ProfilePage() {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Last Name</label>
+              <label>Фамилия</label>
               <input
                 type="text"
                 value={editData.last_name || ""}
@@ -307,7 +190,7 @@ export function ProfilePage() {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Middle Name</label>
+              <label>Отчество</label>
               <input
                 type="text"
                 value={editData.middle_name || ""}
@@ -316,18 +199,18 @@ export function ProfilePage() {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Phone</label>
+              <label>Телефон</label>
               <input
                 type="tel"
                 value={editData.phone || ""}
                 onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
                 disabled={isStudent}
               />
-              {isStudent && <p className={styles.infoText}>Students cannot change phone number</p>}
+              {isStudent && <p className={styles.infoText}>Студенты не могут менять номер телефона</p>}
             </div>
 
             <div className={styles.formGroup}>
-              <label>Birth Date</label>
+              <label>Дата рождения</label>
               <input
                 type="date"
                 value={editData.birth_date || ""}
@@ -340,87 +223,17 @@ export function ProfilePage() {
                 className={`${styles.button} ${styles.buttonSecondary}`}
                 onClick={() => setIsEditingInfo(false)}
               >
-                Cancel
+                <X size={16} style={{ marginRight: 8 }} />
+                Отмена
               </button>
               <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={handleSaveInfo}>
-                Save Changes
+                <Save size={16} style={{ marginRight: 8 }} />
+                Сохранить
               </button>
             </div>
           </div>
         )}
       </div>
-
-      {/* Change Password */}
-      <div className={styles.section}>
-        <h2>Change Password</h2>
-
-        {!isChangingPassword ? (
-          <div className={styles.formActions}>
-            <button
-              className={`${styles.button} ${styles.buttonPrimary}`}
-              onClick={() => setIsChangingPassword(true)}
-            >
-              Change Password
-            </button>
-          </div>
-        ) : (
-          <div className={styles.form}>
-            <div className={styles.formGroup}>
-              <label>Current Password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>New Password</label>
-              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-              <p className={styles.infoText}>Minimum 6 characters</p>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-
-            <div className={styles.formActions}>
-              <button
-                className={`${styles.button} ${styles.buttonSecondary}`}
-                onClick={() => {
-                  setIsChangingPassword(false);
-                  setCurrentPassword("");
-                  setNewPassword("");
-                  setConfirmPassword("");
-                }}
-              >
-                Cancel
-              </button>
-              <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={handleChangePassword}>
-                Update Password
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Delete Photo (if exists and can upload) */}
-      {canUploadPhoto && profile.photo_data_url && (
-        <div className={styles.section}>
-          <h2>Danger Zone</h2>
-          <p style={{ color: "#6b7280", marginBottom: "1rem" }}>
-            Delete your profile photo. This action cannot be undone.
-          </p>
-          <button className={`${styles.button} ${styles.buttonSecondary}`} onClick={handleDeletePhoto}>
-            Delete Profile Photo
-          </button>
-        </div>
-      )}
     </div>
   );
 }

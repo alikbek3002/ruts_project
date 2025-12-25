@@ -1,7 +1,20 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import styles from "./AdminHome.module.css";
+import { 
+  Users, 
+  GraduationCap, 
+  BookOpen, 
+  Map, 
+  Calendar, 
+  Bell, 
+  Phone, 
+  Cake, 
+  Briefcase,
+  User
+} from "lucide-react";
 
 export function AdminHomePage() {
   const { state } = useAuth();
@@ -12,42 +25,81 @@ export function AdminHomePage() {
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
   const title = user.role === "manager" ? "Панель менеджера" : "Админ панель";
 
+  const menuItems = [
+    { to: `${base}/users`, label: "Пользователи", icon: Users, desc: "Управление учителями и учениками" },
+    { to: `${base}/classes`, label: "Группы", icon: GraduationCap, desc: "Создание групп и назначение кураторов" },
+    { to: `${base}/subjects`, label: "Предметы", icon: BookOpen, desc: "Список предметов и учителей" },
+    { to: `${base}/directions`, label: "Направления", icon: Map, desc: "Факультеты и специальности" },
+    { to: `${base}/timetable`, label: "Расписание", icon: Calendar, desc: "Редактирование расписания занятий" },
+    { to: `${base}/notifications`, label: "Уведомления", icon: Bell, desc: "Рассылка объявлений" },
+  ];
+
   return (
     <AppShell
       title={title}
       nav={[
-        { to: "/app", label: "Dashboard" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, label: user.role === "manager" ? "Менеджер" : "Админ" },
+        ...menuItems.map(i => ({ to: i.to, label: i.label }))
       ]}
     >
-      <div style={{ maxWidth: 520 }}>
-        <div style={{ marginBottom: 'var(--spacing-md)', fontSize: 14, color: 'var(--color-text-light)' }}>
-          Данные пользователя
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h2>Добро пожаловать, {user.first_name || user.username}!</h2>
+          <div className={styles.subtitle}>
+            Вы вошли как {user.role === "admin" ? "Администратор" : "Менеджер"}
+          </div>
         </div>
-        <div style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--spacing-md)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'flex-start' }}>
-            {user.photo_data_url ? (
-              <img
-                src={user.photo_data_url}
-                alt="Фото"
-                style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', objectFit: 'cover', border: '1px solid var(--color-border)' }}
-              />
-            ) : (
-              <div style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }} />
-            )}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{user.full_name || user.username}</div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-light)' }}>{user.username}</div>
-              {user.phone && <div style={{ marginTop: 'var(--spacing-xs)', fontSize: 13 }}>{user.phone}</div>}
-              {user.birth_date && <div style={{ fontSize: 13, color: 'var(--color-text-light)' }}>Дата рождения: {user.birth_date}</div>}
-              {user.teacher_subject && <div style={{ fontSize: 13, color: 'var(--color-text-light)' }}>Предмет: {user.teacher_subject}</div>}
+
+        <div className={styles.profileCard}>
+          {user.photo_data_url ? (
+            <img
+              src={user.photo_data_url}
+              alt="Фото"
+              className={styles.avatar}
+            />
+          ) : (
+            <div className={styles.avatarPlaceholder}>
+              <User size={40} />
+            </div>
+          )}
+          <div className={styles.profileInfo}>
+            <div className={styles.name}>{user.full_name || user.username}</div>
+            <div className={styles.username}>@{user.username}</div>
+            
+            <div className={styles.details}>
+              {user.phone && (
+                <div className={styles.detailItem}>
+                  <Phone size={16} className={styles.detailIcon} />
+                  {user.phone}
+                </div>
+              )}
+              {user.birth_date && (
+                <div className={styles.detailItem}>
+                  <Cake size={16} className={styles.detailIcon} />
+                  {user.birth_date}
+                </div>
+              )}
+              {user.teacher_subject && (
+                <div className={styles.detailItem}>
+                  <Briefcase size={16} className={styles.detailIcon} />
+                  {user.teacher_subject}
+                </div>
+              )}
             </div>
           </div>
+        </div>
+
+        <h3 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--color-text)' }}>Быстрый доступ</h3>
+        <div className={styles.dashboardGrid}>
+          {menuItems.map((item) => (
+            <Link key={item.to} to={item.to} className={styles.dashboardCard}>
+              <div className={styles.cardIcon}>
+                <item.icon size={20} />
+              </div>
+              <div className={styles.cardTitle}>{item.label}</div>
+              <div className={styles.cardDesc}>{item.desc}</div>
+            </Link>
+          ))}
         </div>
       </div>
     </AppShell>

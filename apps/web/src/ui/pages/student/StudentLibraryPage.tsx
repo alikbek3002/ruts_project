@@ -36,9 +36,10 @@ export function StudentLibraryPage() {
     <AppShell
       title="Ученик → Библиотека"
       nav={[
-        { to: "/app/student", label: "Панель" },
+        { to: "/app/student", label: "Главная" },
         { to: "/app/student/timetable", label: "Расписание" },
         { to: "/app/student/grades", label: "Оценки" },
+        { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
       ]}
     >

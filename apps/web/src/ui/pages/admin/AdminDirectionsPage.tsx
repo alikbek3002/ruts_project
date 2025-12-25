@@ -7,6 +7,8 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import styles from "./AdminDirections.module.css";
+import { Map, Hash } from "lucide-react";
 
 export function AdminDirectionsPage() {
   const { state } = useAuth();
@@ -51,38 +53,43 @@ export function AdminDirectionsPage() {
         { to: `${base}/timetable`, label: "Расписание" },
       ]}
     >
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h2>Направления</h2>
+        </div>
 
-      {loading && <Loader text="Загрузка..." />}
-      
-      <h3>🏢 Направления</h3>
-      <p style={{ color: "#666", marginBottom: 16 }}>
-        Направления созданы в системе и присваиваются группам при создании или редактировании.
-      </p>
+        {err && <div className={styles.error}>{err}</div>}
+        {loading && <Loader text="Загрузка..." />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-        {!loading && directions.map((d) => (
-          <div
-            key={d.id}
-            style={{
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: 8,
-              padding: 16,
-              boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{d.name}</div>
-            <div style={{ color: "#666", fontSize: 13 }}>Код: {d.code}</div>
-          </div>
-        ))}
+        <div className={styles.cardsGrid}>
+          {!loading && directions.map((d) => (
+            <div key={d.id} className={styles.card}>
+              <div className={styles.cardTitle}>
+                <Map size={18} style={{ display: "inline-block", verticalAlign: "text-bottom", marginRight: 8 }} />
+                {d.name}
+              </div>
+              <div className={styles.cardCode}>
+                <Hash size={14} style={{ display: "inline-block", verticalAlign: "text-bottom", marginRight: 4 }} />
+                {d.code}
+              </div>
+            </div>
+          ))}
+
+          {directions.length === 0 && !loading && (
+            <div className={styles.empty}>
+              Направления не найдены. Примените миграцию базы данных.
+            </div>
+          )}
+        </div>
+
+        <div className={styles.infoBox}>
+          <h3>🏢 О направлениях</h3>
+          <p>
+            Направления (факультеты/специальности) создаются администратором базы данных.
+            Они используются при создании групп.
+          </p>
+        </div>
       </div>
-
-      {directions.length === 0 && (
-        <p style={{ color: "#888" }}>
-          Направления не найдены. Примените миграцию базы данных.
-        </p>
-      )}
     </AppShell>
   );
 }

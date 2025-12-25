@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { LogOut, User, Globe } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { NotificationBell } from "../components/NotificationBell";
@@ -58,18 +59,19 @@ export function Header({ title, showLogo = true }: HeaderProps) {
             <span className={styles.langCode}>{lang.toUpperCase()}</span>
           </button>
           <button
-            className={styles.langBtn}
+            className={styles.profileBtn}
             onClick={handleProfile}
-            title="Profile"
+            title="Профиль"
           >
-            👤 {user?.username || "Profile"}
+            <User size={18} />
+            <span className={styles.username}>{user?.username}</span>
           </button>
           <button
             className={styles.logoutBtn}
             onClick={handleLogout}
             title={t("nav.logout")}
           >
-            Выйти
+            <LogOut size={18} />
           </button>
         </div>
       </div>

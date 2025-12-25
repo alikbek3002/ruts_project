@@ -2,21 +2,22 @@
 .tableWrapper {
   overflow-x: auto;
   max-width: 100%;
-  margin-top: 16px;
-  border: 1px solid #c0c0c0;
-  background: white;
+  margin-top: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  border-radius: var(--radius-md);
 }
 
 .journalTable {
   width: 100%;
   border-collapse: collapse;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
 }
 
 .journalTable thead {
-  background: #f3f3f3;
-  color: #333;
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -25,9 +26,9 @@
 .journalTable th {
   padding: 8px 12px;
   text-align: center;
-  border: 1px solid #c0c0c0;
-  font-weight: 500;
-  background: #f3f3f3;
+  border: 1px solid var(--color-border);
+  font-weight: 600;
+  background: var(--color-bg-secondary);
   min-width: 120px;
   white-space: nowrap;
 }
@@ -35,14 +36,14 @@
 .journalTable td {
   padding: 6px 10px;
   text-align: center;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--color-border);
   min-width: 120px;
   height: 32px;
   vertical-align: middle;
 }
 
 .journalTable tbody tr:hover {
-  background: #e8f0fe;
+  background: var(--color-primary-light);
 }
 
 /* Sticky first column - student names */

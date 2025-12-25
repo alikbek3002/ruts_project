@@ -3,28 +3,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  background: var(--color-bg); /* Use the light background instead of dark gradient for a cleaner look */
   padding: var(--spacing-md);
+  position: relative;
+}
+
+/* Optional: Add a top colored bar or background pattern for "official" look */
+.loginContainer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  background: var(--color-primary);
+  z-index: 0;
 }
 
 .loginCard {
   background: var(--color-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: var(--spacing-xl);
+  padding: 40px; /* More generous padding */
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--color-border);
 }
 
 .loginHeader {
   text-align: center;
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: 32px;
 }
 
 .logo {
-  width: 100px;
-  height: 100px;
-  margin: 0 auto var(--spacing-md);
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -37,55 +53,62 @@
 }
 
 .loginTitle {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--color-primary);
-  margin: 0 0 var(--spacing-xs) 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 8px 0;
 }
 
 .loginSubtitle {
   font-size: 14px;
-  color: var(--color-text-light);
+  color: var(--color-text-secondary);
   margin: 0;
+  font-weight: 500;
 }
 
 .loginForm {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: 20px;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 6px;
 }
 
 .formLabel {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .formInput {
   width: 100%;
+  height: 40px; /* Taller inputs */
 }
 
 .loginButton {
   width: 100%;
-  padding: var(--spacing-md);
-  font-size: 16px;
+  height: 44px;
+  font-size: 15px;
   font-weight: 600;
-  margin-top: var(--spacing-sm);
+  margin-top: 8px;
+  letter-spacing: 0.5px;
 }
 
 .errorMessage {
-  background: rgba(231, 76, 60, 0.1);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   border-left: 4px solid var(--color-error);
-  padding: var(--spacing-md);
+  padding: 12px;
   border-radius: var(--radius-sm);
-  color: var(--color-error);
-  font-size: 14px;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .rememberMe {

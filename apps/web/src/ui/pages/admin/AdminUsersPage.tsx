@@ -22,6 +22,24 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import styles from "./AdminUsers.module.css";
+import { 
+  Search, 
+  Plus, 
+  X, 
+  User, 
+  Calendar, 
+  Phone, 
+  BookOpen, 
+  GraduationCap, 
+  Trash2, 
+  Edit2, 
+  RefreshCw, 
+  Camera, 
+  Save,
+  Briefcase,
+  Shield
+} from "lucide-react";
 
 function normalizeKgPhone(input: string): string {
   const digits = (input || "").replace(/\D/g, "");
@@ -226,798 +244,560 @@ export function AdminUsersPage() {
         { to: `${base}/timetable`, label: "Расписание" },
       ]}
     >
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          onClick={() => {
-            setErr(null);
-            resetForm();
-            setModalOpen(true);
-          }}
-        >
-          Создать пользователя
-        </button>
-      </div>
-
-      {modalOpen && (
-        <div
-          onClick={() => setModalOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "color-mix(in srgb, var(--color-text) 35%, transparent)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "var(--spacing-lg)",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(720px, 100%)",
-              background: "var(--color-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--shadow-lg)",
-              padding: "var(--spacing-lg)",
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h2>Пользователи</h2>
+          <button
+            onClick={() => {
+              setErr(null);
+              resetForm();
+              setModalOpen(true);
             }}
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-md)" }}>
-              <h3 style={{ margin: 0 }}>Создать пользователя</h3>
-              <button className="secondary" onClick={() => setModalOpen(false)}>
-                Закрыть
-              </button>
-            </div>
-
-            {err && (
-              <div
-                style={{
-                  marginBottom: "var(--spacing-md)",
-                  padding: "var(--spacing-sm) var(--spacing-md)",
-                  border: "1px solid var(--color-border)",
-                  background: "color-mix(in srgb, var(--color-error) 10%, transparent)",
-                  borderRadius: "var(--radius-sm)",
-                  color: "var(--color-error)",
-                }}
-              >
-                {err}
-              </div>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Фото</label>
-                <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center" }}>
-                  <div
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      background: "var(--color-bg)",
-                      overflow: "hidden",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {photoDataUrl ? (
-                      <img src={photoDataUrl} alt="Фото" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      <span style={{ fontSize: 12, color: "var(--color-text-light)" }}>Нет</span>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      try {
-                        const url = await fileToDataUrl(f);
-                        setPhotoDataUrl(url);
-                      } catch (err) {
-                        setErr(String(err));
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Статус</label>
-                <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-                  <option value="student">Ученик</option>
-                  <option value="teacher">Преподаватель</option>
-                  {canCreateAdmin && <option value="admin">Администратор</option>}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Фамилия</label>
-                <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Фамилия" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Имя</label>
-                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Имя" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Отчество</label>
-                <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} placeholder="Отчество" />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Телефон</label>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(normalizeKgPhone(e.target.value))}
-                  placeholder="+996XXXXXXXXX"
-                  inputMode="numeric"
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Дата рождения</label>
-                <input
-                  type="date"
-                  value={birthDate}
-                  onChange={(e) => {
-                    setBirthDate(e.target.value);
-                    setGeneratedUsername("");
-                    setGeneratedPassword("");
-                  }}
-                />
-              </div>
-
-              {role === "student" && (
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Группа</label>
-                  <select value={classId} onChange={(e) => setClassId(e.target.value)}>
-                    <option value="">— Не определена —</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {role === "teacher" && (
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Предметы (до 2)</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
-                    <select
-                      value={teacherSubjectIds[0] || ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setTeacherSubjectIds((prev) => {
-                          const next = [...prev];
-                          if (!v) {
-                            next[0] = "";
-                          } else {
-                            next[0] = v;
-                          }
-                          return next.filter(Boolean).slice(0, 2);
-                        });
-                      }}
-                    >
-                      <option value="">(предмет 1)</option>
-                      {subjects.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={teacherSubjectIds[1] || ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setTeacherSubjectIds((prev) => {
-                          const first = prev[0] || "";
-                          const second = v || "";
-                          const next = [first, second].filter(Boolean);
-                          // prevent duplicates
-                          return Array.from(new Set(next)).slice(0, 2);
-                        });
-                      }}
-                    >
-                      <option value="">(предмет 2 — необязательно)</option>
-                      {subjects
-                        .filter((s) => s.id !== (teacherSubjectIds[0] || ""))
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "var(--spacing-md)", alignItems: "end" }}>
-                <div>
-                  <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Логин</label>
-                  <input value={generatedUsername} readOnly placeholder="Сначала нажмите “Сгенерировать”" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Пароль</label>
-                  <input value={generatedPassword} readOnly placeholder="Сначала нажмите “Сгенерировать”" />
-                </div>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    className="secondary"
-                    disabled={generating || !firstName.trim() || !lastName.trim() || !birthDate}
-                    onClick={async () => {
-                      if (!token) return;
-                      setErr(null);
-                      if (!isIsoDate(birthDate)) {
-                        setErr("Дата рождения должна быть в формате YYYY-MM-DD");
-                        return;
-                      }
-                      setGenerating(true);
-                      try {
-                        const resp = await apiAdminGenerateCredentials(token, {
-                          role,
-                          first_name: firstName.trim(),
-                          last_name: lastName.trim(),
-                          birth_date: birthDate,
-                        });
-                        setGeneratedUsername(resp.username);
-                        setGeneratedPassword(resp.password);
-                      } catch (e) {
-                        setErr(String(e));
-                        setGeneratedUsername("");
-                        setGeneratedPassword("");
-                      } finally {
-                        setGenerating(false);
-                      }
-                    }}
-                  >
-                    {generating ? "Генерация..." : "Сгенерировать"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: "var(--spacing-lg)" }}>
-              <button
-                onClick={async () => {
-                  if (!token) return;
-                  setErr(null);
-
-                  const ln = lastName.trim();
-                  const fn = firstName.trim();
-                  const mn = middleName.trim();
-                  const ph = phone.trim();
-                  if (!ln || !fn) {
-                    setErr("Введите фамилию и имя");
-                    return;
-                  }
-                  if (!ph.startsWith("+996")) {
-                    setErr("Телефон должен начинаться с +996");
-                    return;
-                  }
-                  if (!birthDate) {
-                    setErr("Выберите дату рождения");
-                    return;
-                  }
-                  if (!generatedUsername || !generatedPassword) {
-                    setErr("Нажмите “Сгенерировать” для логина и пароля");
-                    return;
-                  }
-                  if (role === "teacher" && teacherSubjectIds.length < 1) {
-                    setErr("Выберите хотя бы 1 предмет для преподавателя");
-                    return;
-                  }
-
-                  setSaving(true);
-                  try {
-                    const teacherSubjectNames = teacherSubjectIds
-                      .map((id) => subjects.find((s) => s.id === id)?.name)
-                      .filter(Boolean) as string[];
-
-                    const resp = await apiAdminCreateUser(token, {
-                      role,
-                      first_name: fn,
-                      last_name: ln,
-                      middle_name: mn || null,
-                      phone: ph,
-                      birth_date: birthDate,
-                      photo_data_url: photoDataUrl,
-                      class_id: (role === "student" && classId) ? classId : null,
-                      teacher_subject: role === "teacher" ? teacherSubjectNames.join(", ") : null,
-                      subject_ids: role === "teacher" ? teacherSubjectIds : null,
-                      username: generatedUsername,
-                      temp_password: generatedPassword,
-                    });
-                    setModalOpen(false);
-                    await reload();
-                  } catch (e) {
-                    setErr(String(e));
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-                disabled={saving}
-              >
-                {saving ? "Создание..." : "Создать"}
-              </button>
-            </div>
-          </div>
+            <Plus size={18} />
+            Создать пользователя
+          </button>
         </div>
-      )}
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
 
-      <hr />
-      <h3>Пользователи</h3>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button className={tab === "students" ? "" : "secondary"} onClick={() => setTab("students")}>
-          Студенты
-        </button>
-        <button className={tab === "teachers" ? "" : "secondary"} onClick={() => setTab("teachers")}>
-          Учителя
-        </button>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по ФИО"
-          style={{ flex: 1, minWidth: 220 }}
-        />
-        <button className="secondary" onClick={() => reload().catch((e) => setErr(String(e)))}>
-          Обновить
-        </button>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        {tab === "teachers" ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: "var(--spacing-md)",
-            }}
-          >
-            {users.map((u) => (
-              <div
-                key={u.id}
-                onClick={() => openUserCard(u)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") openUserCard(u);
-                }}
-                style={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-lg)",
-                  boxShadow: "var(--shadow-sm)",
-                  overflow: "hidden",
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "64px 1fr",
-                    gap: "var(--spacing-sm)",
-                    alignItems: "center",
-                    padding: "var(--spacing-md)",
-                  }}
-                >
-                  <img
-                    src={u.photo_data_url || "/favicon.svg"}
-                    alt="Фото"
-                    loading="lazy"
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      objectFit: "cover",
-                      background: "var(--color-bg)",
-                    }}
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      if (img.src.endsWith("/favicon.svg")) return;
-                      img.src = "/favicon.svg";
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 700, color: "var(--color-text)", lineHeight: 1.2 }}>
-                      {u.full_name || u.username}
-                    </div>
-                    <div style={{ marginTop: 4, fontSize: 13, color: "var(--color-text-light)", lineHeight: 1.2 }}>
-                      📚 {u.teacher_subject || "---"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {users.length === 0 && <div style={{ color: "var(--color-text-light)" }}>Учителя не найдены</div>}
+        <div className={styles.controls}>
+          <div className={styles.tabs}>
+            <button 
+              className={tab === "students" ? "" : "secondary"} 
+              onClick={() => setTab("students")}
+            >
+              <GraduationCap size={16} style={{ marginRight: 8 }} />
+              Студенты
+            </button>
+            <button 
+              className={tab === "teachers" ? "" : "secondary"} 
+              onClick={() => setTab("teachers")}
+            >
+              <Briefcase size={16} style={{ marginRight: 8 }} />
+              Учителя
+            </button>
           </div>
-        ) : (
-          (() => {
-            const assigned = users.filter((u) => !!u.class?.id);
-            const unassigned = users.filter((u) => !u.class?.id);
-            const borderTop = "1px solid var(--color-border)";
+          
+          <div className={styles.searchBar}>
+            <Search className={styles.searchIcon} />
+            <input
+              className={styles.searchInput}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по ФИО"
+            />
+          </div>
+          
+          <button className="secondary" onClick={() => reload().catch((e) => setErr(String(e)))}>
+            <RefreshCw size={16} />
+          </button>
+        </div>
 
-            const tableBaseStyle: React.CSSProperties = { width: "100%", borderCollapse: "collapse" };
-            return (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-lg)" }}>
-                <div>
-                  <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>
-                    Не распределены ({unassigned.length})
-                  </div>
-                  {unassigned.length === 0 ? (
-                    <div style={{ color: "var(--color-text-light)" }}>Нет</div>
-                  ) : (
-                    <table cellPadding={6} style={tableBaseStyle}>
-                      <thead>
-                        <tr>
-                          <th align="left">Фото</th>
-                          <th align="left">Логин</th>
-                          <th align="left">ФИО</th>
-                          <th align="left">Создан</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {unassigned.map((u) => (
-                          <tr key={u.id} style={{ borderTop, cursor: "pointer" }} onClick={() => openUserCard(u)}>
-                            <td style={{ width: 50 }}>
-                              <img
-                                src={u.photo_data_url || "/favicon.svg"}
-                                alt=""
-                                loading="lazy"
-                                style={{
-                                  width: 44,
-                                  height: 44,
-                                  borderRadius: "var(--radius-sm)",
-                                  border: "1px solid var(--color-border)",
-                                  objectFit: "cover",
-                                  background: "var(--color-bg)",
-                                  display: "block",
-                                }}
-                                onError={(e) => {
-                                  const img = e.currentTarget;
-                                  if (img.src.endsWith("/favicon.svg")) return;
-                                  img.src = "/favicon.svg";
-                                }}
-                              />
-                            </td>
-                            <td>{u.username}</td>
-                            <td>{u.full_name || ""}</td>
-                            <td>{new Date(u.created_at).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+        {err && <div className={styles.error}>{err}</div>}
 
-                <div>
-                  <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>
-                    Распределены ({assigned.length})
+        <div className={styles.grid}>
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className={styles.card}
+              onClick={() => openUserCard(u)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") openUserCard(u);
+              }}
+            >
+              <div className={styles.cardHeader}>
+                {u.photo_url ? (
+                  <img src={u.photo_url} alt={u.full_name} className={styles.avatar} />
+                ) : (
+                  <div className={styles.avatarPlaceholder}>
+                    {u.first_name?.[0] || u.username?.[0] || "?"}
                   </div>
-                  {assigned.length === 0 ? (
-                    <div style={{ color: "var(--color-text-light)" }}>Нет</div>
-                  ) : (
-                    <table cellPadding={6} style={tableBaseStyle}>
-                      <thead>
-                        <tr>
-                          <th align="left">Фото</th>
-                          <th align="left">Логин</th>
-                          <th align="left">ФИО</th>
-                          <th align="left">Создан</th>
-                          <th align="left">Группа</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {assigned.map((u) => (
-                          <tr key={u.id} style={{ borderTop, cursor: "pointer" }} onClick={() => openUserCard(u)}>
-                            <td style={{ width: 50 }}>
-                              <img
-                                src={u.photo_data_url || "/favicon.svg"}
-                                alt=""
-                                loading="lazy"
-                                style={{
-                                  width: 44,
-                                  height: 44,
-                                  borderRadius: "var(--radius-sm)",
-                                  border: "1px solid var(--color-border)",
-                                  objectFit: "cover",
-                                  background: "var(--color-bg)",
-                                  display: "block",
-                                }}
-                                onError={(e) => {
-                                  const img = e.currentTarget;
-                                  if (img.src.endsWith("/favicon.svg")) return;
-                                  img.src = "/favicon.svg";
-                                }}
-                              />
-                            </td>
-                            <td>{u.username}</td>
-                            <td>{u.full_name || ""}</td>
-                            <td>{new Date(u.created_at).toLocaleString()}</td>
-                            <td>{u.class?.name || "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                )}
+                <div className={styles.userInfo}>
+                  <div className={styles.userName}>{u.full_name || u.username}</div>
+                  <div className={styles.userRole}>
+                    {u.role === "student" ? "Студент" : u.role === "teacher" ? "Преподаватель" : "Админ"}
+                  </div>
                 </div>
               </div>
-            );
-          })()
-        )}
-      </div>
+              <div className={styles.cardBody}>
+                <div className={styles.infoRow}>
+                  <User className={styles.infoIcon} />
+                  <span>{u.username}</span>
+                </div>
+                {u.role === "student" && u.class_name && (
+                  <div className={styles.infoRow}>
+                    <GraduationCap className={styles.infoIcon} />
+                    <span>{u.class_name}</span>
+                  </div>
+                )}
+                {u.role === "teacher" && u.teacher_subject && (
+                  <div className={styles.infoRow}>
+                    <BookOpen className={styles.infoIcon} />
+                    <span>{u.teacher_subject}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
-      {viewOpen && (
-        <div
-          onClick={() => setViewOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "color-mix(in srgb, var(--color-text) 35%, transparent)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "var(--spacing-lg)",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(720px, 100%)",
-              background: "var(--color-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--shadow-lg)",
-              padding: "var(--spacing-lg)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-md)" }}>
-              <h3 style={{ margin: 0 }}>Карточка пользователя</h3>
-              <div style={{ display: "flex", gap: 8 }}>
-                {!viewLoading && !viewErr && viewUser && (
-                  <button
-                    className={viewEdit ? "secondary" : ""}
-                    onClick={() => {
-                      setViewErr(null);
-                      setViewEdit((v) => !v);
-                      // reset fields from current user when opening edit mode
-                      if (!viewEdit) {
-                        setViewEditFirstName(viewUser.first_name || "");
-                        setViewEditLastName(viewUser.last_name || "");
-                        setViewEditMiddleName(viewUser.middle_name || "");
-                        setViewEditPhone(viewUser.phone || "+996");
-                        setViewEditBirthDate(viewUser.birth_date || "");
-                        setViewEditClassId(viewClass?.id || "");
-                        setViewEditPhotoDataUrl(viewUser.photo_data_url || null);
-                      }
-                    }}
-                  >
-                    {viewEdit ? "Отмена" : "Редактировать"}
-                  </button>
-                )}
-                {!viewLoading && !viewErr && viewUser && (
-                  <button
-                    className="danger"
-                    disabled={viewSaving}
-                    onClick={deleteUserFromCard}
-                  >
-                    Удалить
-                  </button>
-                )}
-                <button className="secondary" onClick={() => setViewOpen(false)}>
-                  Закрыть
+        {/* Create User Modal */}
+        {modalOpen && (
+          <div className={styles.modalOverlay} onClick={() => setModalOpen(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle}>Создать пользователя</h3>
+                <button className={styles.closeButton} onClick={() => setModalOpen(false)}>
+                  <X size={20} />
                 </button>
               </div>
-            </div>
 
-            {viewLoading && <Loader text="Загрузка..." />}
-            {viewErr && <div style={{ color: "var(--color-error)" }}>{viewErr}</div>}
+              <div className={styles.modalContent}>
+                {err && <div className={styles.error}>{err}</div>}
 
-            {!viewLoading && !viewErr && viewUser && (
-              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-                  <div
-                    style={{
-                      width: 160,
-                      height: 160,
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      background: "var(--color-bg)",
-                      overflow: "hidden",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) ? (
-                      <img
-                        src={(viewEdit ? viewEditPhotoDataUrl : viewUser.photo_data_url) || ""}
-                        alt="Фото"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    ) : (
-                      <span style={{ fontSize: 12, color: "var(--color-text-light)" }}>Нет фото</span>
-                    )}
-                  </div>
-
-                  {viewEdit && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Фото</label>
+                    <div className={styles.photoUpload}>
+                      {photoDataUrl ? (
+                        <img src={photoDataUrl} alt="Preview" className={styles.photoPreview} />
+                      ) : (
+                        <Camera size={32} color="var(--color-text-light)" />
+                      )}
                       <input
                         type="file"
                         accept="image/*"
+                        style={{ display: "none" }}
+                        id="photo-upload"
                         onChange={async (e) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
                           try {
-                            const dataUrl = await fileToDataUrl(f);
-                            setViewEditPhotoDataUrl(dataUrl);
+                            const url = await fileToDataUrl(f);
+                            setPhotoDataUrl(url);
                           } catch (err) {
-                            setViewErr(String(err));
+                            setErr(String(err));
                           }
                         }}
                       />
-                      <button className="danger" onClick={() => setViewEditPhotoDataUrl(null)}>
-                        Удалить фото
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
-                  <div
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "var(--radius-md)",
-                      padding: "var(--spacing-md)",
-                      background: "var(--color-card)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Основное</div>
-
-                    <div>
-                      <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>ФИО</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
-                        <input
-                          placeholder="Фамилия"
-                          value={viewEdit ? viewEditLastName : viewUser.last_name || ""}
-                          onChange={(e) => setViewEditLastName(e.target.value)}
-                          disabled={!viewEdit}
-                        />
-                        <input
-                          placeholder="Имя"
-                          value={viewEdit ? viewEditFirstName : viewUser.first_name || ""}
-                          onChange={(e) => setViewEditFirstName(e.target.value)}
-                          disabled={!viewEdit}
-                        />
-                        <input
-                          placeholder="Отчество"
-                          value={viewEdit ? viewEditMiddleName : viewUser.middle_name || ""}
-                          onChange={(e) => setViewEditMiddleName(e.target.value)}
-                          disabled={!viewEdit}
-                        />
-                      </div>
-
-                      <div style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-light)" }}>Логин</div>
-                      <div style={{ fontWeight: 700, marginTop: 4 }}>{viewUser.username}</div>
+                      <label htmlFor="photo-upload" style={{ cursor: "pointer", color: "var(--color-primary)", fontSize: 13 }}>
+                        {photoDataUrl ? "Изменить фото" : "Загрузить фото"}
+                      </label>
                     </div>
                   </div>
 
-                  {viewUser.role === "student" && (
-                    <div
-                      style={{
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--spacing-md)",
-                        background: "var(--color-card)",
-                        display: "flex",
-                        gap: "var(--spacing-md)",
-                        alignItems: "center",
-                        justifyContent: "space-between",
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Роль</label>
+                    <select value={role} onChange={(e) => setRole(e.target.value as any)}>
+                      <option value="student">Ученик</option>
+                      <option value="teacher">Преподаватель</option>
+                      {canCreateAdmin && <option value="admin">Администратор</option>}
+                    </select>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Фамилия</label>
+                    <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Фамилия" />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Имя</label>
+                    <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Имя" />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Отчество</label>
+                    <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} placeholder="Отчество" />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Телефон</label>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(normalizeKgPhone(e.target.value))}
+                      placeholder="+996XXXXXXXXX"
+                      inputMode="numeric"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Дата рождения</label>
+                    <input
+                      type="date"
+                      value={birthDate}
+                      onChange={(e) => {
+                        setBirthDate(e.target.value);
+                        setGeneratedUsername("");
+                        setGeneratedPassword("");
                       }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Пароль студента</div>
-                        <div style={{ fontWeight: 700, marginTop: 4 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
-                          Показывается только после подтверждения паролем админа/менеджера (пароль будет сброшен).
-                        </div>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (!token) return;
-                          const actorPassword = window.prompt("Введите пароль админа/менеджера");
-                          if (!actorPassword) return;
-                          try {
-                            const resp = await apiAdminResetStudentPassword(token, viewUser.id, actorPassword);
-                            setViewTempPassword(resp.tempPassword);
-                          } catch (e) {
-                            setViewErr(String(e));
-                          }
-                        }}
-                      >
-                        Показать
-                      </button>
+                    />
+                  </div>
+
+                  {role === "student" && (
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label className={styles.label}>Группа</label>
+                      <select value={classId} onChange={(e) => setClassId(e.target.value)}>
+                        <option value="">— Не определена —</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
-                  {viewUser.role === "teacher" && (
-                    <div
-                      style={{
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--spacing-md)",
-                        background: "var(--color-card)",
-                        display: "flex",
-                        gap: "var(--spacing-md)",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Пароль учителя</div>
-                        <div style={{ fontWeight: 700, marginTop: 4 }}>{viewTempPassword ? viewTempPassword : "Скрыт"}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
-                          Показывается только после подтверждения паролем админа/менеджера (пароль будет сброшен).
-                        </div>
+                  {role === "teacher" && (
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label className={styles.label}>Предметы (до 2)</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
+                        <select
+                          value={teacherSubjectIds[0] || ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setTeacherSubjectIds((prev) => {
+                              const next = [...prev];
+                              if (!v) {
+                                next[0] = "";
+                              } else {
+                                next[0] = v;
+                              }
+                              return next.filter(Boolean).slice(0, 2);
+                            });
+                          }}
+                        >
+                          <option value="">(предмет 1)</option>
+                          {subjects.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={teacherSubjectIds[1] || ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setTeacherSubjectIds((prev) => {
+                              const first = prev[0] || "";
+                              const second = v || "";
+                              const next = [first, second].filter(Boolean);
+                              return Array.from(new Set(next)).slice(0, 2);
+                            });
+                          }}
+                        >
+                          <option value="">(предмет 2 — необязательно)</option>
+                          {subjects
+                            .filter((s) => s.id !== (teacherSubjectIds[0] || ""))
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                        </select>
                       </div>
-                      <button
-                        onClick={async () => {
-                          if (!token) return;
-                          const actorPassword = window.prompt("Введите пароль админа/менеджера");
-                          if (!actorPassword) return;
-                          try {
-                            const resp = await apiAdminResetTeacherPassword(token, viewUser.id, actorPassword);
-                            setViewTempPassword(resp.tempPassword);
-                          } catch (e) {
-                            setViewErr(String(e));
-                          }
-                        }}
-                      >
-                        Показать
-                      </button>
                     </div>
                   )}
 
-                  <div
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "var(--radius-md)",
-                      padding: "var(--spacing-md)",
-                      background: "var(--color-card)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Контакты</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
-                      <div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Телефон</div>
-                        {!viewEdit ? (
-                          <div style={{ marginTop: 4 }}>{viewUser.phone || "—"}</div>
+                  <div className={`${styles.fullWidth} ${styles.formGrid}`} style={{ alignItems: "end" }}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Логин</label>
+                      <input value={generatedUsername} readOnly placeholder="Сначала нажмите “Сгенерировать”" />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Пароль</label>
+                      <input value={generatedPassword} readOnly placeholder="Сначала нажмите “Сгенерировать”" />
+                    </div>
+                  </div>
+                  
+                  <div className={styles.fullWidth} style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      className="secondary"
+                      disabled={generating || !firstName.trim() || !lastName.trim() || !birthDate}
+                      onClick={async () => {
+                        if (!token) return;
+                        setErr(null);
+                        if (!isIsoDate(birthDate)) {
+                          setErr("Дата рождения должна быть в формате YYYY-MM-DD");
+                          return;
+                        }
+                        setGenerating(true);
+                        try {
+                          const resp = await apiAdminGenerateCredentials(token, {
+                            role,
+                            first_name: firstName.trim(),
+                            last_name: lastName.trim(),
+                            birth_date: birthDate,
+                          });
+                          setGeneratedUsername(resp.username);
+                          setGeneratedPassword(resp.password);
+                        } catch (e) {
+                          setErr(String(e));
+                          setGeneratedUsername("");
+                          setGeneratedPassword("");
+                        } finally {
+                          setGenerating(false);
+                        }
+                      }}
+                    >
+                      <RefreshCw size={16} style={{ marginRight: 8 }} />
+                      {generating ? "Генерация..." : "Сгенерировать"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button
+                  onClick={async () => {
+                    if (!token) return;
+                    setErr(null);
+
+                    const ln = lastName.trim();
+                    const fn = firstName.trim();
+                    const mn = middleName.trim();
+                    const ph = phone.trim();
+                    if (!ln || !fn) {
+                      setErr("Введите фамилию и имя");
+                      return;
+                    }
+                    if (!ph.startsWith("+996")) {
+                      setErr("Телефон должен начинаться с +996");
+                      return;
+                    }
+                    if (!birthDate) {
+                      setErr("Выберите дату рождения");
+                      return;
+                    }
+                    if (!generatedUsername || !generatedPassword) {
+                      setErr("Нажмите “Сгенерировать” для логина и пароля");
+                      return;
+                    }
+                    if (role === "teacher" && teacherSubjectIds.length < 1) {
+                      setErr("Выберите хотя бы 1 предмет для преподавателя");
+                      return;
+                    }
+
+                    setSaving(true);
+                    try {
+                      const teacherSubjectNames = teacherSubjectIds
+                        .map((id) => subjects.find((s) => s.id === id)?.name)
+                        .filter(Boolean) as string[];
+
+                      const resp = await apiAdminCreateUser(token, {
+                        role,
+                        first_name: fn,
+                        last_name: ln,
+                        middle_name: mn || null,
+                        phone: ph,
+                        birth_date: birthDate,
+                        photo_data_url: photoDataUrl,
+                        class_id: (role === "student" && classId) ? classId : null,
+                        teacher_subject: role === "teacher" ? teacherSubjectNames.join(", ") : null,
+                        subject_ids: role === "teacher" ? teacherSubjectIds : null,
+                        username: generatedUsername,
+                        temp_password: generatedPassword,
+                      });
+                      setModalOpen(false);
+                      await reload();
+                    } catch (e) {
+                      setErr(String(e));
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  {saving ? "Создание..." : "Создать"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View/Edit User Modal */}
+        {viewOpen && (
+          <div className={styles.modalOverlay} onClick={() => setViewOpen(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle}>
+                  {viewLoading ? "Загрузка..." : viewUser?.full_name || "Пользователь"}
+                </h3>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {!viewLoading && viewUser && (
+                    <>
+                      <button 
+                        className="secondary" 
+                        onClick={() => setViewEdit(!viewEdit)}
+                        title="Редактировать"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        className="secondary" 
+                        style={{ color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                        onClick={deleteUserFromCard}
+                        title="Удалить"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  )}
+                  <button className={styles.closeButton} onClick={() => setViewOpen(false)}>
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.modalContent}>
+                {viewLoading ? (
+                  <Loader />
+                ) : !viewUser ? (
+                  <p>Не удалось загрузить данные</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+                    {viewErr && <div className={styles.error}>{viewErr}</div>}
+
+                    <div style={{ display: "flex", gap: "var(--spacing-lg)", alignItems: "flex-start" }}>
+                      <div style={{ flexShrink: 0 }}>
+                        {viewEdit ? (
+                          <div className={styles.photoUpload} style={{ width: 120, height: 120, padding: 0, justifyContent: "center" }}>
+                            {viewEditPhotoDataUrl ? (
+                              <img src={viewEditPhotoDataUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "var(--radius-lg)" }} />
+                            ) : (
+                              <Camera size={32} color="var(--color-text-light)" />
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              id="edit-photo-upload"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                try {
+                                  const url = await fileToDataUrl(f);
+                                  setViewEditPhotoDataUrl(url);
+                                } catch (err) {
+                                  setViewErr(String(err));
+                                }
+                              }}
+                            />
+                            <label htmlFor="edit-photo-upload" style={{ position: "absolute", inset: 0, cursor: "pointer" }} />
+                          </div>
                         ) : (
-                          <input style={{ marginTop: 8 }} value={viewEditPhone} onChange={(e) => setViewEditPhone(e.target.value)} placeholder="+996..." />
+                          <img 
+                            src={viewUser.photo_url || ""} 
+                            alt={viewUser.full_name} 
+                            style={{ 
+                              width: 120, 
+                              height: 120, 
+                              borderRadius: "var(--radius-lg)", 
+                              objectFit: "cover",
+                              background: "var(--color-bg)",
+                              border: "1px solid var(--color-border)"
+                            }} 
+                          />
                         )}
                       </div>
-                      <div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Дата рождения</div>
+
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+                        <div className={styles.infoRow}>
+                          <User size={16} className={styles.infoIcon} />
+                          <span style={{ fontWeight: 500 }}>{viewUser.username}</span>
+                        </div>
+                        <div className={styles.infoRow}>
+                          <Shield size={16} className={styles.infoIcon} />
+                          <span>{viewUser.role === "student" ? "Студент" : viewUser.role === "teacher" ? "Преподаватель" : "Админ"}</span>
+                        </div>
+                        
+                        {/* Password Reset Section */}
+                        <div style={{ marginTop: "var(--spacing-md)", padding: "var(--spacing-md)", background: "var(--color-bg-subtle)", borderRadius: "var(--radius-md)" }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Сброс пароля</div>
+                          {viewTempPassword ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-card)", padding: 8, borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 600 }}>{viewTempPassword}</span>
+                              <button className="secondary" style={{ padding: 4, height: "auto" }} onClick={() => navigator.clipboard.writeText(viewTempPassword)}>
+                                Копировать
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              className="secondary" 
+                              style={{ fontSize: 13 }}
+                              onClick={async () => {
+                                if (!token) return;
+                                if (!window.confirm("Сбросить пароль?")) return;
+                                setViewErr(null);
+                                try {
+                                  let resp;
+                                  if (viewUser.role === "student") {
+                                    resp = await apiAdminResetStudentPassword(token, viewUser.id);
+                                  } else {
+                                    resp = await apiAdminResetTeacherPassword(token, viewUser.id);
+                                  }
+                                  setViewTempPassword(resp.temp_password);
+                                } catch (e) {
+                                  setViewErr(String(e));
+                                }
+                              }}
+                            >
+                              Сбросить пароль
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.formGrid}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Фамилия</label>
                         {!viewEdit ? (
-                          <div style={{ marginTop: 4 }}>{viewUser.birth_date || "—"}</div>
+                          <div>{viewUser.last_name}</div>
                         ) : (
-                          <input style={{ marginTop: 8 }} type="date" value={viewEditBirthDate} onChange={(e) => setViewEditBirthDate(e.target.value)} />
+                          <input value={viewEditLastName} onChange={(e) => setViewEditLastName(e.target.value)} />
+                        )}
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Имя</label>
+                        {!viewEdit ? (
+                          <div>{viewUser.first_name}</div>
+                        ) : (
+                          <input value={viewEditFirstName} onChange={(e) => setViewEditFirstName(e.target.value)} />
+                        )}
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Отчество</label>
+                        {!viewEdit ? (
+                          <div>{viewUser.middle_name || "—"}</div>
+                        ) : (
+                          <input value={viewEditMiddleName} onChange={(e) => setViewEditMiddleName(e.target.value)} />
+                        )}
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Телефон</label>
+                        {!viewEdit ? (
+                          <div>{viewUser.phone || "—"}</div>
+                        ) : (
+                          <input value={viewEditPhone} onChange={(e) => setViewEditPhone(e.target.value)} placeholder="+996..." />
+                        )}
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Дата рождения</label>
+                        {!viewEdit ? (
+                          <div>{viewUser.birth_date || "—"}</div>
+                        ) : (
+                          <input type="date" value={viewEditBirthDate} onChange={(e) => setViewEditBirthDate(e.target.value)} />
                         )}
                       </div>
 
                       {viewUser.role === "student" && (
-                        <div style={{ gridColumn: "1 / -1" }}>
-                          <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>Группа</div>
+                        <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                          <label className={styles.label}>Группа</label>
                           {!viewEdit ? (
-                            <div style={{ marginTop: 4 }}>{viewClass?.name || "—"}</div>
+                            <div>{viewClass?.name || "—"}</div>
                           ) : (
-                            <select style={{ marginTop: 8 }} value={viewEditClassId} onChange={(e) => setViewEditClassId(e.target.value)}>
+                            <select value={viewEditClassId} onChange={(e) => setViewEditClassId(e.target.value)}>
                               <option value="">(без группы)</option>
                               {classes.map((c) => (
                                 <option key={c.id} value={c.id}>
@@ -1029,123 +809,121 @@ export function AdminUsersPage() {
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  {viewUser.role === "teacher" && (
-                    <div
-                      style={{
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
+                    {viewUser.role === "teacher" && (
+                      <div style={{ 
+                        border: "1px solid var(--color-border)", 
+                        borderRadius: "var(--radius-md)", 
                         padding: "var(--spacing-md)",
-                        background: "var(--color-card)",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>Предметы учителя</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
-                        <select
-                          value={viewTeacherSubjectIds[0] || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setViewTeacherSubjectIds((prev) => {
-                              const second = prev[1] || "";
-                              const next = [v || "", second].filter(Boolean);
-                              return Array.from(new Set(next)).slice(0, 2);
-                            });
-                          }}
-                        >
-                          <option value="">(предмет 1)</option>
-                          {subjects.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={viewTeacherSubjectIds[1] || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setViewTeacherSubjectIds((prev) => {
-                              const first = prev[0] || "";
-                              const next = [first, v || ""].filter(Boolean);
-                              return Array.from(new Set(next)).slice(0, 2);
-                            });
-                          }}
-                        >
-                          <option value="">(предмет 2 — необязательно)</option>
-                          {subjects
-                            .filter((s) => s.id !== (viewTeacherSubjectIds[0] || ""))
-                            .map((s) => (
+                        background: "var(--color-bg-subtle)"
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
+                          <select
+                            value={viewTeacherSubjectIds[0] || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setViewTeacherSubjectIds((prev) => {
+                                const second = prev[1] || "";
+                                const next = [v || "", second].filter(Boolean);
+                                return Array.from(new Set(next)).slice(0, 2);
+                              });
+                            }}
+                          >
+                            <option value="">(предмет 1)</option>
+                            {subjects.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.name}
                               </option>
                             ))}
-                        </select>
+                          </select>
 
-                        <button
-                          disabled={viewTeacherSaving || viewTeacherSubjectIds.length < 1}
-                          onClick={async () => {
-                            if (!token || !viewUser) return;
-                            setViewErr(null);
-                            setViewTeacherSaving(true);
-                            try {
-                              await apiSetTeacherSubjects(token, viewUser.id, viewTeacherSubjectIds);
-                              const refreshed = await apiAdminGetUser(token, viewUser.id);
-                              setViewUser(refreshed.user);
-                            } catch (e) {
-                              setViewErr(String(e));
-                            } finally {
-                              setViewTeacherSaving(false);
-                            }
-                          }}
-                        >
-                          {viewTeacherSaving ? "Сохранение..." : "Сохранить"}
-                        </button>
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 12, color: "var(--color-text-light)" }}>
-                        Сейчас: {viewUser.teacher_subject || "—"}
-                      </div>
-                    </div>
-                  )}
+                          <select
+                            value={viewTeacherSubjectIds[1] || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setViewTeacherSubjectIds((prev) => {
+                                const first = prev[0] || "";
+                                const next = [first, v || ""].filter(Boolean);
+                                return Array.from(new Set(next)).slice(0, 2);
+                              });
+                            }}
+                          >
+                            <option value="">(предмет 2 — необязательно)</option>
+                            {subjects
+                              .filter((s) => s.id !== (viewTeacherSubjectIds[0] || ""))
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                          </select>
 
-                  {viewEdit && (
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-                      <button
-                        disabled={viewSaving}
-                        onClick={async () => {
-                          if (!token) return;
-                          setViewErr(null);
-                          setViewSaving(true);
-                          try {
-                            const resp = await apiAdminUpdateUser(token, viewUser.id, {
-                              first_name: viewEditFirstName.trim() || null,
-                              last_name: viewEditLastName.trim() || null,
-                              middle_name: viewEditMiddleName.trim() || null,
-                              phone: viewEditPhone.trim() || null,
-                              birth_date: viewEditBirthDate || null,
-                              photo_data_url: viewEditPhotoDataUrl,
-                              class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
-                            });
-                            setViewUser(resp.user);
-                            setViewClass(resp.class);
-                            setViewEdit(false);
-                          } catch (e) {
-                            setViewErr(String(e));
-                          } finally {
-                            setViewSaving(false);
-                          }
-                        }}
-                      >
-                        {viewSaving ? "Сохранение..." : "Сохранить изменения"}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                          <button
+                            disabled={viewTeacherSaving || viewTeacherSubjectIds.length < 1}
+                            onClick={async () => {
+                              if (!token || !viewUser) return;
+                              setViewErr(null);
+                              setViewTeacherSaving(true);
+                              try {
+                                await apiSetTeacherSubjects(token, viewUser.id, viewTeacherSubjectIds);
+                                const refreshed = await apiAdminGetUser(token, viewUser.id);
+                                setViewUser(refreshed.user);
+                              } catch (e) {
+                                setViewErr(String(e));
+                              } finally {
+                                setViewTeacherSaving(false);
+                              }
+                            }}
+                          >
+                            {viewTeacherSaving ? "..." : <Save size={16} />}
+                          </button>
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
+                          Сейчас: {viewUser.teacher_subject || "—"}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+
+              {viewEdit && (
+                <div className={styles.modalFooter}>
+                  <button
+                    disabled={viewSaving}
+                    onClick={async () => {
+                      if (!token || !viewUser) return;
+                      setViewErr(null);
+                      setViewSaving(true);
+                      try {
+                        const resp = await apiAdminUpdateUser(token, viewUser.id, {
+                          first_name: viewEditFirstName.trim() || null,
+                          last_name: viewEditLastName.trim() || null,
+                          middle_name: viewEditMiddleName.trim() || null,
+                          phone: viewEditPhone.trim() || null,
+                          birth_date: viewEditBirthDate || null,
+                          photo_data_url: viewEditPhotoDataUrl,
+                          class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
+                        });
+                        setViewUser(resp.user);
+                        setViewClass(resp.class);
+                        setViewEdit(false);
+                      } catch (e) {
+                        setViewErr(String(e));
+                      } finally {
+                        setViewSaving(false);
+                      }
+                    }}
+                  >
+                    {viewSaving ? "Сохранение..." : "Сохранить изменения"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </AppShell>
   );
 }

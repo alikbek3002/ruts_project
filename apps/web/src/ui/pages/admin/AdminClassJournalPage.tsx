@@ -5,6 +5,7 @@ import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import { apiListSubjects, Subject, trackedFetch } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
+import { ChevronLeft, Download, RefreshCw, FileSpreadsheet, Filter } from "lucide-react";
 
 type Student = {
   id: string;
@@ -188,194 +189,215 @@ export function AdminClassJournalPage() {
         { to: `${base}/timetable`, label: "Расписание" },
       ]}
     >
-      <div style={{ marginBottom: 16 }}>
-        <Link to={`${base}/classes`}>← Назад к группам</Link>
-      </div>
-
-      <h2>Журнал группы: {className || classId}</h2>
-
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <button 
-            onClick={() => { setViewMode("subjects"); setSelectedSubjectId(""); }} 
-            disabled={viewMode === "subjects" && !selectedSubjectId}
-        >
-          Сводная по предметам
-        </button>
-        <button 
-            onClick={() => { setViewMode("dates"); setSelectedSubjectId(""); }} 
-            disabled={viewMode === "dates" && !selectedSubjectId}
-        >
-          Сводная по датам
-        </button>
-
-        <select 
-            value={selectedSubjectId} 
-            onChange={(e) => setSelectedSubjectId(e.target.value)}
-            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
-        >
-            <option value="">-- Выберите предмет для детализации --</option>
-            {allSubjects.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-        </select>
-
-        <button onClick={() => downloadExcel("grades")}>📥 Скачать оценки (Excel)</button>
-        <button onClick={() => downloadExcel("attendance")}>📥 Скачать посещаемость (Excel)</button>
-        <button onClick={() => loadJournal()} disabled={loading}>
-          {loading ? "⭮ Загрузка..." : "Обновить"}
-        </button>
-      </div>
-
-      {loading && <Loader text="Загрузка журнала..." />}
-
-      {!loading && selectedSubjectId && detailedJournal && (
-        <div className={styles.tableWrapper}>
-          <table className={styles.journalTable}>
-            <thead>
-              <tr>
-                <th className={styles.stickyCol}>Ученик</th>
-                {detailedJournal.lessons.map((l) => (
-                  <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
-                    <div style={{ fontSize: "0.8em" }}>
-                        {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {detailedJournal.students.map((student) => (
-                <tr key={student.id}>
-                  <td className={styles.stickyCol}>{student.name}</td>
-                  {detailedJournal.lessons.map((l) => {
-                    const key = `${l.date}_${l.timetable_entry_id}`;
-                    const cell = detailedJournal.grades[student.id]?.[key];
-                    const grades = cell?.grades || [];
-                    const present = cell?.present;
-
-                    return (
-                      <td key={l.timetable_entry_id} style={{ textAlign: "center" }}>
-                        {grades.length > 0 ? (
-                          grades.map((g, i) => (
-                            <span key={i} title={g.comment || ""}>
-                              <strong>{g.grade}</strong>
-                              {i < grades.length - 1 ? ", " : ""}
-                            </span>
-                          ))
-                        ) : present === false ? (
-                          <span style={{ color: "red" }}>Н</span>
-                        ) : present === true ? (
-                          <span style={{ color: "green" }}>✓</span>
-                        ) : (
-                          <span style={{ color: "#ccc" }}>·</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div>
+            <Link to={`${base}/classes`} className={styles.backBtn} style={{ display: "inline-flex", marginBottom: 8 }}>
+              <ChevronLeft size={16} />
+              Назад к группам
+            </Link>
+            <h2>Журнал группы: {className || classId}</h2>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="secondary" onClick={() => loadJournal()} disabled={loading} title="Обновить">
+              <RefreshCw size={18} />
+            </button>
+          </div>
         </div>
-      )}
 
-      {!loading && !selectedSubjectId && viewMode === "subjects" && journalBySubject && (
-        <div className={styles.tableWrapper}>
-          <table className={styles.journalTable}>
-            <thead>
-              <tr>
-                <th className={styles.stickyCol}>Ученик</th>
-                {(subjectColumns.length ? subjectColumns : journalBySubject.subjects).map((subj) => (
-                  <th key={subj}>{subj}</th>
-                ))}
-                <th className={styles.avgCol}>Средний балл</th>
-              </tr>
-            </thead>
-            <tbody>
-              {journalBySubject.students.map((student) => {
-                const studentData = journalBySubject.data[student.id] || {};
-                const cols = subjectColumns.length ? subjectColumns : journalBySubject.subjects;
-                const allAverages = cols
-                  .map((subj) => studentData[subj]?.average)
-                  .filter((avg): avg is number => avg !== null && avg !== undefined);
-                const overallAvg = allAverages.length > 0 ? allAverages.reduce((a, b) => a + b, 0) / allAverages.length : null;
+        {err && <div style={{ color: "var(--color-error)", marginBottom: 16, padding: 16, background: "#fee2e2", borderRadius: 8 }}>{err}</div>}
 
-                return (
+        <div className={styles.controls}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: 1 }}>
+            <button 
+                className={viewMode === "subjects" && !selectedSubjectId ? "primary" : "secondary"}
+                onClick={() => { setViewMode("subjects"); setSelectedSubjectId(""); }} 
+            >
+              Сводная по предметам
+            </button>
+            <button 
+                className={viewMode === "dates" && !selectedSubjectId ? "primary" : "secondary"}
+                onClick={() => { setViewMode("dates"); setSelectedSubjectId(""); }} 
+            >
+              Сводная по датам
+            </button>
+
+            <div style={{ position: "relative" }}>
+              <Filter size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-secondary)" }} />
+              <select 
+                  value={selectedSubjectId} 
+                  onChange={(e) => setSelectedSubjectId(e.target.value)}
+                  className={styles.select}
+                  style={{ paddingLeft: 32 }}
+              >
+                  <option value="">-- Детализация по предмету --</option>
+                  {allSubjects.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="secondary" onClick={() => downloadExcel("grades")} title="Скачать оценки">
+              <FileSpreadsheet size={18} style={{ marginRight: 8 }} />
+              Оценки
+            </button>
+            <button className="secondary" onClick={() => downloadExcel("attendance")} title="Скачать посещаемость">
+              <FileSpreadsheet size={18} style={{ marginRight: 8 }} />
+              Посещаемость
+            </button>
+          </div>
+        </div>
+
+        {loading && <Loader text="Загрузка журнала..." />}
+
+        {!loading && selectedSubjectId && detailedJournal && (
+          <div className={styles.tableWrapper}>
+            <table className={styles.journalTable}>
+              <thead>
+                <tr>
+                  <th className={styles.stickyCol}>Ученик</th>
+                  {detailedJournal.lessons.map((l) => (
+                    <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
+                      <div style={{ fontSize: "0.8em" }}>
+                          {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detailedJournal.students.map((student) => (
                   <tr key={student.id}>
                     <td className={styles.stickyCol}>{student.name}</td>
-                    {cols.map((subj) => {
-                      const subjData = studentData[subj];
+                    {detailedJournal.lessons.map((l) => {
+                      const key = `${l.date}_${l.timetable_entry_id}`;
+                      const cell = detailedJournal.grades[student.id]?.[key];
+                      const grades = cell?.grades || [];
+                      const present = cell?.present;
+
                       return (
-                        <td key={subj} title={subjData?.grades?.length ? `Оценки: ${subjData.grades.join(", ")}` : ""}>
-                          {subjData?.average !== null && subjData?.average !== undefined ? (
-                            <div>
-                              <strong>{subjData.average.toFixed(2)}</strong>
-                              <div style={{ fontSize: "0.85em", color: "#666" }}>
-                                ({subjData.count} {subjData.count === 1 ? "оценка" : "оценок"})
-                              </div>
-                            </div>
+                        <td key={l.timetable_entry_id}>
+                          {grades.length > 0 ? (
+                            grades.map((g, i) => (
+                              <span key={i} title={g.comment || ""} className={`${styles.grade} ${styles[`grade-${g.grade}`] || ""}`}>
+                                {g.grade}
+                              </span>
+                            ))
+                          ) : present === false ? (
+                            <span className={styles.absent}>Н</span>
+                          ) : present === true ? (
+                            <span style={{ color: "var(--color-success)" }}>✓</span>
                           ) : (
-                            <span style={{ color: "#999" }}>—</span>
+                            <span style={{ color: "var(--color-text-light)" }}>·</span>
                           )}
                         </td>
                       );
                     })}
-                    <td className={styles.avgCol}>
-                      {overallAvg !== null ? <strong>{overallAvg.toFixed(2)}</strong> : <span style={{ color: "#999" }}>—</span>}
-                    </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && !selectedSubjectId && viewMode === "dates" && journalByDates && (
-        <div className={styles.tableWrapper}>
-          <table className={styles.journalTable}>
-            <thead>
-              <tr>
-                <th className={styles.stickyCol}>Ученик</th>
-                {journalByDates.dates.map((dt) => (
-                  <th key={dt}>{dt}</th>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {journalByDates.students.map((student) => {
-                const studentData = journalByDates.data[student.id] || {};
-                return (
-                  <tr key={student.id}>
-                    <td className={styles.stickyCol}>{student.name}</td>
-                    {journalByDates.dates.map((dt) => {
-                      const dayData = studentData[dt] || {};
-                      const { present, grade, comment } = dayData;
+              </tbody>
+            </table>
+          </div>
+        )}
 
-                      let content: React.ReactNode = <span style={{ color: "#999" }}>—</span>;
-                      if (grade) {
-                        content = <strong>{grade}</strong>;
-                      } else if (present === true) {
-                        content = <span style={{ color: "green" }}>✓</span>;
-                      } else if (present === false) {
-                        content = <span style={{ color: "red" }}>✗</span>;
-                      }
+        {!loading && !selectedSubjectId && viewMode === "subjects" && journalBySubject && (
+          <div className={styles.tableWrapper}>
+            <table className={styles.journalTable}>
+              <thead>
+                <tr>
+                  <th className={styles.stickyCol}>Ученик</th>
+                  {(subjectColumns.length ? subjectColumns : journalBySubject.subjects).map((subj) => (
+                    <th key={subj}>{subj}</th>
+                  ))}
+                  <th className={styles.avgCol}>Средний балл</th>
+                </tr>
+              </thead>
+              <tbody>
+                {journalBySubject.students.map((student) => {
+                  const studentData = journalBySubject.data[student.id] || {};
+                  const cols = subjectColumns.length ? subjectColumns : journalBySubject.subjects;
+                  const allAverages = cols
+                    .map((subj) => studentData[subj]?.average)
+                    .filter((avg): avg is number => avg !== null && avg !== undefined);
+                  const overallAvg = allAverages.length > 0 ? allAverages.reduce((a, b) => a + b, 0) / allAverages.length : null;
 
-                      return (
-                        <td key={dt} title={comment || ""}>
-                          {content}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  return (
+                    <tr key={student.id}>
+                      <td className={styles.stickyCol}>{student.name}</td>
+                      {cols.map((subj) => {
+                        const subjData = studentData[subj];
+                        return (
+                          <td key={subj} title={subjData?.grades?.length ? `Оценки: ${subjData.grades.join(", ")}` : ""}>
+                            {subjData?.average !== null && subjData?.average !== undefined ? (
+                              <div>
+                                <strong>{subjData.average.toFixed(2)}</strong>
+                                <div style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>
+                                  ({subjData.count})
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--color-text-light)" }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className={styles.avgCol}>
+                        {overallAvg !== null ? <strong>{overallAvg.toFixed(2)}</strong> : <span style={{ color: "var(--color-text-light)" }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && !selectedSubjectId && viewMode === "dates" && journalByDates && (
+          <div className={styles.tableWrapper}>
+            <table className={styles.journalTable}>
+              <thead>
+                <tr>
+                  <th className={styles.stickyCol}>Ученик</th>
+                  {journalByDates.dates.map((dt) => (
+                    <th key={dt}>{dt}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {journalByDates.students.map((student) => {
+                  const studentData = journalByDates.data[student.id] || {};
+                  return (
+                    <tr key={student.id}>
+                      <td className={styles.stickyCol}>{student.name}</td>
+                      {journalByDates.dates.map((dt) => {
+                        const dayData = studentData[dt] || {};
+                        const { present, grade, comment } = dayData;
+
+                        let content: React.ReactNode = <span style={{ color: "var(--color-text-light)" }}>—</span>;
+                        if (grade) {
+                          content = <span className={`${styles.grade} ${styles[`grade-${grade}`] || ""}`}>{grade}</span>;
+                        } else if (present === true) {
+                          content = <span style={{ color: "var(--color-success)" }}>✓</span>;
+                        } else if (present === false) {
+                          content = <span className={styles.absent}>Н</span>;
+                        }
+
+                        return (
+                          <td key={dt} title={comment || ""}>
+                            {content}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }

@@ -18,6 +18,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save, X, Calendar } from "lucide-react";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -140,8 +141,7 @@ export function AdminTimetablePage() {
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
-
-  const selectedClass = classes.find((c) => c.id === classId);
+  const title = user.role === "manager" ? "Менеджер → Расписание" : "Админ → Расписание";
 
   function openAddModal(date: Date, slot: number) {
     setModalDate(date);
@@ -247,96 +247,91 @@ export function AdminTimetablePage() {
 
   return (
     <AppShell
-      title={t("admin.timetable.title")}
+      title={title}
       nav={[
-        { to: base, label: t("admin.nav.home") },
-        { to: `${base}/users`, label: t("admin.nav.users") },
-        { to: `${base}/classes`, label: t("admin.nav.classes") },
+        { to: base, label: user.role === "manager" ? "Менеджер" : "Админ" },
+        { to: `${base}/users`, label: "Пользователи" },
+        { to: `${base}/classes`, label: "Группы" },
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: t("admin.nav.timetable") },
+        { to: `${base}/timetable`, label: "Расписание" },
       ]}
     >
       <div className={styles.container}>
-        {err && <div className={styles.error}>{err}</div>}
-
-        {loading && <Loader text={t("common.loading") || "Загрузка..."} />}
-
         <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <button className={styles.backButton} onClick={() => setClassId("")}>
-              ←
+          <h2>Расписание</h2>
+        </div>
+
+        {err && <div className={styles.error}>{err}</div>}
+        {loading && <Loader text="Загрузка..." />}
+
+        <div className={styles.controls}>
+          <select
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className={styles.select}
+          >
+            <option value="">— Выберите группу —</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <div className={styles.weekNav}>
+            <button className={styles.navBtn} onClick={() => setWeekStart(addDays(weekStart, -7))}>
+              <ChevronLeft size={18} />
             </button>
-            <div className={styles.className}>
-              {selectedClass ? selectedClass.name : t("timetable.selectGroup")}
+            <div className={styles.currentWeek}>
+              <Calendar size={16} style={{ display: "inline-block", verticalAlign: "text-bottom", marginRight: 6 }} />
+              {formatDate(weekDays[0])} - {formatDate(weekDays[6])}
             </div>
-          </div>
-          <div style={{ marginRight: 20 }}>
-            <label style={{ marginRight: 8, fontSize: 14, color: "#8a93a0" }}>{t("timetable.groupShort")}</label>
-            <select
-              value={classId}
-              onChange={(e) => setClassId(e.target.value)}
-              className={styles.formSelect}
-              style={{ width: "auto", display: "inline-block" }}
-            >
-              <option value="">{t("common.select")}</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <button className={styles.navBtn} onClick={() => setWeekStart(addDays(weekStart, 7))}>
+              <ChevronRight size={18} />
+            </button>
           </div>
         </div>
 
-        <div className={styles.weekNav}>
-          <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, -7))}>
-            {t("timetable.prevWeek")}
-          </button>
-          <div className={styles.weekLabel}>
-            {formatDate(weekDays[0])} - {formatDate(weekDays[6])}
-          </div>
-          <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, 7))}>
-            {t("timetable.nextWeek")}
-          </button>
-        </div>
-
-        <div className={styles.gridContainer}>
-          <div className={styles.timeHeader}>
-            <div className={styles.timeSlot}></div>
-            {timeSlots.map((ts) => (
-              <div key={ts.slot} className={styles.timeSlot}>
-                <span className={styles.slotNumber}>{ts.slot}</span>
-                <span className={styles.slotTime}>
-                  {ts.start}-{ts.end}
-                </span>
-                {(ts as any).labelKey && (
-                  <span className={styles.slotTime} style={{ fontSize: '10px', color: '#6ba92c' }}>
-                    {t((ts as any).labelKey)}
-                  </span>
-                )}
+        {classId ? (
+          <div className={styles.grid}>
+            {/* Header Row */}
+            <div className={styles.cellHeader}>Время</div>
+            {weekDays.map((day) => (
+              <div key={day.toISOString()} className={styles.cellHeader}>
+                {formatDate(day)}
               </div>
             ))}
-          </div>
 
-          <div className={styles.grid}>
-            {weekDays.map((day) => (
-              <div className={styles.dayRow} key={day.toISOString()}>
-                <div className={styles.dateCell}>{formatDate(day)}</div>
-                {timeSlots.map((ts) => {
-                  const lesson = classId ? getLessonForCell(day, ts.slot) : null;
+            {/* Time Slots */}
+            {timeSlots.map((ts) => (
+              <React.Fragment key={ts.slot}>
+                {/* Lunch Break */}
+                {ts.slot === 4 && (
+                  <div className={styles.lunchRow}>
+                    ОБЕДЕННЫЙ ПЕРЕРЫВ (13:20 - 14:20)
+                  </div>
+                )}
+
+                <div className={styles.cellTime}>
+                  <div style={{ fontWeight: 600 }}>{ts.slot} пара</div>
+                  <div>{ts.start}</div>
+                  <div>{ts.end}</div>
+                </div>
+
+                {weekDays.map((day) => {
+                  const lesson = getLessonForCell(day, ts.slot);
                   return (
-                    <div key={ts.slot} className={styles.cell}>
+                    <div key={day.toISOString()} className={styles.cell}>
                       {lesson ? (
-                        <div className={styles.lesson} onClick={() => openEditModal(day, ts.slot, lesson)}>
-                          {lesson.room && <div className={styles.lessonRoom}>{lesson.room}</div>}
-                          <div className={styles.lessonSubject}>
+                        <div className={styles.entry} onClick={() => openEditModal(day, ts.slot, lesson)}>
+                          <div className={styles.entrySubject}>
                             {lesson.subject}
                             {lesson.lesson_type === "credit" && (
                               <span style={{ 
                                 marginLeft: 4, 
                                 fontSize: 10, 
-                                background: "#ff9800", 
+                                background: "#f59e0b", 
                                 color: "#fff", 
                                 padding: "1px 4px", 
                                 borderRadius: 3 
@@ -345,33 +340,36 @@ export function AdminTimetablePage() {
                               </span>
                             )}
                           </div>
-                          <div className={styles.lessonTeacher}>{getTeacherName(lesson.teacher_id)}</div>
+                          <div className={styles.entryTeacher}>{getTeacherName(lesson.teacher_id)}</div>
+                          {lesson.room && <div className={styles.entryRoom}>{lesson.room}</div>}
                         </div>
                       ) : (
-                        <button 
-                          className={styles.addButton} 
-                          onClick={() => openAddModal(day, ts.slot)}
-                          disabled={!classId}
-                        >
-                          +
+                        <button className={styles.addBtn} onClick={() => openAddModal(day, ts.slot)}>
+                          <Plus size={24} />
                         </button>
                       )}
                     </div>
                   );
                 })}
-              </div>
+              </React.Fragment>
             ))}
           </div>
-        </div>
+        ) : (
+          <div className={styles.empty}>
+            Выберите группу, чтобы увидеть расписание
+          </div>
+        )}
       </div>
 
       {modalOpen && (
-        <div className={styles.modal} onClick={closeModal}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalTitle}>{editEntry ? t("timetable.editLesson") : t("timetable.addLesson")}</div>
+        <div className={styles.modalOverlay} onClick={closeModal}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalTitle}>
+              {editEntry ? "Редактировать пару" : "Добавить пару"}
+            </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>{t("timetable.subject")}</label>
+              <label className={styles.label}>Предмет</label>
               <select
                 value={formSubjectId}
                 onChange={(e) => {
@@ -382,60 +380,50 @@ export function AdminTimetablePage() {
                     setFormSubject(subj.name);
                   }
                 }}
-                className={styles.formSelect}
+                className={styles.select}
               >
                 <option value="">— Выберите предмет —</option>
                 {subjects.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <small style={{ color: "#666", display: "block", marginTop: 4 }}>
-                Учитель подставится автоматически по предмету (если назначен), иначе будет "---"
-              </small>
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Тип пары</label>
+              <label className={styles.label}>Тип занятия</label>
               <select
                 value={formLessonType}
                 onChange={(e) => setFormLessonType(e.target.value as "lecture" | "credit")}
-                className={styles.formSelect}
+                className={styles.select}
               >
                 <option value="lecture">Обычная пара</option>
                 <option value="credit">Зачёт</option>
               </select>
-              {formLessonType === "credit" && (
-                <small style={{ color: "#666", display: "block", marginTop: 4 }}>
-                  При зачёте оценки: зачёт/незачёт
-                </small>
-              )}
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>{t("timetable.room")}</label>
+              <label className={styles.label}>Аудитория</label>
               <input
                 value={formRoom}
                 onChange={(e) => setFormRoom(e.target.value)}
-                className={styles.formInput}
-                placeholder={t("timetable.roomPlaceholder")}
+                className={styles.input}
+                placeholder="Например: 305"
               />
             </div>
 
             <div className={styles.modalActions}>
-              <button className={styles.cancelButton} onClick={closeModal}>
-                {t("timetable.cancel")}
-              </button>
               {editEntry && (
-                <button className={styles.deleteButton} onClick={handleDelete}>
-                  {t("common.delete")}
+                <button className={`secondary ${styles.deleteBtn}`} onClick={handleDelete}>
+                  <Trash2 size={18} style={{ marginRight: 8 }} />
+                  Удалить
                 </button>
               )}
-              <button
-                className={styles.saveButton}
-                onClick={handleSave}
-                disabled={!formSubjectId}
-              >
-                {t("timetable.save")}
+              <button className="secondary" onClick={closeModal}>
+                Отмена
+              </button>
+              <button onClick={handleSave} disabled={!formSubjectId}>
+                <Save size={18} style={{ marginRight: 8 }} />
+                Сохранить
               </button>
             </div>
           </div>

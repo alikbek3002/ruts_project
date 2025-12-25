@@ -30,9 +30,10 @@ export function StudentGradesPage() {
     <AppShell
       title="Ученик → Оценки"
       nav={[
-        { to: "/app/student", label: "Панель" },
+        { to: "/app/student", label: "Главная" },
         { to: "/app/student/timetable", label: "Расписание" },
         { to: "/app/student/grades", label: "Оценки" },
+        { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
       ]}
     >
@@ -43,7 +44,38 @@ export function StudentGradesPage() {
         {grades.length === 0 ? (
           <p>Оценок пока нет.</p>
         ) : (
-          <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(grades, null, 2)}</pre>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {grades.map((g, idx) => (
+              <div
+                key={idx}
+                style={{
+                  padding: 12,
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 8,
+                  background: "var(--color-card)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600 }}>{g.title || "Контрольная работа"}</div>
+                  <div style={{ opacity: 0.7, fontSize: "0.9em" }}>{g.date}</div>
+                  {g.comment && <div style={{ marginTop: 4, fontStyle: "italic" }}>{g.comment}</div>}
+                </div>
+                <div style={{ 
+                  fontSize: "1.2em", 
+                  fontWeight: "bold", 
+                  color: "var(--color-primary)",
+                  background: "var(--color-bg-secondary)",
+                  padding: "4px 12px",
+                  borderRadius: 16
+                }}>
+                  {g.grade}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

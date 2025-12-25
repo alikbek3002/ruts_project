@@ -247,11 +247,12 @@ export function TeacherJournalPage() {
     <AppShell
       title={`${t("teacher.title")} → ${t("nav.journal")}`}
       nav={[
-        { to: "/app/teacher", label: `🏠 ${t("nav.home")}` },
-        { to: "/app/teacher/journal", label: `📖 ${t("nav.journal")}` },
-        { to: "/app/teacher/vzvody", label: "👥 Мои взводы" },
-        { to: "/app/teacher/timetable", label: `📅 ${t("nav.timetable")}` },
-        { to: "/app/teacher/library", label: `📚 ${t("nav.library")}` },
+        { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/gradebook", label: "Контрольные" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/library", label: "Библиотека" },
       ]}
     >
       <h2 style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, marginBottom: 16 }}>{t("journal.title")}</h2>

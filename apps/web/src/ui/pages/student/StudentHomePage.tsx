@@ -15,7 +15,7 @@ export function StudentHomePage() {
     <AppShell
       title="Панель ученика"
       nav={[
-        { to: "/app", label: "Dashboard" },
+        { to: "/app/student", label: "Главная" },
         { to: "/app/student/timetable", label: "Расписание" },
         { to: "/app/student/grades", label: "Оценки" },
         { to: "/app/student/homework", label: "Домашнее задание" },

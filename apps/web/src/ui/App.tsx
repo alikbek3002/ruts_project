@@ -1,8 +1,6 @@
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../ui/auth/AuthProvider';
-import { getApiLoading, subscribeApiLoading } from '../api/client';
-import { Loader } from './components/Loader';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -36,29 +34,8 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 }
 
 export function App() {
-  const [rawLoading, setRawLoading] = React.useState<boolean>(getApiLoading());
-  const [showGlobalLoader, setShowGlobalLoader] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    return subscribeApiLoading(setRawLoading);
-  }, []);
-
-  React.useEffect(() => {
-    let t: number | undefined;
-    if (rawLoading) {
-      // Avoid flashing a full-screen loader for short requests.
-      t = window.setTimeout(() => setShowGlobalLoader(true), 1500);
-    } else {
-      setShowGlobalLoader(false);
-    }
-    return () => {
-      if (t) window.clearTimeout(t);
-    };
-  }, [rawLoading]);
-
   return (
     <AuthProvider>
-      {showGlobalLoader && <Loader fullScreen size="lg" text="" />}
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
