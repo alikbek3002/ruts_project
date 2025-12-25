@@ -822,6 +822,7 @@ export type UserProfile = {
   photo_data_url?: string | null;
   teacher_subject?: string | null;
   teacher_subject_name?: string | null;
+  class_name?: string | null;
   created_at: string;
   updated_at?: string | null;
 };

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, X, Edit2 } from "lucide-react";
+import { User } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
+import { AppShell } from "../layout/AppShell";
+import { Loader } from "../components/Loader";
 import {
   apiGetProfile,
-  apiUpdateProfile,
   type UserProfile,
 } from "../../api/client";
 import styles from "./ProfilePage.module.css";
@@ -17,11 +18,6 @@ export function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  
-  // Edit mode states
-  const [isEditingInfo, setIsEditingInfo] = useState(false);
-  const [editData, setEditData] = useState<Partial<UserProfile>>({});
 
   useEffect(() => {
     if (token) {
@@ -35,14 +31,6 @@ export function ProfilePage() {
       setError("");
       const data = await apiGetProfile(token!);
       setProfile(data.profile);
-      setEditData({
-        full_name: data.profile.full_name || "",
-        first_name: data.profile.first_name || "",
-        last_name: data.profile.last_name || "",
-        middle_name: data.profile.middle_name || "",
-        phone: data.profile.phone || "",
-        birth_date: data.profile.birth_date || "",
-      });
     } catch (err: any) {
       setError(err.message || "Не удалось загрузить профиль");
     } finally {
@@ -50,37 +38,55 @@ export function ProfilePage() {
     }
   }
 
-  async function handleSaveInfo() {
-    try {
-      setError("");
-      setSuccess("");
-      const data = await apiUpdateProfile(token!, editData);
-      setProfile(data.profile);
-      setIsEditingInfo(false);
-      setSuccess("Профиль успешно обновлен");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
-      setError(err.message || "Не удалось обновить профиль");
+  const getNavLinks = () => {
+    const role = authUser?.role;
+    if (role === "teacher") {
+      return [
+        { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/library", label: "Библиотека" },
+      ];
     }
-  }
+    if (role === "student") {
+      return [
+        { to: "/app/student", label: "Главная" },
+        { to: "/app/student/timetable", label: "Расписание" },
+        { to: "/app/student/grades", label: "Оценки" },
+        { to: "/app/student/homework", label: "Домашнее задание" },
+        { to: "/app/student/library", label: "Библиотека" },
+      ];
+    }
+    if (role === "admin" || role === "manager") {
+      const prefix = role === "manager" ? "/app/manager" : "/app/admin";
+      return [
+        { to: prefix, label: "Главная" },
+        { to: `${prefix}/users`, label: "Пользователи" },
+        { to: `${prefix}/classes`, label: "Классы" },
+        { to: `${prefix}/timetable`, label: "Расписание" },
+      ];
+    }
+    return [];
+  };
 
   if (loading) {
-    return (
-      <div className={styles.profilePage}>
-        <p>Загрузка профиля...</p>
-      </div>
-    );
+    return <Loader fullScreen text="Загрузка профиля..." />;
   }
 
   if (!profile) {
     return (
-      <div className={styles.profilePage}>
+      <div className={styles.errorContainer}>
         <div className={styles.error}>Профиль не найден</div>
+        <button onClick={() => navigate(-1)} className={styles.backButton}>
+          Назад
+        </button>
       </div>
     );
   }
 
   const isStudent = authUser?.role === "student";
+  const isTeacher = authUser?.role === "teacher";
   const initials = profile.full_name
     ? profile.full_name
         .split(" ")
@@ -91,149 +97,93 @@ export function ProfilePage() {
     : profile.username[0].toUpperCase();
 
   return (
-    <div className={styles.profilePage}>
-      <div className={styles.topBar}>
-        <button className={styles.backButton} onClick={() => navigate(-1)}>
-          <ArrowLeft size={20} />
-          <span>Назад</span>
-        </button>
-      </div>
-
-      {error && <div className={styles.error}>{error}</div>}
-      {success && <div className={styles.success}>{success}</div>}
-
-      {/* Header with Avatar */}
-      <div className={styles.header}>
-        <div className={styles.avatarSection}>
-          {profile.photo_data_url ? (
-            <img src={profile.photo_data_url} alt="Profile" className={styles.avatar} />
-          ) : (
-            <div className={styles.avatarPlaceholder}>{initials}</div>
-          )}
-        </div>
-
-        <div className={styles.headerInfo}>
-          <h1>{profile.full_name || profile.username}</h1>
-          <span className={`${styles.role} ${styles[profile.role]}`}>
-            {profile.role === "admin" ? "Администратор" : 
-             profile.role === "manager" ? "Менеджер" :
-             profile.role === "teacher" ? "Преподаватель" : "Студент"}
-          </span>
-          {profile.teacher_subject_name && (
-            <p style={{ marginTop: "0.5rem", color: "var(--color-text-secondary)" }}>
-              Предмет: {profile.teacher_subject_name}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Personal Information */}
-      <div className={styles.section}>
-        <h2>Личная информация</h2>
-
-        {!isEditingInfo ? (
-          <div>
-            <div className={styles.infoGrid}>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Имя</span>
-                <span className={styles.infoValue}>{profile.first_name || "—"}</span>
-              </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Фамилия</span>
-                <span className={styles.infoValue}>{profile.last_name || "—"}</span>
-              </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Отчество</span>
-                <span className={styles.infoValue}>{profile.middle_name || "—"}</span>
-              </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Телефон</span>
-                <span className={styles.infoValue}>{profile.phone || "—"}</span>
-              </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Дата рождения</span>
-                <span className={styles.infoValue}>{profile.birth_date || "—"}</span>
-              </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>Логин</span>
-                <span className={styles.infoValue}>{profile.username}</span>
-              </div>
-            </div>
-
-            {authUser?.role !== "teacher" && (
-              <div className={styles.formActions}>
-                <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={() => setIsEditingInfo(true)}>
-                  <Edit2 size={16} style={{ marginRight: 8 }} />
-                  Редактировать
-                </button>
-              </div>
+    <AppShell title="Профиль пользователя" nav={getNavLinks()}>
+      <div className={styles.container}>
+        <div className={styles.profileHeader}>
+          <div className={styles.avatarSection}>
+            {profile.photo_data_url ? (
+              <img src={profile.photo_data_url} alt="Avatar" className={styles.avatar} />
+            ) : (
+              <div className={styles.avatarPlaceholder}>{initials}</div>
             )}
           </div>
-        ) : (
-          <div className={styles.form}>
-            <div className={styles.formGroup}>
-              <label>Имя</label>
-              <input
-                type="text"
-                value={editData.first_name || ""}
-                onChange={(e) => setEditData({ ...editData, first_name: e.target.value })}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Фамилия</label>
-              <input
-                type="text"
-                value={editData.last_name || ""}
-                onChange={(e) => setEditData({ ...editData, last_name: e.target.value })}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Отчество</label>
-              <input
-                type="text"
-                value={editData.middle_name || ""}
-                onChange={(e) => setEditData({ ...editData, middle_name: e.target.value })}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Телефон</label>
-              <input
-                type="tel"
-                value={editData.phone || ""}
-                onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                disabled={isStudent}
-              />
-              {isStudent && <p className={styles.infoText}>Студенты не могут менять номер телефона</p>}
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Дата рождения</label>
-              <input
-                type="date"
-                value={editData.birth_date || ""}
-                onChange={(e) => setEditData({ ...editData, birth_date: e.target.value })}
-              />
-            </div>
-
-            <div className={styles.formActions}>
-              <button
-                className={`${styles.button} ${styles.buttonSecondary}`}
-                onClick={() => setIsEditingInfo(false)}
-              >
-                <X size={16} style={{ marginRight: 8 }} />
-                Отмена
-              </button>
-              <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={handleSaveInfo}>
-                <Save size={16} style={{ marginRight: 8 }} />
-                Сохранить
-              </button>
+          
+          <div className={styles.headerInfo}>
+            <h1 className={styles.name}>{profile.full_name || profile.username}</h1>
+            <div className={styles.badges}>
+              <span className={`${styles.roleBadge} ${styles[authUser?.role || ""]}`}>
+                {authUser?.role === "admin" ? "Администратор" :
+                 authUser?.role === "manager" ? "Менеджер" :
+                 authUser?.role === "teacher" ? "Преподаватель" : "Ученик"}
+              </span>
+              {isStudent && profile.class_name && (
+                <span className={styles.classBadge}>{profile.class_name}</span>
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        <div className={styles.grid}>
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>
+                <User size={20} />
+                Личная информация
+              </h2>
+            </div>
+
+            <div className={styles.cardContent}>
+              <div className={styles.infoGrid}>
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Фамилия</span>
+                  <span className={styles.value}>{profile.last_name || "—"}</span>
+                </div>
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Имя</span>
+                  <span className={styles.value}>{profile.first_name || "—"}</span>
+                </div>
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Отчество</span>
+                  <span className={styles.value}>{profile.middle_name || "—"}</span>
+                </div>
+                
+                {isTeacher && profile.teacher_subject_name && (
+                  <div className={styles.infoItem}>
+                    <span className={styles.label}>Предмет</span>
+                    <span className={styles.value}>{profile.teacher_subject_name}</span>
+                  </div>
+                )}
+
+                {isStudent && profile.class_name && (
+                  <div className={styles.infoItem}>
+                    <span className={styles.label}>Группа</span>
+                    <span className={styles.value}>{profile.class_name}</span>
+                  </div>
+                )}
+
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Телефон</span>
+                  <span className={styles.value}>
+                    {profile.phone ? (
+                      <a href={`tel:${profile.phone}`} className={styles.link}>{profile.phone}</a>
+                    ) : "Не указано"}
+                  </span>
+                </div>
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Дата рождения</span>
+                  <span className={styles.value}>
+                    {profile.birth_date ? new Date(profile.birth_date).toLocaleDateString("ru-RU") : "Не указано"}
+                  </span>
+                </div>
+                <div className={styles.infoItem}>
+                  <span className={styles.label}>Логин</span>
+                  <span className={styles.value}>{profile.username}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
