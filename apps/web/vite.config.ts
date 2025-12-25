@@ -7,7 +7,7 @@ export default defineConfig({
   preview: {
     // Railway uses *.up.railway.app / *.railway.app hostnames.
     // Vite preview blocks unknown hosts by default; allow Railway domains.
-    allowedHosts: [".railway.app"],
+    allowedHosts: [".railway.app", "ruts-edu.online", "www.ruts-edu.online"],
   },
   server: {
     port: 5173,
