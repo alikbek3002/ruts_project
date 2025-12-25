@@ -57,6 +57,9 @@ export type I18nKey =
   | "teacher.journal"
   | "student.title"
   | "student.myGrades"
+  | "role.student"
+  | "role.teacher"
+  | "role.admin"
   | "login.title"
   | "login.username"
   | "login.password"
@@ -125,6 +128,9 @@ const ru: Record<I18nKey, string> = {
 
   "student.title": "Ученик",
   "student.myGrades": "Мои оценки",
+  "role.student": "Ученик",
+  "role.teacher": "Преподаватель",
+  "role.admin": "Администратор",
 
   "login.title": "Вход в систему",
   "login.username": "Логин",
@@ -193,8 +199,11 @@ const ky: Record<I18nKey, string> = {
   "teacher.title": "Мугалим",
   "teacher.journal": "Журнал",
 
-  "student.title": "Окуучу",
+  "student.title": "Талапкер",
   "student.myGrades": "Менин бааларым",
+  "role.student": "Талапкер",
+  "role.teacher": "Мугалим",
+  "role.admin": "Админ",
 
   "login.title": "Системага кирүү",
   "login.username": "Логин",

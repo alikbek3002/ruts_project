@@ -22,6 +22,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminUsers.module.css";
 import { 
   Search, 
@@ -55,6 +56,7 @@ function isIsoDate(value: string): boolean {
 
 export function AdminUsersPage() {
   const { state } = useAuth();
+  const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
   const [tab, setTab] = useState<"teachers" | "students">("students");
@@ -318,7 +320,7 @@ export function AdminUsersPage() {
                 <div className={styles.userInfo}>
                   <div className={styles.userName}>{u.full_name || u.username}</div>
                   <div className={styles.userRole}>
-                    {u.role === "student" ? "Студент" : u.role === "teacher" ? "Преподаватель" : "Админ"}
+                    {u.role === "student" ? t("role.student") : u.role === "teacher" ? t("role.teacher") : t("role.admin")}
                   </div>
                 </div>
               </div>
@@ -392,9 +394,9 @@ export function AdminUsersPage() {
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Роль</label>
                     <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-                      <option value="student">Ученик</option>
-                      <option value="teacher">Преподаватель</option>
-                      {canCreateAdmin && <option value="admin">Администратор</option>}
+                      <option value="student">{t("role.student")}</option>
+                      <option value="teacher">{t("role.teacher")}</option>
+                      {canCreateAdmin && <option value="admin">{t("role.admin")}</option>}
                     </select>
                   </div>
 
@@ -708,7 +710,13 @@ export function AdminUsersPage() {
                         </div>
                         <div className={styles.infoRow}>
                           <Shield size={16} className={styles.infoIcon} />
-                          <span>{viewUser.role === "student" ? "Студент" : viewUser.role === "teacher" ? "Преподаватель" : "Админ"}</span>
+                          <span>
+                            {viewUser.role === "student"
+                              ? t("role.student")
+                              : viewUser.role === "teacher"
+                                ? t("role.teacher")
+                                : t("role.admin")}
+                          </span>
                         </div>
                         
                         {/* Password Reset Section */}
