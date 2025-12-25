@@ -76,6 +76,14 @@ export function AdminClassesPage() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
+  const curatorNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of teachers) {
+      map.set(t.id, t.full_name || t.username);
+    }
+    return map;
+  }, [teachers]);
+
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
   const title = user.role === "manager" ? "Менеджер → Группы" : "Админ → Группы";
 
@@ -214,6 +222,10 @@ export function AdminClassesPage() {
                 📍 {cls.direction.name}
               </div>
             )}
+
+            <div className={styles.direction}>
+              👨‍🏫 Куратор: {cls.curator_id ? curatorNameById.get(cls.curator_id) || "—" : "—"}
+            </div>
 
             <div className={styles.cardActions}>
               <Link to={`${base}/classes/${cls.id}/journal`}>

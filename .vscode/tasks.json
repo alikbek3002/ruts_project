@@ -1,0 +1,45 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "api:dev",
+			"type": "shell",
+			"command": "cd /Users/chyngyz/Desktop/ruts_project/apps/api && /Users/chyngyz/Desktop/ruts_project/.venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "web:dev",
+			"type": "shell",
+			"command": "cd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "web:dev (restart)",
+			"type": "shell",
+			"command": "pids=$(lsof -ti tcp:5173 2>/dev/null || true); if [[ -n \"$pids\" ]]; then kill -9 $pids; fi\ncd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "web:dev (restart clean)",
+			"type": "shell",
+			"command": "cd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "web:dev (restart clean)",
+			"type": "shell",
+			"command": "cd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

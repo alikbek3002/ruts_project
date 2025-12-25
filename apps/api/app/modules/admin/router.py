@@ -84,8 +84,6 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
     if not phone.startswith("+996"):
         raise HTTPException(status_code=400, detail="Phone must start with +996")
 
-    if role == "student" and not payload.class_id:
-        raise HTTPException(status_code=400, detail="class_id required for student")
     if role == "teacher":
         # New flow: subjects assigned at teacher creation
         subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
@@ -262,10 +260,62 @@ def generate_credentials(payload: CredentialsIn, actor: dict = require_role("adm
 
 
 @router.get("/users")
-def admin_list_users(role: str | None = None, q: str | None = None, _: dict = require_role("admin", "manager")):
+def admin_list_users(
+    role: str | None = None,
+    q: str | None = None,
+    include_inactive: bool = False,
+    _: dict = require_role("admin", "manager"),
+):
     sb = get_supabase()
 
+    def _attach_student_class(users: list[dict]) -> list[dict]:
+        try:
+            student_ids = [u.get("id") for u in (users or []) if u.get("role") == "student" and u.get("id")]
+            if not student_ids:
+                return users
+
+            enr_rows = (
+                sb.table("class_enrollments")
+                .select("student_id,class_id")
+                .in_("student_id", student_ids)
+                .execute()
+                .data
+                or []
+            )
+
+            class_id_by_student: dict[str, str] = {
+                str(r.get("student_id")): str(r.get("class_id"))
+                for r in enr_rows
+                if r.get("student_id") and r.get("class_id")
+            }
+            class_ids = list({cid for cid in class_id_by_student.values() if cid})
+            if not class_ids:
+                for u in users:
+                    if u.get("role") == "student":
+                        u["class"] = None
+                return users
+
+            class_rows = sb.table("classes").select("id,name").in_("id", class_ids).execute().data or []
+            class_by_id: dict[str, dict] = {
+                str(c.get("id")): {"id": str(c.get("id")), "name": c.get("name")}
+                for c in class_rows
+                if c.get("id")
+            }
+
+            for u in users:
+                if u.get("role") != "student":
+                    continue
+                uid = str(u.get("id"))
+                cid = class_id_by_student.get(uid)
+                u["class"] = class_by_id.get(cid) if cid else None
+            return users
+        except Exception:
+            # Listing users must not fail if schema differs.
+            return users
+
     def _apply_filters(query):
+        if not include_inactive:
+            query = query.eq("is_active", True)
         if role:
             query = query.eq("role", role)
         if q and q.strip():
@@ -281,12 +331,16 @@ def admin_list_users(role: str | None = None, q: str | None = None, _: dict = re
         )
         query = _apply_filters(query)
         resp = query.order("created_at", desc=True).execute()
-        return {"users": resp.data or []}
+        users = resp.data or []
+        users = _attach_student_class(users)
+        return {"users": users}
     except Exception:
         query = sb.table("users").select("id,role,username,full_name,is_active,must_change_password,created_at")
         query = _apply_filters(query)
         resp = query.order("created_at", desc=True).execute()
-        return {"users": resp.data or []}
+        users = resp.data or []
+        users = _attach_student_class(users)
+        return {"users": users}
 
 
 @router.get("/users/{user_id}")
@@ -453,6 +507,41 @@ def admin_update_user(user_id: str, payload: UpdateUserIn, _: dict = require_rol
             extra["class"] = c[0] if c else {"id": class_id, "name": None}
 
     return {"user": u, **extra}
+
+
+@router.delete("/users/{user_id}")
+def admin_delete_user(user_id: str, actor: dict = require_role("admin", "manager")):
+    sb = get_supabase()
+    _require_users_schema(sb)
+
+    if actor.get("id") == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    t_rows = sb.table("users").select("id,role,is_active").eq("id", user_id).limit(1).execute().data or []
+    target = t_rows[0] if isinstance(t_rows, list) and t_rows else None
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_role = target.get("role")
+    if target_role == "manager":
+        raise HTTPException(status_code=400, detail="Cannot delete manager users")
+    if actor.get("role") == "admin" and target_role == "admin":
+        raise HTTPException(status_code=403, detail="Admins cannot delete admins")
+    if actor.get("role") != "manager" and target_role == "admin":
+        raise HTTPException(status_code=403, detail="Only managers can delete admins")
+
+    # Revoke all refresh tokens so the user is logged out everywhere.
+    sb.table("refresh_tokens").delete().eq("user_id", user_id).execute()
+
+    # Detach from active relations to keep UI lists consistent.
+    if target_role == "student":
+        sb.table("class_enrollments").delete().eq("student_id", user_id).execute()
+    if target_role == "teacher":
+        sb.table("teacher_subjects").delete().eq("teacher_id", user_id).execute()
+
+    # Soft-delete: disable login without breaking FK constraints (many tables use RESTRICT).
+    sb.table("users").update({"is_active": False}).eq("id", user_id).execute()
+    return {"ok": True}
 
 
 class ResetStudentPasswordIn(BaseModel):

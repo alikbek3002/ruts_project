@@ -1,4 +1,9 @@
-const API_BASE = import.meta.env.VITE_API_BASE as string;
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+
+if (!API_BASE) {
+  // Fail loudly in dev if env is missing (prevents requests to "undefined/..." paths).
+  console.warn("VITE_API_URL is not set; API requests will fail.");
+}
 const AUTH_STORAGE_KEY = "ruts_auth";
 
 type LoadingListener = (isLoading: boolean) => void;
@@ -9,6 +14,15 @@ const loadingListeners = new Set<LoadingListener>();
 function emitLoading() {
   const isLoading = inFlightRequests > 0;
   for (const listener of loadingListeners) listener(isLoading);
+}
+
+function withApiPrefix(path: string): string {
+  // If a full URL is passed, don't modify it.
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized === "/api" || normalized.startsWith("/api/")) return normalized;
+  return `/api${normalized}`;
 }
 
 export function getApiLoading(): boolean {
@@ -46,7 +60,7 @@ async function readErrorText(res: Response): Promise<string> {
 
 async function refreshAccessToken(): Promise<string | null> {
   try {
-    const res = await trackedFetch(`${API_BASE}/auth/refresh`, {
+    const res = await trackedFetch(`${API_BASE}${withApiPrefix("/auth/refresh")}`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -85,7 +99,7 @@ function hasAuthHeader(init?: RequestInit): boolean {
 }
 
 async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
-  const res = await trackedFetch(`${API_BASE}${path}`, {
+  const res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -131,20 +145,20 @@ function apiPost<T>(path: string, body: any, accessToken: string) {
 }
 
 export async function apiLogin(username: string, password: string) {
-  return await http<{ accessToken: string; user: any }>(`/auth/login`, {
+  return await http<{ accessToken: string; user: any }>(`/api/auth/login`, {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   });
 }
 
 export async function apiMe(accessToken: string) {
-  return await http<{ user: any }>(`/auth/me`, {
+  return await http<{ user: any }>(`/api/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
 export async function apiChangePassword(accessToken: string, oldPassword: string, newPassword: string) {
-  return await http<{ ok: boolean }>(`/auth/change-password`, {
+  return await http<{ ok: boolean }>(`/api/auth/change-password`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ oldPassword, newPassword }),
@@ -152,13 +166,13 @@ export async function apiChangePassword(accessToken: string, oldPassword: string
 }
 
 export async function apiZoomStart(accessToken: string) {
-  return await http<{ authUrl: string }>(`/zoom/oauth/start`, {
+  return await http<{ authUrl: string }>(`/api/zoom/oauth/start`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
 export async function apiZoomStatus(accessToken: string) {
-  return await http<{ connected: boolean; zoom_user_id?: string }>(`/zoom/status`, {
+  return await http<{ connected: boolean; zoom_user_id?: string }>(`/api/zoom/status`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -189,15 +203,15 @@ export type SubjectWithTeachers = Subject & {
 };
 
 export async function apiListDirections(token: string) {
-  return apiGet<{ directions: Direction[] }>("/directions", token);
+  return apiGet<{ directions: Direction[] }>("/api/directions", token);
 }
 
 export async function apiListSubjects(token: string) {
-  return apiGet<{ subjects: Subject[] }>("/subjects/subjects", token);
+  return apiGet<{ subjects: Subject[] }>("/api/subjects/subjects", token);
 }
 
 export async function apiListSubjectsWithTeachers(token: string) {
-  return apiGet<{ subjects: SubjectWithTeachers[] }>("/subjects/subjects-with-teachers", token);
+  return apiGet<{ subjects: SubjectWithTeachers[] }>("/api/subjects/subjects-with-teachers", token);
 }
 
 export async function apiCreateSubject(token: string, name: string, photoUrl?: string | null) {
@@ -231,6 +245,7 @@ export type AdminUser = {
   role: UserRole;
   username: string;
   full_name: string | null;
+  class?: { id: string; name: string | null } | null;
   first_name?: string | null;
   last_name?: string | null;
   middle_name?: string | null;
@@ -267,7 +282,11 @@ export async function apiAdminListUsers(token: string, role?: UserRole, searchQu
   if (role) params.set("role", role);
   if (searchQuery && searchQuery.trim()) params.set("q", searchQuery.trim());
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return apiGet<{ users: AdminUser[] }>(`/admin/users${suffix}`, token);
+  const resp = await apiGet<{ users: AdminUser[] }>(`/admin/users${suffix}`, token);
+  return {
+    ...resp,
+    users: (resp.users || []).filter((u) => u?.is_active !== false),
+  };
 }
 
 export async function apiAdminGetUser(token: string, userId: string) {
@@ -298,6 +317,13 @@ export async function apiAdminUpdateUser(
       body: JSON.stringify(body),
     }
   );
+}
+
+export async function apiAdminDeleteUser(token: string, userId: string) {
+  return http<{ ok: boolean }>(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export async function apiAdminResetStudentPassword(token: string, userId: string, actorPassword: string) {

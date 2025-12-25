@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import {
   apiAdminCreateUser,
   apiAdminGenerateCredentials,
+  apiAdminDeleteUser,
   apiAdminGetUser,
   apiAdminUpdateUser,
   apiAdminResetStudentPassword,
@@ -173,6 +174,24 @@ export function AdminUsersPage() {
     }
   }
 
+  async function deleteUserFromCard() {
+    if (!token || !viewUser) return;
+    const label = viewUser.full_name || viewUser.username || "этого пользователя";
+    if (!window.confirm(`Удалить ${label}?`)) return;
+
+    setViewErr(null);
+    setViewSaving(true);
+    try {
+      await apiAdminDeleteUser(token, viewUser.id);
+      setViewOpen(false);
+      await reload();
+    } catch (e) {
+      setViewErr(String(e));
+    } finally {
+      setViewSaving(false);
+    }
+  }
+
   useEffect(() => {
     if (!can) return;
     reload().catch((e) => setErr(String(e)));
@@ -230,7 +249,7 @@ export function AdminUsersPage() {
             alignItems: "center",
             justifyContent: "center",
             padding: "var(--spacing-lg)",
-            zIndex: 50,
+            zIndex: 1000,
           }}
         >
           <div
@@ -309,9 +328,9 @@ export function AdminUsersPage() {
               <div>
                 <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Статус</label>
                 <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-                  <option value="student">student</option>
-                  <option value="teacher">teacher</option>
-                  {canCreateAdmin && <option value="admin">admin</option>}
+                  <option value="student">Ученик</option>
+                  <option value="teacher">Преподаватель</option>
+                  {canCreateAdmin && <option value="admin">Администратор</option>}
                 </select>
               </div>
 
@@ -355,7 +374,7 @@ export function AdminUsersPage() {
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={{ fontSize: 13, color: "var(--color-text-light)" }}>Группа</label>
                   <select value={classId} onChange={(e) => setClassId(e.target.value)}>
-                    <option value="">(выберите группу)</option>
+                    <option value="">— Не определена —</option>
                     {classes.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -488,10 +507,6 @@ export function AdminUsersPage() {
                     setErr("Нажмите “Сгенерировать” для логина и пароля");
                     return;
                   }
-                  if (role === "student" && !classId) {
-                    setErr("Выберите группу для ученика");
-                    return;
-                  }
                   if (role === "teacher" && teacherSubjectIds.length < 1) {
                     setErr("Выберите хотя бы 1 предмет для преподавателя");
                     return;
@@ -511,7 +526,7 @@ export function AdminUsersPage() {
                       phone: ph,
                       birth_date: birthDate,
                       photo_data_url: photoDataUrl,
-                      class_id: role === "student" ? classId : null,
+                      class_id: (role === "student" && classId) ? classId : null,
                       teacher_subject: role === "teacher" ? teacherSubjectNames.join(", ") : null,
                       subject_ids: role === "teacher" ? teacherSubjectIds : null,
                       username: generatedUsername,
@@ -622,28 +637,118 @@ export function AdminUsersPage() {
             {users.length === 0 && <div style={{ color: "var(--color-text-light)" }}>Учителя не найдены</div>}
           </div>
         ) : (
-          <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th align="left">username</th>
-                <th align="left">full_name</th>
-                <th align="left">created_at</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr
-                  key={u.id}
-                  style={{ borderTop: "1px solid #eee", cursor: "pointer" }}
-                  onClick={() => openUserCard(u)}
-                >
-                  <td>{u.username}</td>
-                  <td>{u.full_name || ""}</td>
-                  <td>{new Date(u.created_at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          (() => {
+            const assigned = users.filter((u) => !!u.class?.id);
+            const unassigned = users.filter((u) => !u.class?.id);
+            const borderTop = "1px solid var(--color-border)";
+
+            const tableBaseStyle: React.CSSProperties = { width: "100%", borderCollapse: "collapse" };
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-lg)" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>
+                    Не распределены ({unassigned.length})
+                  </div>
+                  {unassigned.length === 0 ? (
+                    <div style={{ color: "var(--color-text-light)" }}>Нет</div>
+                  ) : (
+                    <table cellPadding={6} style={tableBaseStyle}>
+                      <thead>
+                        <tr>
+                          <th align="left">Фото</th>
+                          <th align="left">Логин</th>
+                          <th align="left">ФИО</th>
+                          <th align="left">Создан</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unassigned.map((u) => (
+                          <tr key={u.id} style={{ borderTop, cursor: "pointer" }} onClick={() => openUserCard(u)}>
+                            <td style={{ width: 50 }}>
+                              <img
+                                src={u.photo_data_url || "/favicon.svg"}
+                                alt=""
+                                loading="lazy"
+                                style={{
+                                  width: 44,
+                                  height: 44,
+                                  borderRadius: "var(--radius-sm)",
+                                  border: "1px solid var(--color-border)",
+                                  objectFit: "cover",
+                                  background: "var(--color-bg)",
+                                  display: "block",
+                                }}
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.src.endsWith("/favicon.svg")) return;
+                                  img.src = "/favicon.svg";
+                                }}
+                              />
+                            </td>
+                            <td>{u.username}</td>
+                            <td>{u.full_name || ""}</td>
+                            <td>{new Date(u.created_at).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-light)", marginBottom: 8 }}>
+                    Распределены ({assigned.length})
+                  </div>
+                  {assigned.length === 0 ? (
+                    <div style={{ color: "var(--color-text-light)" }}>Нет</div>
+                  ) : (
+                    <table cellPadding={6} style={tableBaseStyle}>
+                      <thead>
+                        <tr>
+                          <th align="left">Фото</th>
+                          <th align="left">Логин</th>
+                          <th align="left">ФИО</th>
+                          <th align="left">Создан</th>
+                          <th align="left">Группа</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assigned.map((u) => (
+                          <tr key={u.id} style={{ borderTop, cursor: "pointer" }} onClick={() => openUserCard(u)}>
+                            <td style={{ width: 50 }}>
+                              <img
+                                src={u.photo_data_url || "/favicon.svg"}
+                                alt=""
+                                loading="lazy"
+                                style={{
+                                  width: 44,
+                                  height: 44,
+                                  borderRadius: "var(--radius-sm)",
+                                  border: "1px solid var(--color-border)",
+                                  objectFit: "cover",
+                                  background: "var(--color-bg)",
+                                  display: "block",
+                                }}
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.src.endsWith("/favicon.svg")) return;
+                                  img.src = "/favicon.svg";
+                                }}
+                              />
+                            </td>
+                            <td>{u.username}</td>
+                            <td>{u.full_name || ""}</td>
+                            <td>{new Date(u.created_at).toLocaleString()}</td>
+                            <td>{u.class?.name || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })()
         )}
       </div>
 
@@ -658,7 +763,7 @@ export function AdminUsersPage() {
             alignItems: "center",
             justifyContent: "center",
             padding: "var(--spacing-lg)",
-            zIndex: 50,
+            zIndex: 1000,
           }}
         >
           <div
@@ -694,6 +799,15 @@ export function AdminUsersPage() {
                     }}
                   >
                     {viewEdit ? "Отмена" : "Редактировать"}
+                  </button>
+                )}
+                {!viewLoading && !viewErr && viewUser && (
+                  <button
+                    className="danger"
+                    disabled={viewSaving}
+                    onClick={deleteUserFromCard}
+                  >
+                    Удалить
                   </button>
                 )}
                 <button className="secondary" onClick={() => setViewOpen(false)}>
