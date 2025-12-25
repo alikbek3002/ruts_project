@@ -31,7 +31,14 @@ class ChangePasswordIn(BaseModel):
 def get_profile(user: CurrentUser):
     """Получить профиль текущего пользователя"""
     sb = get_supabase()
-    
+
+    # Use a very short cache to avoid repeated identical requests
+    from app.core.cache import cache
+    cache_key = f"profile:{user['id']}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return {"profile": cached}
+
     # Получаем полные данные пользователя
     resp = sb.table("users").select("*").eq("id", user["id"]).limit(1).execute()
     user_data = resp.data[0] if resp.data else None
@@ -69,6 +76,8 @@ def get_profile(user: CurrentUser):
             if class_resp.data:
                 user_data["class_name"] = class_resp.data[0]["name"]
 
+    # Cache the assembled profile briefly
+    cache.set(cache_key, user_data, ttl=5)
     return {"profile": user_data}
 
 

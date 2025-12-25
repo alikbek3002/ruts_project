@@ -219,6 +219,14 @@ def get_week(weekStart: str, user: CurrentUser):
     )
 
     entries = tt.data or []
+
+    # Use a short-lived cache to avoid repeated lookups for classes/teachers and zooms
+    cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}"
+    from app.core.cache import cache
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     class_ids = sorted({e["class_id"] for e in entries if e.get("class_id")})
     teacher_ids = sorted({e["teacher_id"] for e in entries if e.get("teacher_id")})
 
@@ -269,4 +277,6 @@ def get_week(weekStart: str, user: CurrentUser):
 
     enriched.sort(key=lambda r: (r.get("weekday") or 0, r.get("start_time") or ""))
 
-    return {"weekStart": weekStart, "entries": enriched}
+    result = {"weekStart": weekStart, "entries": enriched}
+    cache.set(cache_key, result, ttl=20)  # short TTL
+    return result

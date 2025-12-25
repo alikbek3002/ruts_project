@@ -47,51 +47,42 @@ def create_notification(
 
 
 @router.get("")
-def list_notifications(user: CurrentUser):
-    """Get notifications for current user"""
+def list_notifications(user: CurrentUser, limit: int = 30, offset: int = 0):
+    """Get notifications for current user (supports pagination)."""
     sb = get_supabase()
-    
-    # Build query based on user role
-    query = sb.table("notifications").select(
+
+    from app.core.cache import cache
+    cache_key = f"notifications:{user['id']}:{limit}:{offset}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return {"notifications": cached}
+
+    # Build query: push filtering to DB using OR-combination
+    now = datetime.utcnow().isoformat()
+
+    q = sb.table("notifications").select(
         "id,title,message,type,created_at,expires_at,target_role,target_user_id"
     )
-    
-    # Filter active notifications
-    query = query.eq("is_active", True)
-    
-    # Filter by role or specific user
-    # Notifications can target: specific user, specific role, or all users
-    conditions = []
-    
-    # Check if expired
-    now = datetime.utcnow().isoformat()
-    query = query.or_(f"expires_at.is.null,expires_at.gt.{now}")
-    
-    # Get notifications
-    resp = query.order("created_at", desc=True).limit(100).execute()
-    all_notifications = resp.data or []
-    
-    # Filter in Python for complex OR logic
-    filtered = []
-    for notif in all_notifications:
-        target_role = notif.get("target_role")
-        target_user = notif.get("target_user_id")
-        
-        # Include if:
-        # 1. target_role is 'all'
-        # 2. target_role matches user's role
-        # 3. target_user_id matches user's id
-        # 4. no target specified (null for both)
-        if (
-            target_role == "all"
-            or target_role == user["role"]
-            or target_user == user["id"]
-            or (target_role is None and target_user is None)
-        ):
-            filtered.append(notif)
-    
-    # Get read status for each notification
-    notification_ids = [n["id"] for n in filtered]
+    q = q.eq("is_active", True)
+    q = q.or_(f"expires_at.is.null,expires_at.gt.{now}")
+
+    # Construct OR that matches user's role / all / specific user / no target
+    # Supabase supports or_(<condition1>,<condition2>,...)
+    # conditions are like: "target_role.eq.{role}" or "target_user_id.eq.{id}" or "target_role.is.null,target_user_id.is.null"
+    role_cond = f"target_role.eq.{user['role']}"
+    all_cond = "target_role.eq.all"
+    user_cond = f"target_user_id.eq.{user['id']}"
+    null_cond = "target_role.is.null,target_user_id.is.null"
+
+    # Combine with or_, then order and paginate
+    q = q.or_(f"{role_cond},{all_cond},{user_cond},{null_cond}")
+
+    resp = q.order("created_at", desc=True).limit(limit).offset(offset).execute()
+    visible = resp.data or []
+
+    # Get read status for these notifications in one call
+    notification_ids = [n["id"] for n in visible]
+    read_ids = set()
     if notification_ids:
         reads_resp = (
             sb.table("user_notification_reads")
@@ -101,14 +92,14 @@ def list_notifications(user: CurrentUser):
             .execute()
         )
         read_ids = {r["notification_id"] for r in (reads_resp.data or [])}
-        
-        for notif in filtered:
-            notif["is_read"] = notif["id"] in read_ids
-    else:
-        for notif in filtered:
-            notif["is_read"] = False
-    
-    return {"notifications": filtered}
+
+    for notif in visible:
+        notif["is_read"] = notif["id"] in read_ids
+
+    # cache briefly
+    cache.set(cache_key, visible, ttl=10)
+
+    return {"notifications": visible}
 
 
 @router.get("/unread-count")
