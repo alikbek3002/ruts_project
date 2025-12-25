@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { 
-  apiListLibrary, 
   apiListClasses, 
-  apiUploadLibraryFile,
+  apiListLibraryTopics,
+  apiCreateLibraryTopic,
+  apiUploadLibraryFileToTopic,
   apiGetLibraryDownloadUrl,
   apiDeleteLibraryItem,
   type ClassItem, 
-  type LibraryItem 
+  type LibraryItem,
+  type LibraryTopic
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
@@ -20,25 +22,28 @@ export function TeacherLibraryPage() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [classId, setClassId] = useState<string>("");
-  const [items, setItems] = useState<LibraryItem[]>([]);
+  const [topics, setTopics] = useState<LibraryTopic[]>([]);
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showCreateTopic, setShowCreateTopic] = useState(false);
+  const [topicTitle, setTopicTitle] = useState("");
+  const [topicDescription, setTopicDescription] = useState("");
+  const [topicFile, setTopicFile] = useState<File | null>(null);
+
+  const [uploadingTopicId, setUploadingTopicId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
+
+  const createTopicFileInputRef = useRef<HTMLInputElement>(null);
+  const topicUploadInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   async function reload() {
     if (!token) return;
     try {
-      const [c, l] = await Promise.all([apiListClasses(token), apiListLibrary(token, classId || undefined)]);
+      const [c, t] = await Promise.all([apiListClasses(token), apiListLibraryTopics(token, classId || undefined)]);
       setClasses(c.classes);
-      setItems(l.items);
+      setTopics(t.topics);
     } catch (e) {
       setErr(String(e));
     }
@@ -50,58 +55,70 @@ export function TeacherLibraryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can, classId]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      if (!title) {
-        setTitle(file.name.replace(/\.[^/.]+$/, "")); // Remove extension
-      }
-    }
-  };
+  const handleCreateTopic = async () => {
+    if (!token || !topicTitle.trim()) return;
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
-      if (!title) {
-        setTitle(file.name.replace(/\.[^/.]+$/, ""));
-      }
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!token || !selectedFile || !title.trim()) return;
-    
     setUploading(true);
     setErr(null);
     setSuccess(null);
     setUploadProgress(0);
 
     try {
-      const result = await apiUploadLibraryFile(
+      const result = await apiCreateLibraryTopic(
         token,
-        selectedFile,
-        title.trim(),
-        description.trim() || undefined,
+        topicFile,
+        topicTitle.trim(),
+        topicDescription.trim() || undefined,
         classId || null,
         (percent) => setUploadProgress(percent)
       );
-      
-      setSuccess(`Файл "${result.originalFilename}" успешно загружен!`);
-      setTitle("");
-      setDescription("");
-      setSelectedFile(null);
+
+      if (result.originalFilename) {
+        setSuccess(`Тема "${topicTitle.trim()}" создана, файл "${result.originalFilename}" загружен`);
+      } else {
+        setSuccess(`Тема "${topicTitle.trim()}" создана`);
+      }
+      setShowCreateTopic(false);
+      setTopicTitle("");
+      setTopicDescription("");
+      setTopicFile(null);
       setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      
+      if (createTopicFileInputRef.current) createTopicFileInputRef.current.value = "";
+      await reload();
+    } catch (e) {
+      setErr(`Ошибка создания темы: ${String(e)}`);
+    } finally {
+      setUploading(false);
+      setUploadingTopicId(null);
+    }
+  };
+
+  const handleTopicFilePick = (topicId: string) => {
+    const ref = topicUploadInputRefs.current[topicId];
+    if (ref) ref.click();
+  };
+
+  const handleUploadToTopic = async (topic: LibraryTopic, file: File) => {
+    if (!token) return;
+    setUploading(true);
+    setUploadingTopicId(topic.id);
+    setErr(null);
+    setSuccess(null);
+    setUploadProgress(0);
+
+    try {
+      const title = file.name.replace(/\.[^/.]+$/, "");
+      const res = await apiUploadLibraryFileToTopic(token, topic.id, file, title, undefined, (p) => setUploadProgress(p));
+      setSuccess(`Файл "${res.originalFilename}" загружен в тему "${topic.title}"`);
       await reload();
     } catch (e) {
       setErr(`Ошибка загрузки: ${String(e)}`);
     } finally {
       setUploading(false);
+      setUploadingTopicId(null);
+      setUploadProgress(0);
+      const input = topicUploadInputRefs.current[topic.id];
+      if (input) input.value = "";
     }
   };
 
@@ -157,189 +174,267 @@ export function TeacherLibraryPage() {
             ))}
           </select>
         </label>
+        <button onClick={() => { setErr(null); setSuccess(null); setShowCreateTopic(true); }}>➕ Добавить тему</button>
         <button onClick={() => reload()}>🔄 Обновить</button>
       </div>
 
-      <hr />
-      
-      <h3 style={{ marginTop: 20, marginBottom: 12 }}>📤 Загрузить файл</h3>
-      
-      <div
-        style={{
-          border: dragOver ? "2px dashed var(--color-primary)" : "2px dashed var(--color-border)",
-          borderRadius: 12,
-          padding: 32,
-          textAlign: "center",
-          background: dragOver ? "var(--color-card)" : "transparent",
-          marginBottom: 16,
-          transition: "all 0.2s",
-        }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          onChange={handleFileSelect}
-          style={{ display: "none" }}
-          id="file-input"
-        />
-        <label htmlFor="file-input" style={{ cursor: "pointer" }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>📁</div>
-          <div style={{ fontSize: 16, marginBottom: 8 }}>
-            {selectedFile ? (
-              <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>{selectedFile.name}</span>
-            ) : (
-              <>Перетащите файл сюда или <span style={{ color: "var(--color-primary)" }}>выберите</span></>
-            )}
-          </div>
-          <div style={{ fontSize: 14, opacity: 0.7 }}>
-            {selectedFile ? `Размер: ${(selectedFile.size / 1024 / 1024).toFixed(2)} МБ` : "Максимальный размер: 50 МБ"}
-          </div>
-        </label>
-      </div>
+      {showCreateTopic && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+          onClick={() => (uploading ? null : setShowCreateTopic(false))}
+        >
+          <div
+            style={{
+              width: "min(720px, 100%)",
+              background: "var(--color-card)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 12,
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <h3 style={{ margin: 0 }}>➕ Добавить тему</h3>
+              <button onClick={() => (uploading ? null : setShowCreateTopic(false))} disabled={uploading}>
+                ✖
+              </button>
+            </div>
 
-      {selectedFile && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
-          <div>
-            <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Название:</label>
-            <input
-              type="text"
-              placeholder="Название файла"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", fontSize: 14 }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Описание (опционально):</label>
-            <textarea
-              placeholder="Краткое описание"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", fontSize: 14, minHeight: 60, resize: "vertical" }}
-            />
-          </div>
-          
-          {uploading && (
-            <div>
-              <div style={{ 
-                height: 8, 
-                background: "var(--color-border)", 
-                borderRadius: 4, 
-                overflow: "hidden",
-                marginBottom: 8
-              }}>
-                <div style={{ 
-                  height: "100%", 
-                  background: "var(--color-primary)", 
-                  width: `${uploadProgress}%`,
-                  transition: "width 0.3s"
-                }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+              <div>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Название темы:</label>
+                <input
+                  value={topicTitle}
+                  onChange={(e) => setTopicTitle(e.target.value)}
+                  placeholder="Например: Тема 1 — Основы"
+                  style={{ width: "100%", padding: "8px 12px", fontSize: 14 }}
+                />
               </div>
-              <div style={{ textAlign: "center", fontSize: 14, opacity: 0.8 }}>
-                Загрузка: {uploadProgress}%
+
+              <div>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Описание темы:</label>
+                <textarea
+                  value={topicDescription}
+                  onChange={(e) => setTopicDescription(e.target.value)}
+                  placeholder="Краткое описание темы"
+                  style={{ width: "100%", padding: "8px 12px", fontSize: 14, minHeight: 80, resize: "vertical" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Файл:</label>
+                <input
+                  ref={createTopicFileInputRef}
+                  type="file"
+                  onChange={(e) => setTopicFile(e.target.files?.[0] ?? null)}
+                />
+                {topicFile && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{topicFile.name}</div>}
+              </div>
+
+              {uploading && (
+                <div>
+                  <div
+                    style={{
+                      height: 8,
+                      background: "var(--color-border)",
+                      borderRadius: 4,
+                      overflow: "hidden",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        background: "var(--color-primary)",
+                        width: `${uploadProgress}%`,
+                        transition: "width 0.3s",
+                      }}
+                    />
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 14, opacity: 0.8 }}>Загрузка: {uploadProgress}%</div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowCreateTopic(false)} disabled={uploading}>
+                  Отмена
+                </button>
+                <button
+                  onClick={handleCreateTopic}
+                  disabled={!topicTitle.trim() || uploading}
+                  style={{
+                    padding: "10px 20px",
+                    background: "var(--color-primary)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: uploading ? "not-allowed" : "pointer",
+                    opacity: (!topicTitle.trim() || uploading) ? 0.5 : 1,
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {uploading ? "Создание..." : "Создать"}
+                </button>
               </div>
             </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              disabled={!title.trim() || uploading}
-              onClick={handleUpload}
-              style={{
-                flex: 1,
-                padding: "10px 20px",
-                background: "var(--color-primary)",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                cursor: uploading ? "not-allowed" : "pointer",
-                opacity: (!title.trim() || uploading) ? 0.5 : 1,
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
-              {uploading ? "Загрузка..." : "📤 Загрузить файл"}
-            </button>
-            <button
-              onClick={() => {
-                setSelectedFile(null);
-                setTitle("");
-                setDescription("");
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-              disabled={uploading}
-              style={{ padding: "10px 20px" }}
-            >
-              Отмена
-            </button>
           </div>
         </div>
       )}
 
       <hr />
-      
-      <h3 style={{ marginTop: 20, marginBottom: 12 }}>📚 Список файлов</h3>
-      {items.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>Пока нет загруженных файлов.</p>
+
+      <h3 style={{ marginTop: 20, marginBottom: 12 }}>📚 Темы</h3>
+      {topics.length === 0 ? (
+        <p style={{ opacity: 0.7 }}>Пока нет тем. Нажмите «Добавить тему».</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {items.map((item) => (
+          {topics.map((topic) => (
             <div
-              key={item.id}
+              key={topic.id}
               style={{
                 padding: 16,
                 border: "1px solid var(--color-border)",
-                borderRadius: 8,
+                borderRadius: 12,
                 background: "var(--color-card)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 16,
               }}
             >
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
-                  📄 {item.title}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>📌 {topic.title}</div>
+                  {topic.description && <div style={{ fontSize: 14, opacity: 0.85 }}>{topic.description}</div>}
+                  <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+                    {new Date(topic.created_at).toLocaleDateString("ru-RU")}
+                  </div>
                 </div>
-                {item.description && (
-                  <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 4 }}>{item.description}</div>
-                )}
-                <div style={{ fontSize: 12, opacity: 0.6 }}>
-                  {new Date(item.created_at).toLocaleDateString("ru-RU")}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="file"
+                    style={{ display: "none" }}
+                    ref={(el) => {
+                      topicUploadInputRefs.current[topic.id] = el;
+                    }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUploadToTopic(topic, f);
+                    }}
+                  />
+                  <button
+                    onClick={() => handleTopicFilePick(topic.id)}
+                    disabled={uploading && uploadingTopicId === topic.id}
+                    style={{
+                      padding: "8px 12px",
+                      background: "var(--color-primary)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 8,
+                      cursor: uploading && uploadingTopicId === topic.id ? "not-allowed" : "pointer",
+                      opacity: uploading && uploadingTopicId === topic.id ? 0.6 : 1,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {uploading && uploadingTopicId === topic.id ? "Загрузка..." : "📤 Загрузить файл"}
+                  </button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => handleDownload(item)}
-                  style={{
-                    padding: "8px 16px",
-                    background: "var(--color-primary)",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontSize: 14,
-                  }}
-                >
-                  ⬇️ Скачать
-                </button>
-                <button
-                  onClick={() => handleDelete(item)}
-                  style={{
-                    padding: "8px 16px",
-                    background: "#fee",
-                    color: "#c00",
-                    border: "1px solid #c00",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontSize: 14,
-                  }}
-                >
-                  🗑️ Удалить
-                </button>
+
+              {uploading && uploadingTopicId === topic.id && (
+                <div style={{ marginTop: 12 }}>
+                  <div
+                    style={{
+                      height: 8,
+                      background: "var(--color-border)",
+                      borderRadius: 4,
+                      overflow: "hidden",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        background: "var(--color-primary)",
+                        width: `${uploadProgress}%`,
+                        transition: "width 0.3s",
+                      }}
+                    />
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 14, opacity: 0.8 }}>Загрузка: {uploadProgress}%</div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 14 }}>
+                {topic.items.length === 0 ? (
+                  <div style={{ opacity: 0.7 }}>В теме пока нет файлов.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {topic.items.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: 12,
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 10,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            📄 {item.title}
+                          </div>
+                          <div style={{ fontSize: 12, opacity: 0.6 }}>{new Date(item.created_at).toLocaleDateString("ru-RU")}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            onClick={() => handleDownload(item)}
+                            style={{
+                              padding: "8px 12px",
+                              background: "var(--color-primary)",
+                              color: "white",
+                              border: "none",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                              fontSize: 14,
+                            }}
+                          >
+                            ⬇️ Скачать
+                          </button>
+                          {!!item.can_delete && (
+                            <button
+                              onClick={() => handleDelete(item)}
+                              style={{
+                                padding: "8px 12px",
+                                background: "#fee",
+                                color: "#c00",
+                                border: "1px solid #c00",
+                                borderRadius: 8,
+                                cursor: "pointer",
+                                fontSize: 14,
+                              }}
+                            >
+                              🗑️ Удалить
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}

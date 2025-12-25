@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,7 +31,32 @@ app = FastAPI(title="RUTS Journal API", version="0.1.0")
 logger.info(f"Starting app in {settings.app_env} mode")
 logger.info(f"CORS origins: {settings.app_cors_origins}")
 
-origins = [o.strip() for o in settings.app_cors_origins.split(",") if o.strip()]
+def _normalize_origin(value: str) -> str | None:
+    v = (value or "").strip().strip('"').strip("'")
+    if not v:
+        return None
+    # Some people paste full URLs with paths; Origin must be scheme://host[:port]
+    if "://" in v:
+        p = urlparse(v)
+        if p.scheme and p.netloc:
+            v = f"{p.scheme}://{p.netloc}"
+    # Origin never has a trailing slash; remove it to avoid mismatches.
+    v = v.rstrip("/")
+    return v or None
+
+
+origins_set: set[str] = set()
+for raw in settings.app_cors_origins.split(","):
+    norm = _normalize_origin(raw)
+    if norm:
+        origins_set.add(norm)
+
+# Always include the configured frontend base (common source of truth)
+frontend_origin = _normalize_origin(settings.app_frontend_base)
+if frontend_origin:
+    origins_set.add(frontend_origin)
+
+origins = sorted(origins_set)
 # In dev, Vite may auto-bump the port (5173 -> 5174, etc). Allow any localhost port.
 origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$" if settings.app_env == "dev" else None
 app.add_middleware(

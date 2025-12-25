@@ -47,7 +47,7 @@ export function App() {
     let t: number | undefined;
     if (rawLoading) {
       // Avoid flashing a full-screen loader for short requests.
-      t = window.setTimeout(() => setShowGlobalLoader(true), 450);
+      t = window.setTimeout(() => setShowGlobalLoader(true), 1500);
     } else {
       setShowGlobalLoader(false);
     }

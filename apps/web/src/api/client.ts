@@ -1,8 +1,24 @@
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
-if (!API_BASE) {
-  // Fail loudly in dev if env is missing (prevents requests to "undefined/..." paths).
-  console.warn("VITE_API_URL is not set; API requests will fail.");
+function getApiBaseProblem(): string | null {
+  if (!API_BASE) return "VITE_API_URL is not set";
+  try {
+    if (typeof window !== "undefined" && window.location?.protocol === "https:" && /^http:\/\//i.test(API_BASE)) {
+      return "VITE_API_URL uses http:// on an https site (mixed content will be blocked)";
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+const API_BASE_PROBLEM = getApiBaseProblem();
+
+if (!API_BASE && import.meta.env.PROD) {
+  console.warn("VITE_API_URL is not set; API requests will fail in production.");
+}
+if (API_BASE_PROBLEM && API_BASE && import.meta.env.PROD) {
+  console.warn(API_BASE_PROBLEM);
 }
 const AUTH_STORAGE_KEY = "ruts_auth";
 
@@ -99,14 +115,23 @@ function hasAuthHeader(init?: RequestInit): boolean {
 }
 
 async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
-  const res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      credentials: "include",
+    });
+  } catch (e: any) {
+    const hint = API_BASE_PROBLEM
+      ? `${API_BASE_PROBLEM}. `
+      : "Не удалось подключиться к API. Проверь `VITE_API_URL`, CORS и доступность бэка. ";
+    const err: HttpError = new Error(`${hint}${String(e?.message ?? e ?? "")}`.trim()) as HttpError;
+    throw err;
+  }
 
   if (res.status === 401 && _retry && hasAuthHeader(init)) {
     const newToken = await refreshAccessToken();
@@ -569,11 +594,105 @@ export type LibraryItem = {
   description: string | null;
   class_id: string | null;
   storage_path: string;
+  topic_id?: string | null;
+  uploaded_by?: string;
+  can_delete?: boolean;
   created_at: string;
+};
+
+export type LibraryTopic = {
+  id: string;
+  title: string;
+  description: string | null;
+  class_id: string | null;
+  created_at: string;
+  items: LibraryItem[];
 };
 export async function apiListLibrary(token: string, classId?: string) {
   const q = classId ? `?classId=${encodeURIComponent(classId)}` : "";
   return apiGet<{ items: LibraryItem[] }>(`/library${q}`, token);
+}
+
+export async function apiListLibraryTopics(token: string, classId?: string) {
+  const q = classId ? `?classId=${encodeURIComponent(classId)}` : "";
+  return apiGet<{ topics: LibraryTopic[] }>(`/library/topics${q}`, token);
+}
+
+export async function apiCreateLibraryTopic(
+  token: string,
+  file: File | null | undefined,
+  topicTitle: string,
+  topicDescription?: string,
+  classId?: string | null,
+  onProgress?: (percent: number) => void
+): Promise<{ topic: any; item: LibraryItem | null; originalFilename: string | null }> {
+  const formData = new FormData();
+  if (file) formData.append("file", file);
+  formData.append("title", topicTitle);
+  if (topicDescription) formData.append("description", topicDescription);
+  if (classId) formData.append("class_id", classId);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Create topic failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("POST", `${API_BASE}${withApiPrefix("/library/topics")}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+export async function apiUploadLibraryFileToTopic(
+  token: string,
+  topicId: string,
+  file: File,
+  title?: string,
+  description?: string,
+  onProgress?: (percent: number) => void
+): Promise<{ item: LibraryItem; originalFilename: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  if (description) formData.append("description", description);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("POST", `${API_BASE}${withApiPrefix(`/library/topics/${encodeURIComponent(topicId)}/upload`)}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
 }
 export async function apiCreateLibraryItem(
   token: string,
@@ -626,7 +745,7 @@ export async function apiUploadLibraryFile(
       reject(new Error("Network error"));
     });
 
-    xhr.open("POST", `${API_BASE}/library/upload`);
+    xhr.open("POST", `${API_BASE}${withApiPrefix("/library/upload")}`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(formData);
   });
@@ -753,7 +872,7 @@ export async function apiUploadProfilePhoto(
       reject(new Error("Network error"));
     });
 
-    xhr.open("POST", `${API_BASE}/profile/upload-photo`);
+    xhr.open("POST", `${API_BASE}${withApiPrefix("/profile/upload-photo")}`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(formData);
   });
