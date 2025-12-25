@@ -996,3 +996,62 @@ export async function apiDeleteNotification(token: string, notificationId: strin
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// Library Topics
+export interface TopicFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  created_at: string;
+}
+
+export interface Topic {
+  id: string;
+  title: string;
+  description: string | null;
+  class_id: string | null;
+  subject_id: string | null;
+  files: TopicFile[];
+}
+
+export async function apiLibraryListTopics(token: string) {
+  return apiGet<Topic[]>("/library/topics", token);
+}
+
+export async function apiLibraryCreateTopic(token: string, data: {
+  title: string;
+  description: string;
+  class_id: string;
+  subject_id: string;
+}) {
+  return apiPost<Topic>("/library/topics", data, token);
+}
+
+export async function apiLibraryDeleteTopic(token: string, id: string) {
+  return http<{ ok: boolean }>(`/library/topics/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiLibraryUploadTopicFiles(token: string, topicId: string, formData: FormData) {
+  return new Promise<TopicFile[]>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (e) {
+          reject(e);
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.open("POST", `${API_BASE}${withApiPrefix(`/library/topics/${topicId}/files`)}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}

@@ -419,3 +419,168 @@ def delete_item(item_id: str, user: dict = require_role("teacher", "admin")):
     sb.table("library_items").delete().eq("id", item_id).execute()
     
     return {"ok": True}
+
+
+# --- Topics API ---
+
+class TopicCreateIn(BaseModel):
+    title: str
+    description: str | None = None
+    class_id: str | None = None
+    subject_id: str | None = None
+
+
+@router.get("/topics")
+def list_topics(
+    class_id: str | None = None,
+    subject_id: str | None = None,
+    user: dict = require_role("admin", "teacher", "student")
+):
+    sb = get_supabase()
+    
+    # Get topics
+    q = sb.table("library_topics").select("*")
+    if class_id:
+        q = q.eq("class_id", class_id)
+    if subject_id:
+        q = q.eq("subject_id", subject_id)
+        
+    try:
+        topics_resp = q.order("created_at", desc=True).execute()
+    except APIError as e:
+        # Fallback if subject_id column missing
+        if _is_missing_column_api_error(e, "subject_id"):
+            q = sb.table("library_topics").select("id,title,description,class_id,created_by,created_at")
+            if class_id:
+                q = q.eq("class_id", class_id)
+            topics_resp = q.order("created_at", desc=True).execute()
+        else:
+            raise
+
+    topics = topics_resp.data or []
+    
+    if not topics:
+        return []
+        
+    topic_ids = [t["id"] for t in topics]
+    
+    # Get files for these topics
+    # We need to handle if topic_id column is missing in library_items (unlikely given migration order but safe)
+    try:
+        files_resp = sb.table("library_items").select("*").in_("topic_id", topic_ids).execute()
+    except APIError:
+        files_resp = None
+        
+    files = files_resp.data if files_resp else []
+    
+    # Group files by topic
+    files_by_topic = {}
+    for f in files:
+        tid = f.get("topic_id")
+        if not tid:
+            continue
+            
+        if tid not in files_by_topic:
+            files_by_topic[tid] = []
+        
+        # Generate signed URL
+        try:
+            signed = sb.storage.from_(f["storage_bucket"]).create_signed_url(f["storage_path"], 3600)
+            f["file_path"] = signed["signedURL"]
+        except Exception:
+            f["file_path"] = "#"
+            
+        f["file_name"] = f["title"]
+        f["file_size"] = 0 
+        
+        files_by_topic[tid].append(f)
+        
+    for t in topics:
+        t["files"] = files_by_topic.get(t["id"], [])
+        
+    return topics
+
+
+@router.post("/topics")
+def create_topic(payload: TopicCreateIn, user: dict = require_role("teacher", "admin")):
+    sb = get_supabase()
+    data = payload.model_dump()
+    data["created_by"] = user["id"]
+    
+    try:
+        resp = sb.table("library_topics").insert(data).execute()
+    except APIError as e:
+        if _is_missing_column_api_error(e, "subject_id"):
+            data.pop("subject_id", None)
+            resp = sb.table("library_topics").insert(data).execute()
+        else:
+            raise
+            
+    return resp.data[0]
+
+
+@router.delete("/topics/{topic_id}")
+def delete_topic(topic_id: str, user: dict = require_role("teacher", "admin")):
+    sb = get_supabase()
+    # Check ownership
+    t = sb.table("library_topics").select("created_by").eq("id", topic_id).single().execute()
+    if not t.data:
+        raise HTTPException(404, "Topic not found")
+    
+    if user["role"] != "admin" and t.data["created_by"] != user["id"]:
+        raise HTTPException(403, "Permission denied")
+        
+    sb.table("library_topics").delete().eq("id", topic_id).execute()
+    return {"ok": True}
+
+
+@router.post("/topics/{topic_id}/files")
+async def upload_topic_files(
+    topic_id: str,
+    files: list[UploadFile] = File(...),
+    user: dict = require_role("teacher", "admin")
+):
+    sb = get_supabase()
+    uploaded = []
+    
+    # Verify topic exists
+    t = sb.table("library_topics").select("class_id").eq("id", topic_id).single().execute()
+    if not t.data:
+        raise HTTPException(404, "Topic not found")
+    
+    class_id = t.data.get("class_id")
+    
+    for file in files:
+        file_ext = file.filename.split(".")[-1] if "." in file.filename else ""
+        unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
+        storage_path = f"files/{unique_filename}"
+        content = await file.read()
+        
+        try:
+            sb.storage.from_("library").upload(
+                path=storage_path,
+                file=content,
+                file_options={"content-type": file.content_type or "application/octet-stream"}
+            )
+        except Exception as e:
+            print(f"Upload failed for {file.filename}: {e}")
+            continue
+        
+        item_data = {
+            "title": file.filename,
+            "storage_bucket": "library",
+            "storage_path": storage_path,
+            "uploaded_by": user["id"],
+            "topic_id": topic_id,
+            "class_id": class_id
+        }
+        
+        try:
+            resp = sb.table("library_items").insert(item_data).execute()
+            if resp.data:
+                uploaded.append(resp.data[0])
+        except Exception as e:
+            print(f"DB insert failed for {file.filename}: {e}")
+            
+    return uploaded
+

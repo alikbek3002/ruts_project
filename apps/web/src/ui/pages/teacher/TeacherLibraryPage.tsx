@@ -1,176 +1,137 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
-import { Navigate } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
 import { 
-  apiListClasses, 
-  apiListLibrary,
-  apiListLibraryTopics,
-  apiCreateLibraryTopic,
-  apiUploadLibraryFileToTopic,
-  apiGetLibraryDownloadUrl,
-  apiDeleteLibraryItem,
-  type ClassItem, 
-  type LibraryItem,
-  type LibraryTopic
-} from "../../../api/client";
-import { useAuth } from "../../auth/AuthProvider";
-import { AppShell } from "../../layout/AppShell";
+  apiLibraryListTopics, 
+  apiLibraryCreateTopic, 
+  apiLibraryDeleteTopic, 
+  apiLibraryUploadTopicFiles,
+  apiListClasses,
+  apiListSubjects,
+  type Topic,
+  type TopicFile,
+  type ClassItem,
+  type Subject
+} from '../../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
+import { AppShell } from '../../layout/AppShell';
+import styles from './TeacherLibrary.module.css';
+import { Search, Plus, FileText, Download, Trash2, X, Upload, Filter } from 'lucide-react';
 
-export function TeacherLibraryPage() {
+export const TeacherLibraryPage: React.FC = () => {
   const { state } = useAuth();
-  const user = state.user;
   const token = state.accessToken;
-  const can = useMemo(() => !!user && user.role === "teacher" && !!token, [user, token]);
 
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [classId, setClassId] = useState<string>("");
-  const [topics, setTopics] = useState<LibraryTopic[]>([]);
-  const [topicsSchemaMissing, setTopicsSchemaMissing] = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
-  const [showCreateTopic, setShowCreateTopic] = useState(false);
-  const [topicTitle, setTopicTitle] = useState("");
-  const [topicDescription, setTopicDescription] = useState("");
-  const [topicFile, setTopicFile] = useState<File | null>(null);
-
-  const [uploadingTopicId, setUploadingTopicId] = useState<string | null>(null);
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTopicTitle, setNewTopicTitle] = useState('');
+  const [newTopicDesc, setNewTopicDesc] = useState('');
+  const [newTopicClassId, setNewTopicClassId] = useState<string | null>(null);
+  const [newTopicSubjectId, setNewTopicSubjectId] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [err, setErr] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  const createTopicFileInputRef = useRef<HTMLInputElement>(null);
-  const topicUploadInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  async function reload() {
-    if (!token) return;
-    try {
-      const [c, t] = await Promise.all([apiListClasses(token), apiListLibraryTopics(token, classId || undefined)]);
-      setClasses(c.classes);
-      const schemaMissing = !!(t as any)?.schema_missing;
-      setTopicsSchemaMissing(schemaMissing);
-
-      if (schemaMissing) {
-        // Fallback: show flat library list until migration is applied.
-        const flat = await apiListLibrary(token, classId || undefined);
-        setTopics([
-          {
-            id: "__flat__",
-            title: "Файлы",
-            description: null,
-            class_id: classId || null,
-            created_at: new Date().toISOString(),
-            items: flat.items,
-          },
-        ]);
-        setErr(
-          "Темы библиотеки ещё не включены (не применена миграция library_topics). Пока показываю общий список файлов."
-        );
-      } else {
-        setErr(null);
-        setTopics(t.topics);
-      }
-    } catch (e) {
-      setErr(String(e));
-    }
-  }
 
   useEffect(() => {
-    if (!can) return;
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [can, classId]);
+    if (token) {
+      loadData();
+    }
+  }, [token]);
 
-  const handleCreateTopic = async () => {
-    if (!token || !topicTitle.trim()) return;
+  const loadData = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const [topicsData, classesData, subjectsData] = await Promise.all([
+        apiLibraryListTopics(token),
+        apiListClasses(token),
+        apiListSubjects(token)
+      ]);
+      setTopics(Array.isArray(topicsData) ? topicsData : []);
+      setClasses(classesData.classes || []);
+      setSubjects(subjectsData.subjects || []);
+    } catch (error) {
+      console.error('Failed to load library data:', error);
+      setTopics([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setUploading(true);
-    setErr(null);
-    setSuccess(null);
-    setUploadProgress(0);
+  const handleCreateTopic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !newTopicTitle || !newTopicClassId || !newTopicSubjectId) {
+      alert('Пожалуйста, заполните все обязательные поля');
+      return;
+    }
 
     try {
-      const result = await apiCreateLibraryTopic(
-        token,
-        topicFile,
-        topicTitle.trim(),
-        topicDescription.trim() || undefined,
-        classId || null,
-        (percent) => setUploadProgress(percent)
-      );
-
-      if (result.originalFilename) {
-        setSuccess(`Тема "${topicTitle.trim()}" создана, файл "${result.originalFilename}" загружен`);
-      } else {
-        setSuccess(`Тема "${topicTitle.trim()}" создана`);
+      setUploading(true);
+      
+      // 1. Create topic
+      const topic = await apiLibraryCreateTopic(token, {
+        title: newTopicTitle,
+        description: newTopicDesc,
+        class_id: newTopicClassId,
+        subject_id: newTopicSubjectId
+      });
+      
+      // 2. Upload files if any
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        await apiLibraryUploadTopicFiles(token, topic.id, formData);
       }
-      setShowCreateTopic(false);
-      setTopicTitle("");
-      setTopicDescription("");
-      setTopicFile(null);
-      setUploadProgress(0);
-      if (createTopicFileInputRef.current) createTopicFileInputRef.current.value = "";
-      await reload();
-    } catch (e) {
-      setErr(`Ошибка создания темы: ${String(e)}`);
+
+      // Reset and reload
+      setIsModalOpen(false);
+      setNewTopicTitle('');
+      setNewTopicDesc('');
+      setNewTopicClassId(null);
+      setNewTopicSubjectId(null);
+      setSelectedFiles([]);
+      loadData();
+    } catch (error) {
+      console.error('Failed to create topic:', error);
+      alert('Не удалось создать тему');
     } finally {
       setUploading(false);
-      setUploadingTopicId(null);
     }
   };
 
-  const handleTopicFilePick = (topicId: string) => {
-    const ref = topicUploadInputRefs.current[topicId];
-    if (ref) ref.click();
-  };
-
-  const handleUploadToTopic = async (topic: LibraryTopic, file: File) => {
+  const handleDeleteTopic = async (id: string) => {
     if (!token) return;
-    setUploading(true);
-    setUploadingTopicId(topic.id);
-    setErr(null);
-    setSuccess(null);
-    setUploadProgress(0);
-
+    if (!confirm('Вы уверены, что хотите удалить эту тему?')) return;
     try {
-      const title = file.name.replace(/\.[^/.]+$/, "");
-      const res = await apiUploadLibraryFileToTopic(token, topic.id, file, title, undefined, (p) => setUploadProgress(p));
-      setSuccess(`Файл "${res.originalFilename}" загружен в тему "${topic.title}"`);
-      await reload();
-    } catch (e) {
-      setErr(`Ошибка загрузки: ${String(e)}`);
-    } finally {
-      setUploading(false);
-      setUploadingTopicId(null);
-      setUploadProgress(0);
-      const input = topicUploadInputRefs.current[topic.id];
-      if (input) input.value = "";
+      await apiLibraryDeleteTopic(token, id);
+      setTopics(topics.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Failed to delete topic:', error);
     }
   };
 
-  const handleDownload = async (item: LibraryItem) => {
-    if (!token) return;
-    try {
-      const { url } = await apiGetLibraryDownloadUrl(token, item.id);
-      window.open(url, "_blank");
-    } catch (e) {
-      setErr(`Ошибка скачивания: ${String(e)}`);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setSelectedFiles(Array.from(e.target.files));
     }
   };
 
-  const handleDelete = async (item: LibraryItem) => {
-    if (!token) return;
-    if (!confirm(`Удалить "${item.title}"?`)) return;
-    
-    try {
-      await apiDeleteLibraryItem(token, item.id);
-      setSuccess("Файл удален");
-      await reload();
-    } catch (e) {
-      setErr(`Ошибка удаления: ${String(e)}`);
-    }
-  };
+  const filteredTopics = topics.filter(topic => {
+    const matchesSearch = topic.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         topic.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesClass = selectedClassId ? topic.class_id === selectedClassId : true;
+    return matchesSearch && matchesClass;
+  });
 
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "teacher") return <Navigate to="/app" replace />;
+  const getClassName = (id: string | null) => classes.find(c => c.id === id)?.name || 'Неизвестный класс';
+  const getSubjectName = (id: string | null) => subjects.find(s => s.id === id)?.name || 'Неизвестный предмет';
 
   return (
     <AppShell
@@ -184,298 +145,187 @@ export function TeacherLibraryPage() {
         { to: "/app/teacher/library", label: "Библиотека" },
       ]}
     >
-      {err && <div style={{ padding: "12px", background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 16 }}>{err}</div>}
-      {success && <div style={{ padding: "12px", background: "#efe", color: "#060", borderRadius: 8, marginBottom: 16 }}>{success}</div>}
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>Библиотека</h1>
+          <button className={styles.addButton} onClick={() => setIsModalOpen(true)}>
+            <Plus size={20} />
+            Добавить тему
+          </button>
+        </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
-        <label>
-          Группа:
-          <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ marginLeft: 8, padding: "6px 12px" }}>
-            <option value="">(все / общая библиотека)</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          onClick={() => {
-            setErr(null);
-            setSuccess(null);
-            setShowCreateTopic(true);
-          }}
-          disabled={topicsSchemaMissing}
-          title={topicsSchemaMissing ? "Нужно применить миграцию library_topics в Supabase" : undefined}
-        >
-          ➕ Добавить тему
-        </button>
-        <button onClick={() => reload()}>🔄 Обновить</button>
-      </div>
-
-      {showCreateTopic && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 50,
-          }}
-          onClick={() => (uploading ? null : setShowCreateTopic(false))}
-        >
-          <div
-            style={{
-              width: "min(720px, 100%)",
-              background: "var(--color-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 12,
-              padding: 16,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-              <h3 style={{ margin: 0 }}>➕ Добавить тему</h3>
-              <button onClick={() => (uploading ? null : setShowCreateTopic(false))} disabled={uploading}>
-                ✖
-              </button>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-              <div>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Название темы:</label>
-                <input
-                  value={topicTitle}
-                  onChange={(e) => setTopicTitle(e.target.value)}
-                  placeholder="Например: Тема 1 — Основы"
-                  style={{ width: "100%", padding: "8px 12px", fontSize: 14 }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Описание темы:</label>
-                <textarea
-                  value={topicDescription}
-                  onChange={(e) => setTopicDescription(e.target.value)}
-                  placeholder="Краткое описание темы"
-                  style={{ width: "100%", padding: "8px 12px", fontSize: 14, minHeight: 80, resize: "vertical" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 600 }}>Файл:</label>
-                <input
-                  ref={createTopicFileInputRef}
-                  type="file"
-                  onChange={(e) => setTopicFile(e.target.files?.[0] ?? null)}
-                />
-                {topicFile && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{topicFile.name}</div>}
-              </div>
-
-              {uploading && (
-                <div>
-                  <div
-                    style={{
-                      height: 8,
-                      background: "var(--color-border)",
-                      borderRadius: 4,
-                      overflow: "hidden",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        background: "var(--color-primary)",
-                        width: `${uploadProgress}%`,
-                        transition: "width 0.3s",
-                      }}
-                    />
-                  </div>
-                  <div style={{ textAlign: "center", fontSize: 14, opacity: 0.8 }}>Загрузка: {uploadProgress}%</div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setShowCreateTopic(false)} disabled={uploading}>
-                  Отмена
-                </button>
-                <button
-                  onClick={handleCreateTopic}
-                  disabled={!topicTitle.trim() || uploading}
-                  style={{
-                    padding: "10px 20px",
-                    background: "var(--color-primary)",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: uploading ? "not-allowed" : "pointer",
-                    opacity: (!topicTitle.trim() || uploading) ? 0.5 : 1,
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  {uploading ? "Создание..." : "Создать"}
-                </button>
-              </div>
-            </div>
+        <div className={styles.controls}>
+          <div className={styles.searchWrapper}>
+            <Search className={styles.searchIcon} size={20} />
+            <input
+              type="text"
+              placeholder="Поиск тем..."
+              className={styles.searchInput}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          
+          <div className={styles.filterWrapper}>
+            <Filter className={styles.filterIcon} size={20} />
+            <select 
+              className={styles.filterSelect}
+              value={selectedClassId || ''}
+              onChange={(e) => setSelectedClassId(e.target.value || null)}
+            >
+              <option value="">Все классы</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
 
-      <hr />
-
-      <h3 style={{ marginTop: 20, marginBottom: 12 }}>📚 Темы</h3>
-      {topics.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>Пока нет тем. Нажмите «Добавить тему».</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {topics.map((topic) => (
-            <div
-              key={topic.id}
-              style={{
-                padding: 16,
-                border: "1px solid var(--color-border)",
-                borderRadius: 12,
-                background: "var(--color-card)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>📌 {topic.title}</div>
-                  {topic.description && <div style={{ fontSize: 14, opacity: 0.85 }}>{topic.description}</div>}
-                  <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
-                    {new Date(topic.created_at).toLocaleDateString("ru-RU")}
+        {loading ? (
+          <div className={styles.loading}>Загрузка библиотеки...</div>
+        ) : (
+          <div className={styles.grid}>
+            {filteredTopics.map(topic => (
+              <div key={topic.id} className={styles.card}>
+                <div className={styles.cardHeader}>
+                  <div className={styles.cardMeta}>
+                    <span className={styles.badge}>{getClassName(topic.class_id)}</span>
+                    <span className={styles.badgeSecondary}>{getSubjectName(topic.subject_id)}</span>
                   </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="file"
-                    style={{ display: "none" }}
-                    ref={(el) => {
-                      topicUploadInputRefs.current[topic.id] = el;
-                    }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleUploadToTopic(topic, f);
-                    }}
-                  />
-                  <button
-                    onClick={() => handleTopicFilePick(topic.id)}
-                    disabled={topic.id === "__flat__" || (uploading && uploadingTopicId === topic.id)}
-                    title={topic.id === "__flat__" ? "Нужно применить миграцию library_topics" : undefined}
-                    style={{
-                      padding: "8px 12px",
-                      background: "var(--color-primary)",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: uploading && uploadingTopicId === topic.id ? "not-allowed" : "pointer",
-                      opacity: uploading && uploadingTopicId === topic.id ? 0.6 : 1,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                    }}
+                  <button 
+                    className={styles.deleteButton}
+                    onClick={() => handleDeleteTopic(topic.id)}
+                    title="Удалить тему"
                   >
-                    {uploading && uploadingTopicId === topic.id ? "Загрузка..." : "📤 Загрузить файл"}
+                    <Trash2 size={16} />
                   </button>
                 </div>
-              </div>
-
-              {uploading && uploadingTopicId === topic.id && (
-                <div style={{ marginTop: 12 }}>
-                  <div
-                    style={{
-                      height: 8,
-                      background: "var(--color-border)",
-                      borderRadius: 4,
-                      overflow: "hidden",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        background: "var(--color-primary)",
-                        width: `${uploadProgress}%`,
-                        transition: "width 0.3s",
-                      }}
-                    />
-                  </div>
-                  <div style={{ textAlign: "center", fontSize: 14, opacity: 0.8 }}>Загрузка: {uploadProgress}%</div>
-                </div>
-              )}
-
-              <div style={{ marginTop: 14 }}>
-                {topic.items.length === 0 ? (
-                  <div style={{ opacity: 0.7 }}>В теме пока нет файлов.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {topic.items.map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          padding: 12,
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 10,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 12,
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            📄 {item.title}
-                          </div>
-                          <div style={{ fontSize: 12, opacity: 0.6 }}>{new Date(item.created_at).toLocaleDateString("ru-RU")}</div>
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button
-                            onClick={() => handleDownload(item)}
-                            style={{
-                              padding: "8px 12px",
-                              background: "var(--color-primary)",
-                              color: "white",
-                              border: "none",
-                              borderRadius: 8,
-                              cursor: "pointer",
-                              fontSize: 14,
-                            }}
-                          >
-                            ⬇️ Скачать
-                          </button>
-                          {!!item.can_delete && (
-                            <button
-                              onClick={() => handleDelete(item)}
-                              style={{
-                                padding: "8px 12px",
-                                background: "#fee",
-                                color: "#c00",
-                                border: "1px solid #c00",
-                                borderRadius: 8,
-                                cursor: "pointer",
-                                fontSize: 14,
-                              }}
-                            >
-                              🗑️ Удалить
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                
+                <h3 className={styles.cardTitle}>{topic.title}</h3>
+                {topic.description && (
+                  <p className={styles.cardDescription}>{topic.description}</p>
                 )}
+
+                <div className={styles.fileList}>
+                  {topic.files && topic.files.map(file => (
+                    <a 
+                      key={file.id}
+                      href={file.file_path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.fileLink}
+                    >
+                      <FileText size={16} />
+                      <span className={styles.fileName}>{file.file_name}</span>
+                      <Download size={14} className={styles.downloadIcon} />
+                    </a>
+                  ))}
+                </div>
               </div>
+            ))}
+          </div>
+        )}
+
+        {isModalOpen && (
+          <div className={styles.modalOverlay}>
+            <div className={styles.modal}>
+              <div className={styles.modalHeader}>
+                <h2>Добавить новую тему</h2>
+                <button onClick={() => setIsModalOpen(false)} className={styles.closeButton}>
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleCreateTopic} className={styles.form}>
+                <div className={styles.formGroup}>
+                  <label>Название</label>
+                  <input
+                    type="text"
+                    value={newTopicTitle}
+                    onChange={(e) => setNewTopicTitle(e.target.value)}
+                    required
+                    placeholder="например, Глава 1: Введение"
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Описание</label>
+                  <textarea
+                    value={newTopicDesc}
+                    onChange={(e) => setNewTopicDesc(e.target.value)}
+                    placeholder="Необязательное описание..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label>Класс</label>
+                    <select
+                      value={newTopicClassId || ''}
+                      onChange={(e) => setNewTopicClassId(e.target.value)}
+                      required
+                    >
+                      <option value="">Выберите класс</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Предмет</label>
+                    <select
+                      value={newTopicSubjectId || ''}
+                      onChange={(e) => setNewTopicSubjectId(e.target.value)}
+                      required
+                    >
+                      <option value="">Выберите предмет</option>
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Файлы</label>
+                  <div className={styles.fileUpload}>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileChange}
+                      id="file-upload"
+                      className={styles.fileInput}
+                    />
+                    <label htmlFor="file-upload" className={styles.fileLabel}>
+                      <Upload size={20} />
+                      <span>{selectedFiles.length ? `${selectedFiles.length} файлов выбрано` : 'Выберите файлы'}</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className={styles.modalActions}>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsModalOpen(false)}
+                    className={styles.cancelButton}
+                  >
+                    Отмена
+                  </button>
+                  <button 
+                    type="submit" 
+                    className={styles.submitButton}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Создание...' : 'Создать тему'}
+                  </button>
+                </div>
+              </form>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </AppShell>
   );
-}
+};
