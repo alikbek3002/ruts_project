@@ -36,10 +36,10 @@ def login(payload: LoginIn, response: Response):
     rows = resp.data or []
     user = rows[0] if isinstance(rows, list) and rows else None
     if not user or not user.get("is_active", True):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
     if not verify_password(payload.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
     access = create_access_token(subject=user["id"], role=user["role"])
 
@@ -97,7 +97,7 @@ def logout(response: Response, refresh_cookie: str | None = Depends(get_refresh_
 @router.post("/refresh")
 def refresh(response: Response, refresh_cookie: str | None = Depends(get_refresh_cookie)):
     if not refresh_cookie:
-        raise HTTPException(status_code=401, detail="Missing refresh token")
+        raise HTTPException(status_code=401, detail="Отсутствует токен обновления")
 
     sb = get_supabase()
     token_hash = hash_refresh_token(refresh_cookie)
@@ -111,17 +111,17 @@ def refresh(response: Response, refresh_cookie: str | None = Depends(get_refresh
     tok_rows = tok_resp.data or []
     row = tok_rows[0] if isinstance(tok_rows, list) and tok_rows else None
     if not row or row.get("revoked_at") is not None:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        raise HTTPException(status_code=401, detail="Неверный токен обновления")
 
     expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
     if expires_at <= datetime.now(tz=timezone.utc):
-        raise HTTPException(status_code=401, detail="Refresh token expired")
+        raise HTTPException(status_code=401, detail="Срок действия токена обновления истек")
 
     u_resp = sb.table("users").select("*").eq("id", row["user_id"]).limit(1).execute()
     u_rows = u_resp.data or []
     user = u_rows[0] if isinstance(u_rows, list) and u_rows else None
     if not user or not user.get("is_active", True):
-        raise HTTPException(status_code=401, detail="User disabled")
+        raise HTTPException(status_code=401, detail="Пользователь отключен")
 
     # rotate refresh token
     new_refresh = create_refresh_token()
@@ -166,14 +166,14 @@ class ChangePasswordIn(BaseModel):
 def change_password(payload: ChangePasswordIn, user: CurrentUser):
     # For MVP: require login + oldPassword; later can allow "temp password" flow.
     if not payload.oldPassword:
-        raise HTTPException(status_code=400, detail="oldPassword required")
+        raise HTTPException(status_code=400, detail="Требуется старый пароль")
 
     sb = get_supabase()
     resp = sb.table("users").select("id,password_hash").eq("id", user["id"]).limit(1).execute()
     rows = resp.data or []
     db_user = rows[0] if isinstance(rows, list) and rows else None
     if not db_user or not verify_password(payload.oldPassword, db_user["password_hash"]):
-        raise HTTPException(status_code=400, detail="Wrong password")
+        raise HTTPException(status_code=400, detail="Неверный пароль")
 
     from app.core.security import hash_password
 

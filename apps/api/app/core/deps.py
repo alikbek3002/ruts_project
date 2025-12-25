@@ -21,26 +21,26 @@ def _get_bearer_token(request: Request) -> str | None:
 def get_current_user(request: Request) -> dict:
     token = _get_bearer_token(request)
     if not token:
-        raise HTTPException(status_code=401, detail="Missing access token")
+        raise HTTPException(status_code=401, detail="Отсутствует токен доступа")
 
     try:
         payload = jwt.decode(token, settings.app_jwt_secret, algorithms=["HS256"])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Неверный токен")
         
         # Validate UUID format (36 chars with dashes)
         if not (len(user_id) == 36 and user_id.count("-") == 4):
-            raise HTTPException(status_code=401, detail="Invalid token format - please re-login")
+            raise HTTPException(status_code=401, detail="Неверный формат токена - пожалуйста, войдите снова")
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Неверный токен")
 
     sb = get_supabase()
     resp = sb.table("users").select("*").eq("id", user_id).limit(1).execute()
     rows = resp.data or []
     user = rows[0] if isinstance(rows, list) and rows else None
     if not user or not user.get("is_active", True):
-        raise HTTPException(status_code=401, detail="User disabled")
+        raise HTTPException(status_code=401, detail="Пользователь отключен")
     return user
 
 
@@ -55,7 +55,7 @@ def require_role(*roles: str):
     """
     def _dep(user: dict = Depends(get_current_user)) -> dict:
         if user.get("role") not in roles:
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise HTTPException(status_code=403, detail="Доступ запрещен")
         return user
 
     return Depends(_dep)

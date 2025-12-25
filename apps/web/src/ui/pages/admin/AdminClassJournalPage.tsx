@@ -24,6 +24,31 @@ type JournalBySubject = {
   data: Record<string, Record<string, { average?: number; grades: number[]; count: number }>>;
 };
 
+type Grade = {
+  grade: number;
+  comment: string | null;
+};
+
+type CellData = {
+  grades: Grade[];
+  present: boolean | null;
+};
+
+type Lesson = {
+  date: string;
+  timetable_entry_id: string;
+  subject_name: string;
+  subject_id?: string;
+  lesson_topic?: string | null;
+  homework?: string | null;
+};
+
+type DetailedJournalData = {
+  students: Student[];
+  lessons: Lesson[];
+  grades: Record<string, Record<string, CellData>>;
+};
+
 export function AdminClassJournalPage() {
   const { state } = useAuth();
   const { classId } = useParams<{ classId: string }>();
@@ -34,6 +59,8 @@ export function AdminClassJournalPage() {
   const [viewMode, setViewMode] = useState<"dates" | "subjects">("subjects");
   const [journalByDates, setJournalByDates] = useState<JournalByDates | null>(null);
   const [journalBySubject, setJournalBySubject] = useState<JournalBySubject | null>(null);
+  const [detailedJournal, setDetailedJournal] = useState<DetailedJournalData | null>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [className, setClassName] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
@@ -90,6 +117,32 @@ export function AdminClassJournalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can, classId]);
 
+  useEffect(() => {
+    if (!token || !classId || !selectedSubjectId) {
+      setDetailedJournal(null);
+      return;
+    }
+
+    async function loadDetailed() {
+      setLoading(true);
+      try {
+        const url = new URL(`/api/journal/classes/${classId}/journal`, window.location.origin);
+        url.searchParams.append("subject_id", selectedSubjectId);
+        const resp = await trackedFetch(url.toString(), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error("Failed to load detailed journal");
+        const data = await resp.json();
+        setDetailedJournal(data);
+      } catch (e) {
+        setErr(String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDetailed();
+  }, [token, classId, selectedSubjectId]);
+
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
@@ -143,13 +196,31 @@ export function AdminClassJournalPage() {
 
       {err && <p style={{ color: "crimson" }}>{err}</p>}
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <button onClick={() => setViewMode("subjects")} disabled={viewMode === "subjects"}>
-          По предметам
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <button 
+            onClick={() => { setViewMode("subjects"); setSelectedSubjectId(""); }} 
+            disabled={viewMode === "subjects" && !selectedSubjectId}
+        >
+          Сводная по предметам
         </button>
-        <button onClick={() => setViewMode("dates")} disabled={viewMode === "dates"}>
-          По датам
+        <button 
+            onClick={() => { setViewMode("dates"); setSelectedSubjectId(""); }} 
+            disabled={viewMode === "dates" && !selectedSubjectId}
+        >
+          Сводная по датам
         </button>
+
+        <select 
+            value={selectedSubjectId} 
+            onChange={(e) => setSelectedSubjectId(e.target.value)}
+            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
+        >
+            <option value="">-- Выберите предмет для детализации --</option>
+            {allSubjects.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+        </select>
+
         <button onClick={() => downloadExcel("grades")}>📥 Скачать оценки (Excel)</button>
         <button onClick={() => downloadExcel("attendance")}>📥 Скачать посещаемость (Excel)</button>
         <button onClick={() => loadJournal()} disabled={loading}>
@@ -159,7 +230,58 @@ export function AdminClassJournalPage() {
 
       {loading && <Loader text="Загрузка журнала..." />}
 
-      {!loading && viewMode === "subjects" && journalBySubject && (
+      {!loading && selectedSubjectId && detailedJournal && (
+        <div className={styles.tableWrapper}>
+          <table className={styles.journalTable}>
+            <thead>
+              <tr>
+                <th className={styles.stickyCol}>Ученик</th>
+                {detailedJournal.lessons.map((l) => (
+                  <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
+                    <div style={{ fontSize: "0.8em" }}>
+                        {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {detailedJournal.students.map((student) => (
+                <tr key={student.id}>
+                  <td className={styles.stickyCol}>{student.name}</td>
+                  {detailedJournal.lessons.map((l) => {
+                    const key = `${l.date}_${l.timetable_entry_id}`;
+                    const cell = detailedJournal.grades[student.id]?.[key];
+                    const grades = cell?.grades || [];
+                    const present = cell?.present;
+
+                    return (
+                      <td key={l.timetable_entry_id} style={{ textAlign: "center" }}>
+                        {grades.length > 0 ? (
+                          grades.map((g, i) => (
+                            <span key={i} title={g.comment || ""}>
+                              <strong>{g.grade}</strong>
+                              {i < grades.length - 1 ? ", " : ""}
+                            </span>
+                          ))
+                        ) : present === false ? (
+                          <span style={{ color: "red" }}>Н</span>
+                        ) : present === true ? (
+                          <span style={{ color: "green" }}>✓</span>
+                        ) : (
+                          <span style={{ color: "#ccc" }}>·</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && !selectedSubjectId && viewMode === "subjects" && journalBySubject && (
         <div className={styles.tableWrapper}>
           <table className={styles.journalTable}>
             <thead>
@@ -211,7 +333,7 @@ export function AdminClassJournalPage() {
         </div>
       )}
 
-      {!loading && viewMode === "dates" && journalByDates && (
+      {!loading && !selectedSubjectId && viewMode === "dates" && journalByDates && (
         <div className={styles.tableWrapper}>
           <table className={styles.journalTable}>
             <thead>

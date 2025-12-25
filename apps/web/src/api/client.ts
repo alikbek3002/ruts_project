@@ -151,7 +151,16 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
 
   if (!res.ok) {
     const msg = await readErrorText(res);
-    const err: HttpError = new Error(msg || `HTTP ${res.status}`) as HttpError;
+    let cleanMsg = msg;
+    try {
+      const json = JSON.parse(msg);
+      if (json && typeof json === "object" && json.detail) {
+        cleanMsg = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+      }
+    } catch {
+      // ignore
+    }
+    const err: HttpError = new Error(cleanMsg || `HTTP ${res.status}`) as HttpError;
     err.status = res.status;
     err.bodyText = msg;
     throw err;

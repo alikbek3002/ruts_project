@@ -37,7 +37,7 @@ def get_profile(user: CurrentUser):
     user_data = resp.data[0] if resp.data else None
     
     if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     # Убираем чувствительные данные
     user_data.pop("password_hash", None)
@@ -90,14 +90,14 @@ def update_profile(payload: UpdateProfileIn, user: CurrentUser):
         update_data["birth_date"] = payload.birth_date
     
     if not update_data:
-        raise HTTPException(status_code=400, detail="No data to update")
+        raise HTTPException(status_code=400, detail="Нет данных для обновления")
     
     update_data["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
     
     resp = sb.table("users").update(update_data).eq("id", user["id"]).execute()
     
     if not resp.data:
-        raise HTTPException(status_code=400, detail="Update failed")
+        raise HTTPException(status_code=400, detail="Ошибка обновления")
     
     updated_user = resp.data[0]
     updated_user.pop("password_hash", None)
@@ -114,16 +114,16 @@ def change_password(payload: ChangePasswordIn, user: CurrentUser):
     # Проверяем текущий пароль
     resp = sb.table("users").select("password_hash").eq("id", user["id"]).limit(1).execute()
     if not resp.data:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     current_hash = resp.data[0]["password_hash"]
     
     if not verify_password(payload.current_password, current_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+        raise HTTPException(status_code=400, detail="Текущий пароль неверен")
     
     # Проверяем что новый пароль отличается
     if payload.current_password == payload.new_password:
-        raise HTTPException(status_code=400, detail="New password must be different")
+        raise HTTPException(status_code=400, detail="Новый пароль должен отличаться")
     
     # Обновляем пароль
     new_hash = hash_password(payload.new_password)
@@ -134,7 +134,7 @@ def change_password(payload: ChangePasswordIn, user: CurrentUser):
         "updated_at": datetime.now(tz=timezone.utc).isoformat()
     }).eq("id", user["id"]).execute()
     
-    return {"success": True, "message": "Password changed successfully"}
+    return {"success": True, "message": "Пароль успешно изменен"}
 
 
 @router.post("/upload-photo")
@@ -147,16 +147,16 @@ async def upload_photo(
     
     # Студенты не могут менять фото
     if user["role"] == "student":
-        raise HTTPException(status_code=403, detail="Students cannot upload photos")
+        raise HTTPException(status_code=403, detail="Студенты не могут загружать фото")
     
     # Проверяем тип файла
     if not photo.content_type or not photo.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only images are allowed")
+        raise HTTPException(status_code=400, detail="Разрешены только изображения")
     
     # Проверяем размер (макс 5MB)
     content = await photo.read()
     if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size exceeds 5MB")
+        raise HTTPException(status_code=400, detail="Размер файла превышает 5 МБ")
     
     # Генерируем имя файла
     import uuid
@@ -180,7 +180,7 @@ async def upload_photo(
         return {"photo_url": public_url}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {str(e)}")
 
 
 @router.delete("/photo")
@@ -189,7 +189,7 @@ def delete_photo(user: CurrentUser):
     sb = get_supabase()
     
     if user["role"] == "student":
-        raise HTTPException(status_code=403, detail="Students cannot delete photos")
+        raise HTTPException(status_code=403, detail="Студенты не могут удалять фото")
     
     # Обновляем профиль
     sb.table("users").update({
@@ -197,4 +197,4 @@ def delete_photo(user: CurrentUser):
         "updated_at": datetime.now(tz=timezone.utc).isoformat()
     }).eq("id", user["id"]).execute()
     
-    return {"success": True, "message": "Photo deleted"}
+    return {"success": True, "message": "Фото удалено"}

@@ -38,10 +38,15 @@ type JournalData = {
   grades: Record<string, Record<string, CellData>>;
 };
 
+type SubjectInfo = {
+  id: string;
+  name: string;
+};
+
 type ClassInfo = {
   id: string;
   name: string;
-  subjects: string[];
+  subjects: SubjectInfo[];
 };
 
 export function TeacherJournalPage() {
@@ -52,6 +57,7 @@ export function TeacherJournalPage() {
 
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [journal, setJournal] = useState<JournalData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -76,7 +82,7 @@ export function TeacherJournalPage() {
     if (!token || !selectedClassId) return;
     loadJournal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedClassId]);
+  }, [token, selectedClassId, selectedSubjectId]);
 
   async function loadClasses() {
     if (!token) return;
@@ -98,7 +104,12 @@ export function TeacherJournalPage() {
     setLoading(true);
     setErr(null);
     try {
-      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/journal`, {
+      const url = new URL(`/api/journal/classes/${selectedClassId}/journal`, window.location.origin);
+      if (selectedSubjectId) {
+        url.searchParams.append("subject_id", selectedSubjectId);
+      }
+
+      const resp = await trackedFetch(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) throw new Error("Failed to load journal");
@@ -247,13 +258,16 @@ export function TeacherJournalPage() {
 
       {err && <p style={{ color: "crimson" }}>{err}</p>}
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: "flex", gap: "1rem", alignItems: "center" }}>
         <label style={{ fontFamily: 'Arial, sans-serif', fontSize: 14 }}>
           <strong>{t("journal.selectClass")}:</strong>
           <select
             className={styles.classSelect}
             value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
+            onChange={(e) => {
+              setSelectedClassId(e.target.value);
+              setSelectedSubjectId("");
+            }}
             style={{ marginLeft: 8 }}
           >
             <option value="">-- {t("common.select")} --</option>
@@ -264,6 +278,25 @@ export function TeacherJournalPage() {
             ))}
           </select>
         </label>
+
+        {selectedClass && selectedClass.subjects.length > 0 && (
+          <label style={{ fontFamily: 'Arial, sans-serif', fontSize: 14 }}>
+            <strong>Предмет:</strong>
+            <select
+              className={styles.classSelect}
+              value={selectedSubjectId}
+              onChange={(e) => setSelectedSubjectId(e.target.value)}
+              style={{ marginLeft: 8 }}
+            >
+              <option value="">Все предметы</option>
+              {selectedClass.subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {selectedClassId && (

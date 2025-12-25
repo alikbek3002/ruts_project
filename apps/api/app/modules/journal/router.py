@@ -39,7 +39,7 @@ def get_teacher_classes(user: dict = require_role("teacher")):
     # Получаем уникальные классы из расписания учителя
     timetable = (
         sb.table("timetable_entries")
-        .select("class_id,subject")
+        .select("class_id,subject,subject_id")
         .eq("teacher_id", user["id"])
         .execute()
         .data
@@ -63,11 +63,16 @@ def get_teacher_classes(user: dict = require_role("teacher")):
     # Для каждого класса получаем предметы, которые ведет учитель
     result = []
     for cls in classes:
-        subjects = sorted({
-            e.get("subject") 
-            for e in timetable 
-            if e.get("class_id") == cls.get("id") and e.get("subject")
-        })
+        subjects_map = {}
+        for e in timetable:
+            if e.get("class_id") == cls.get("id") and e.get("subject_id"):
+                subjects_map[e.get("subject_id")] = {
+                    "id": e.get("subject_id"),
+                    "name": e.get("subject")
+                }
+        
+        subjects = sorted(subjects_map.values(), key=lambda x: x["name"])
+        
         result.append({
             "id": cls.get("id"),
             "name": cls.get("name"),
@@ -378,35 +383,33 @@ def get_lesson_details(
 
 
 @router.get("/classes/{class_id}/journal")
-def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin", "manager")):
+def get_class_journal(
+    class_id: str,
+    subject_id: str | None = None,
+    user: dict = require_role("teacher", "admin", "manager")
+):
     """Получить журнал класса с оценками по датам уроков"""
     sb = get_supabase()
     
     # Проверяем доступ
-    if user["role"] == "teacher":
-        # Учитель видит только свои уроки
-        timetable = (
-            sb.table("timetable_entries")
-            .select("id,subject,weekday,start_time")
-            .eq("class_id", class_id)
-            .eq("teacher_id", user["id"])
-            .execute()
-            .data
-            or []
-        )
-        if not timetable:
-            raise HTTPException(status_code=403, detail="No lessons found for this teacher in this class")
-    else:
-        # Админ видит все уроки класса
-        timetable = (
-            sb.table("timetable_entries")
-            .select("id,subject,teacher_id,weekday,start_time")
-            .eq("class_id", class_id)
-            .execute()
-            .data
-            or []
-        )
+    query = sb.table("timetable_entries").select("id,subject,weekday,start_time,subject_id").eq("class_id", class_id)
     
+    if user["role"] == "teacher":
+        query = query.eq("teacher_id", user["id"])
+        
+    if subject_id:
+        query = query.eq("subject_id", subject_id)
+        
+    timetable = query.execute().data or []
+    
+    if not timetable:
+        if user["role"] == "teacher":
+             # Если учитель, и нет уроков, возможно он не ведет этот предмет или класс
+             # Но чтобы не падать с 403, просто вернем пустоту, если фильтр был
+             pass
+        else:
+             pass
+             
     if not timetable:
         return {"students": [], "lessons": [], "grades": {}}
     
@@ -449,23 +452,52 @@ def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin
     
     # Группируем уроки по датам и собираем темы/ДЗ
     lessons_by_date = {}
+    
+    # Генерируем сетку уроков на учебный год
+    today = date.today()
+    # Определяем учебный год (с 1 сентября)
+    if today.month >= 9:
+        start_date = date(today.year, 9, 1)
+        end_date = date(today.year + 1, 5, 31)
+    else:
+        start_date = date(today.year - 1, 9, 1)
+        end_date = date(today.year, 5, 31)
+        
+    current = start_date
+    while current <= end_date:
+        wd = current.isoweekday()
+        day_entries = [e for e in timetable if e.get("weekday") == wd]
+        for entry in day_entries:
+            d_str = current.isoformat()
+            key = f"{d_str}_{entry['id']}"
+            lessons_by_date[key] = {
+                "date": d_str,
+                "timetable_entry_id": entry['id'],
+                "subject_name": entry.get("subject", ""),
+                "lesson_topic": None,
+                "homework": None
+            }
+        current += timedelta(days=1)
+    
     lesson_info = {}  # Храним тему и ДЗ для каждого урока
     
     for record in journal_records:
         entry_id = record.get("timetable_entry_id")
-        date = record.get("lesson_date")
+        d_str = record.get("lesson_date")
         
         # Находим информацию о уроке
         entry = next((e for e in timetable if e.get("id") == entry_id), None)
         if not entry:
             continue
         
-        key = f"{date}_{entry_id}"
+        key = f"{d_str}_{entry_id}"
         if key not in lessons_by_date:
             lessons_by_date[key] = {
-                "date": date,
+                "date": d_str,
                 "timetable_entry_id": entry_id,
-                "subject_name": entry.get("subject", "")
+                "subject_name": entry.get("subject", ""),
+                "lesson_topic": None,
+                "homework": None
             }
         
         # Собираем тему урока и ДЗ (берем первое непустое значение)
@@ -482,8 +514,10 @@ def get_class_journal(class_id: str, user: dict = require_role("teacher", "admin
     for lesson in lessons:
         key = f"{lesson['date']}_{lesson['timetable_entry_id']}"
         info = lesson_info.get(key, {})
-        lesson["lesson_topic"] = info.get("lesson_topic")
-        lesson["homework"] = info.get("homework")
+        if info.get("lesson_topic"):
+            lesson["lesson_topic"] = info.get("lesson_topic")
+        if info.get("homework"):
+            lesson["homework"] = info.get("homework")
     
     # Структура: grades[student_id][lesson_key] = {grades: [...], present: bool|null}
     grades = {}

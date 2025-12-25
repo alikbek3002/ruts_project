@@ -55,7 +55,7 @@ export function ProfilePage() {
         birth_date: data.profile.birth_date || "",
       });
     } catch (err: any) {
-      setError(err.message || "Failed to load profile");
+      setError(err.message || "Не удалось загрузить профиль");
     } finally {
       setLoading(false);
     }
@@ -68,10 +68,10 @@ export function ProfilePage() {
       const data = await apiUpdateProfile(token!, editData);
       setProfile(data.profile);
       setIsEditingInfo(false);
-      setSuccess("Profile updated successfully");
+      setSuccess("Профиль успешно обновлен");
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to update profile");
+      setError(err.message || "Не удалось обновить профиль");
     }
   }
 
@@ -81,17 +81,17 @@ export function ProfilePage() {
       setSuccess("");
 
       if (!currentPassword || !newPassword || !confirmPassword) {
-        setError("All password fields are required");
+        setError("Все поля пароля обязательны");
         return;
       }
 
       if (newPassword !== confirmPassword) {
-        setError("New passwords do not match");
+        setError("Новые пароли не совпадают");
         return;
       }
 
       if (newPassword.length < 6) {
-        setError("New password must be at least 6 characters");
+        setError("Новый пароль должен содержать не менее 6 символов");
         return;
       }
 
@@ -103,7 +103,7 @@ export function ProfilePage() {
       setConfirmPassword("");
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to change password");
+      setError(err.message || "Не удалось изменить пароль");
     }
   }
 
@@ -113,13 +113,13 @@ export function ProfilePage() {
 
     // Check file type
     if (!file.type.startsWith("image/")) {
-      setError("Please select an image file");
+      setError("Пожалуйста, выберите файл изображения");
       return;
     }
 
     // Check file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setError("Image size must be less than 5MB");
+      setError("Размер изображения должен быть менее 5 МБ");
       return;
     }
 
@@ -133,10 +133,10 @@ export function ProfilePage() {
       });
 
       setProfile((prev) => (prev ? { ...prev, photo_data_url: data.photo_url } : prev));
-      setSuccess("Photo uploaded successfully");
+      setSuccess("Фото успешно загружено");
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to upload photo");
+      setError(err.message || "Не удалось загрузить фото");
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -147,23 +147,23 @@ export function ProfilePage() {
   }
 
   async function handleDeletePhoto() {
-    if (!confirm("Are you sure you want to delete your profile photo?")) return;
+    if (!confirm("Вы уверены, что хотите удалить фото профиля?")) return;
 
     try {
       setError("");
       await apiDeleteProfilePhoto(token!);
       setProfile((prev) => (prev ? { ...prev, photo_data_url: null } : prev));
-      setSuccess("Photo deleted successfully");
+      setSuccess("Фото успешно удалено");
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to delete photo");
+      setError(err.message || "Не удалось удалить фото");
     }
   }
 
   if (loading) {
     return (
       <div className={styles.profilePage}>
-        <p>Loading profile...</p>
+        <p>Загрузка профиля...</p>
       </div>
     );
   }
@@ -171,7 +171,7 @@ export function ProfilePage() {
   if (!profile) {
     return (
       <div className={styles.profilePage}>
-        <div className={styles.error}>Profile not found</div>
+        <div className={styles.error}>Профиль не найден</div>
       </div>
     );
   }
@@ -269,11 +269,13 @@ export function ProfilePage() {
               <strong>Username:</strong> {profile.username}
             </p>
 
-            <div className={styles.formActions}>
-              <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={() => setIsEditingInfo(true)}>
-                Edit Information
-              </button>
-            </div>
+            {authUser?.role !== "teacher" && (
+              <div className={styles.formActions}>
+                <button className={`${styles.button} ${styles.buttonPrimary}`} onClick={() => setIsEditingInfo(true)}>
+                  Edit Information
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className={styles.form}>
