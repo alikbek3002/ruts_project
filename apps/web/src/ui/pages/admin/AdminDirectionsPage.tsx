@@ -45,12 +45,13 @@ export function AdminDirectionsPage() {
     <AppShell
       title={title}
       nav={[
-        { to: base, label: user.role === "manager" ? "Менеджер" : "Админ" },
+        { to: base, label: "Главная" },
         { to: `${base}/users`, label: "Пользователи" },
         { to: `${base}/classes`, label: "Группы" },
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
       <div className={styles.container}>

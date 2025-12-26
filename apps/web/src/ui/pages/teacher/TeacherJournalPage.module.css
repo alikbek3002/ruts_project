@@ -14,6 +14,239 @@
   gap: 16px;
 }
 
+.controlsRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.classesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.classCard {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.classCard:hover {
+  border-color: #4f46e5;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.classCardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.classCardMeta {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.classTopBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: #111827;
+}
+
+.backBtn:hover {
+  background: #f9fafb;
+}
+
+.classTopTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.datesBar {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.datesTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.datesChips {
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  padding-bottom: 2px;
+}
+
+.dateChip {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.dateChip:hover {
+  background: #f9fafb;
+}
+
+.dateChipSelected {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.studentsBlock {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.classSelector {
+  display: flex;
+  align-items: center;
+  background: white;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.classSelector select {
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #111827;
+  background: transparent;
+  min-width: 180px;
+}
+
+.vzvodPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.vzvodBlock {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.vzvodBlockTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.vzvodHint {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.dateList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.dateItem {
+  text-align: left;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #111827;
+}
+
+.dateItem:hover {
+  background: #f9fafb;
+}
+
+.dateItemSelected {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.studentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.studentListItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studentListAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4f46e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.studentListName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.studentListUser {
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .title {
   font-size: 24px;
   font-weight: 600;

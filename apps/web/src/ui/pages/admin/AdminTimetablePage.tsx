@@ -18,7 +18,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Save, X, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar } from "lucide-react";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -53,6 +53,13 @@ function formatDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = String(date.getFullYear()).slice(-2);
   return `${day}/${month}/${year}`;
+}
+
+function formatDayTitle(date: Date): string {
+  const weekday = date.toLocaleDateString("ru-RU", { weekday: "short" });
+  // Capitalize first letter (e.g. "пн" -> "Пн")
+  const wd = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  return `${wd} ${formatDate(date)}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -91,7 +98,8 @@ export function AdminTimetablePage() {
   const [formLessonType, setFormLessonType] = useState<"lecture" | "credit">("lecture");
 
   const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    // Admin timetable grid: Mon-Sat (6 days)
+    return Array.from({ length: 6 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
 
   async function reload() {
@@ -249,12 +257,13 @@ export function AdminTimetablePage() {
     <AppShell
       title={title}
       nav={[
-        { to: base, label: user.role === "manager" ? "Менеджер" : "Админ" },
+        { to: base, label: "Главная" },
         { to: `${base}/users`, label: "Пользователи" },
         { to: `${base}/classes`, label: "Группы" },
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
       <div className={styles.container}>
@@ -285,10 +294,19 @@ export function AdminTimetablePage() {
             </button>
             <div className={styles.currentWeek}>
               <Calendar size={16} style={{ display: "inline-block", verticalAlign: "text-bottom", marginRight: 6 }} />
-              {formatDate(weekDays[0])} - {formatDate(weekDays[6])}
+              {formatDate(weekDays[0])} - {formatDate(weekDays[weekDays.length - 1])}
             </div>
             <button className={styles.navBtn} onClick={() => setWeekStart(addDays(weekStart, 7))}>
               <ChevronRight size={18} />
+            </button>
+          </div>
+
+          <div className={styles.quickWeek}>
+            <button className={styles.quickBtn} onClick={() => setWeekStart(getMonday(new Date()))}>
+              Текущая неделя
+            </button>
+            <button className={styles.quickBtn} onClick={() => setWeekStart(addDays(getMonday(new Date()), 7))}>
+              Следующая неделя
             </button>
           </div>
         </div>
@@ -299,7 +317,7 @@ export function AdminTimetablePage() {
             <div className={styles.cellHeader}>Время</div>
             {weekDays.map((day) => (
               <div key={day.toISOString()} className={styles.cellHeader}>
-                {formatDate(day)}
+                {formatDayTitle(day)}
               </div>
             ))}
 

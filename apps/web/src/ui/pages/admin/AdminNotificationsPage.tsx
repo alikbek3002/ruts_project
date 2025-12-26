@@ -118,7 +118,7 @@ export function AdminNotificationsPage() {
     <AppShell
       title={pageTitle}
       nav={[
-        { to: base, label: user.role === "manager" ? "Менеджер" : "Админ" },
+        { to: base, label: "Главная" },
         { to: `${base}/users`, label: "Пользователи" },
         { to: `${base}/classes`, label: "Группы" },
         { to: `${base}/subjects`, label: "Предметы" },

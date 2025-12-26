@@ -1,10 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { 
   ChevronLeft, 
-  ChevronRight, 
-  Calendar, 
-  Clock, 
   MapPin, 
   BookOpen, 
   Check, 
@@ -59,6 +56,20 @@ type LessonDetails = {
   students: Student[];
 };
 
+type TeacherClass = {
+  id: string;
+  name: string;
+  subjects: Array<{ id: string; name: string }>;
+};
+
+type ClassStudentLite = { id: string; username: string; full_name: string | null; student_number?: number | null };
+
+type TeacherScheduleLesson = {
+  timetable_entry_id: string;
+  date: string;
+  class_id: string;
+};
+
 export function TeacherJournalPage() {
   const { state } = useAuth();
   const user = state.user;
@@ -76,14 +87,42 @@ export function TeacherJournalPage() {
   const [saving, setSaving] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
+  const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
+
+  const [classStudents, setClassStudents] = useState<ClassStudentLite[]>([]);
+  const [classStudentsLoading, setClassStudentsLoading] = useState(false);
+
+  const [classLessonDates, setClassLessonDates] = useState<string[]>([]);
+  const [classLessonDatesLoading, setClassLessonDatesLoading] = useState(false);
+
   // Local state for editing comments before blur
   const [editingComment, setEditingComment] = useState<{id: string, value: string} | null>(null);
 
   useEffect(() => {
     if (!token) return;
+    loadTeacherClasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!selectedClassId) return;
     loadLessonsForDate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, token]);
+  }, [selectedDate, token, selectedClassId]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!selectedClassId) {
+      setClassStudents([]);
+      setClassLessonDates([]);
+      return;
+    }
+    loadClassStudents(selectedClassId);
+    loadClassLessonDates(selectedClassId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedClassId]);
 
   useEffect(() => {
     if (!selectedLesson || !token) return;
@@ -100,11 +139,93 @@ export function TeacherJournalPage() {
       });
       if (!resp.ok) throw new Error("Failed to load lessons");
       const data = await resp.json();
-      setLessons(data.lessons || []);
+      const all: Lesson[] = data.lessons || [];
+      setLessons(all.filter((l) => l.class_id === selectedClassId));
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadTeacherClasses() {
+    if (!token) return;
+    try {
+      const resp = await trackedFetch(`/api/journal/teacher/classes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error("Failed to load teacher classes");
+      const data = await resp.json();
+      setTeacherClasses(data.classes || []);
+    } catch (e) {
+      console.error(e);
+      setTeacherClasses([]);
+    }
+  }
+
+  async function loadClassStudents(classId: string) {
+    if (!token) return;
+    setClassStudentsLoading(true);
+    try {
+      const resp = await trackedFetch(`/api/classes/${encodeURIComponent(classId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error("Failed to load class");
+      const data = await resp.json();
+      const students: ClassStudentLite[] = data.students || [];
+      const sorted = [...students].sort((a, b) => {
+        const an = a.student_number;
+        const bn = b.student_number;
+        if (an != null && bn != null) return an - bn;
+        if (an != null) return -1;
+        if (bn != null) return 1;
+        const aName = (a.full_name || a.username || "").toLowerCase();
+        const bName = (b.full_name || b.username || "").toLowerCase();
+        return aName.localeCompare(bName);
+      });
+      setClassStudents(sorted);
+    } catch (e) {
+      console.error(e);
+      setClassStudents([]);
+    } finally {
+      setClassStudentsLoading(false);
+    }
+  }
+
+  function getAcademicYearStartISO(nowISO: string): string {
+    const d = new Date(nowISO);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const startYear = month >= 9 ? year : year - 1;
+    const start = new Date(Date.UTC(startYear, 8, 1)); // Sep = 8
+    return start.toISOString().split("T")[0];
+  }
+
+  async function loadClassLessonDates(classId: string) {
+    if (!token) return;
+    setClassLessonDatesLoading(true);
+    try {
+      const todayISO = new Date().toISOString().split("T")[0];
+      const fromISO = getAcademicYearStartISO(todayISO);
+      const resp = await trackedFetch(
+        `/api/journal/teacher/schedule?date_from=${encodeURIComponent(fromISO)}&date_to=${encodeURIComponent(todayISO)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!resp.ok) throw new Error("Failed to load teacher schedule");
+      const data = await resp.json();
+      const lessons: TeacherScheduleLesson[] = data.lessons || [];
+      const dates = Array.from(new Set(lessons.filter((l) => l.class_id === classId).map((l) => l.date).filter(Boolean)));
+      dates.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+      setClassLessonDates(dates);
+      setSelectedDate(dates[0] || todayISO);
+      setSelectedLesson(null);
+      setLessonDetails(null);
+      setSelectedStudents(new Set());
+    } catch (e) {
+      console.error(e);
+      setClassLessonDates([]);
+    } finally {
+      setClassLessonDatesLoading(false);
     }
   }
 
@@ -264,7 +385,7 @@ export function TeacherJournalPage() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "teacher") return <Navigate to="/app" replace />;
 
-  const today = new Date().toISOString().split("T")[0];
+  const selectedClass = useMemo(() => teacherClasses.find((c) => c.id === selectedClassId) || null, [teacherClasses, selectedClassId]);
 
   return (
     <AppShell
@@ -283,48 +404,112 @@ export function TeacherJournalPage() {
             <BookOpen size={28} />
             Классный журнал
           </h1>
+        </div>
 
-          <div className={styles.dateSelector}>
-            <button 
-              className={styles.navBtn} 
-              onClick={() => setSelectedDate(new Date(new Date(selectedDate).getTime() - 86400000).toISOString().split("T")[0])}
-            >
-              <ChevronLeft size={20} />
-            </button>
-            
-            <div className={styles.dateDisplay}>
-              {new Date(selectedDate).toLocaleDateString("ru-RU", { 
-                weekday: "short", 
-                day: "numeric", 
-                month: "long"
-              })}
+        {!selectedClassId ? (
+          <>
+            <h3 className={styles.sectionTitle}>Выберите взвод</h3>
+            {teacherClasses.length === 0 ? (
+              <div className={styles.emptyState}>У вас нет назначенных взводов в расписании</div>
+            ) : (
+              <div className={styles.classesGrid}>
+                {teacherClasses.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={styles.classCard}
+                    onClick={() => {
+                      setSelectedClassId(c.id);
+                    }}
+                  >
+                    <div className={styles.classCardTitle}>{c.name}</div>
+                    {c.subjects?.length ? (
+                      <div className={styles.classCardMeta}>
+                        {c.subjects.map((s) => s.name).slice(0, 3).join(", ")}
+                        {c.subjects.length > 3 ? "…" : ""}
+                      </div>
+                    ) : (
+                      <div className={styles.classCardMeta}>Предметы не указаны</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className={styles.classTopBar}>
+              <button
+                type="button"
+                className={styles.backBtn}
+                onClick={() => {
+                  setSelectedClassId("");
+                  setSelectedLesson(null);
+                  setLessonDetails(null);
+                  setSelectedStudents(new Set());
+                }}
+              >
+                <ChevronLeft size={18} /> Назад
+              </button>
+              <div className={styles.classTopTitle}>{selectedClass?.name || "Взвод"}</div>
             </div>
 
-            <button 
-              className={styles.navBtn} 
-              onClick={() => setSelectedDate(new Date(new Date(selectedDate).getTime() + 86400000).toISOString().split("T")[0])}
-            >
-              <ChevronRight size={20} />
-            </button>
+            <div className={styles.datesBar}>
+              <div className={styles.datesTitle}>Даты уроков</div>
+              {classLessonDatesLoading ? (
+                <div className={styles.vzvodHint}>Загрузка...</div>
+              ) : classLessonDates.length === 0 ? (
+                <div className={styles.vzvodHint}>У вас нет уроков с этим взводом</div>
+              ) : (
+                <div className={styles.datesChips}>
+                  {classLessonDates.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={`${styles.dateChip} ${d === selectedDate ? styles.dateChipSelected : ""}`}
+                      onClick={() => {
+                        setSelectedLesson(null);
+                        setLessonDetails(null);
+                        setSelectedDate(d);
+                      }}
+                    >
+                      {new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-            <button className={styles.todayBtn} onClick={() => setSelectedDate(today)}>
-              Сегодня
-            </button>
-            
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              style={{ marginLeft: 8, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px' }}
-            />
-          </div>
-        </div>
+            <div className={styles.studentsBlock}>
+              <div className={styles.vzvodBlockTitle}>Список взвода</div>
+              {classStudentsLoading ? (
+                <div className={styles.vzvodHint}>Загрузка...</div>
+              ) : classStudents.length === 0 ? (
+                <div className={styles.vzvodHint}>В этом взводе нет студентов</div>
+              ) : (
+                <div className={styles.studentList}>
+                  {classStudents.map((s, idx) => (
+                    <div key={s.id} className={styles.studentListItem}>
+                      <div className={styles.studentListAvatar}>{((s.full_name || s.username || "?") as string).charAt(0)}</div>
+                      <div>
+                        <div className={styles.studentListName}>
+                          {(s.student_number ?? idx + 1).toString().padStart(2, "0")} — {s.full_name || s.username}
+                        </div>
+                        <div className={styles.studentListUser}>{s.username}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {loading && !lessonDetails && <Loader text="Загрузка..." />}
 
-        {!selectedLesson && !loading && (
+        {selectedClassId && !selectedLesson && !loading && (
           <>
-            <h3 className={styles.sectionTitle}>Уроки на сегодня:</h3>
+            <h3 className={styles.sectionTitle}>Уроки на выбранную дату:</h3>
             {lessons.length === 0 ? (
               <div className={styles.emptyState}>На эту дату уроков нет</div>
             ) : (

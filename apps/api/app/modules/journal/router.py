@@ -6,10 +6,62 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.deps import CurrentUser, require_role
+from app.core.monitor import timed
 from app.db.supabase_client import get_supabase
 from app.core.monitor import timed
 
 router = APIRouter()
+
+
+def _teacher_subject_ids(sb, teacher_id: str) -> set[str]:
+    rows = (
+        sb.table("teacher_subjects")
+        .select("subject_id")
+        .eq("teacher_id", teacher_id)
+        .execute()
+        .data
+        or []
+    )
+    return {str(r.get("subject_id")) for r in rows if r.get("subject_id")}
+
+
+def _timetable_entries_for_teacher(sb, teacher_id: str, select_fields: str, weekday: int | None = None) -> list[dict]:
+    q1 = sb.table("timetable_entries").select(select_fields).eq("active", True).eq("teacher_id", teacher_id)
+    if weekday is not None:
+        q1 = q1.eq("weekday", weekday)
+    rows = q1.execute().data or []
+
+    subject_ids = sorted(_teacher_subject_ids(sb, teacher_id))
+    if subject_ids:
+        q2 = (
+            sb.table("timetable_entries")
+            .select(select_fields)
+            .eq("active", True)
+            .is_("teacher_id", "null")
+            .in_("subject_id", subject_ids)
+        )
+        if weekday is not None:
+            q2 = q2.eq("weekday", weekday)
+        rows2 = q2.execute().data or []
+    else:
+        rows2 = []
+
+    merged: dict[str, dict] = {}
+    for r in (rows + rows2):
+        rid = r.get("id")
+        if rid:
+            merged[str(rid)] = r
+    return list(merged.values())
+
+
+def _teacher_can_access_entry(sb, teacher_id: str, entry_data: dict) -> bool:
+    if entry_data.get("teacher_id") == teacher_id:
+        return True
+    if entry_data.get("teacher_id") is None:
+        subject_id = entry_data.get("subject_id")
+        if subject_id and str(subject_id) in _teacher_subject_ids(sb, teacher_id):
+            return True
+    return False
 
 
 class GradeEntry(BaseModel):
@@ -45,15 +97,10 @@ def get_teacher_classes(user: dict = require_role("teacher")):
     if cached is not None:
         return {"classes": cached}
     
-    # Получаем уникальные классы из расписания учителя
-    timetable = (
-        sb.table("timetable_entries")
-        .select("class_id,subject,subject_id")
-        .eq("teacher_id", user["id"])
-        .execute()
-        .data
-        or []
-    )
+    # Получаем уникальные классы из расписания учителя.
+    # Важно: teacher_id может быть NULL (см. migration timetable_teacher_optional),
+    # поэтому дополнительно учитываем записи по предметам учителя (teacher_subjects).
+    timetable = _timetable_entries_for_teacher(sb, user["id"], "id,class_id,subject,subject_id")
     
     class_ids = list({e.get("class_id") for e in timetable if e.get("class_id")})
     
@@ -101,14 +148,12 @@ def get_teacher_schedule(
     """Получить расписание учителя на диапазон дат с уроками"""
     sb = get_supabase()
     
-    # Получаем все уроки учителя из расписания
-    timetable = (
-        sb.table("timetable_entries")
-        .select("id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)")
-        .eq("teacher_id", user["id"])
-        .execute()
-        .data
-        or []
+    # Получаем все уроки учителя из расписания.
+    # Учитываем записи с teacher_id=NULL, если предмет закреплён за учителем.
+    timetable = _timetable_entries_for_teacher(
+        sb,
+        user["id"],
+        "id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)",
     )
     
     if not timetable:
@@ -165,17 +210,14 @@ def get_teacher_lessons_for_date(
     lesson_date_obj = date.fromisoformat(lesson_date)
     weekday = lesson_date_obj.isoweekday()
     
-    # Получаем расписание на этот день
-    timetable = (
-        sb.table("timetable_entries")
-        .select("id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)")
-        .eq("teacher_id", user["id"])
-        .eq("weekday", weekday)
-        .order("start_time")
-        .execute()
-        .data
-        or []
+    # Получаем расписание на этот день.
+    timetable = _timetable_entries_for_teacher(
+        sb,
+        user["id"],
+        "id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)",
+        weekday=weekday,
     )
+    timetable.sort(key=lambda x: (x.get("start_time") or ""))
     
     if not timetable:
         return {"lessons": []}
@@ -246,7 +288,7 @@ def bulk_mark_attendance(
     entry_data = entry[0]
     
     # Проверяем доступ для учителя
-    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+    if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Создаем/обновляем записи для всех студентов
@@ -294,7 +336,7 @@ def get_lesson_details(
     entry_data = entry[0]
     
     # Проверяем доступ для учителя
-    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+    if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
     
     class_id = entry_data.get("class_id")
@@ -607,7 +649,7 @@ def add_grade(
     # Проверяем урок
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id")
+        .select("id,class_id,teacher_id,subject_id")
         .eq("id", payload.timetable_entry_id)
         .limit(1)
         .execute()
@@ -621,7 +663,7 @@ def add_grade(
         raise HTTPException(status_code=400, detail="Lesson does not belong to this class")
     
     # Проверяем доступ для учителя
-    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+    if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Проверяем, что студент в этом классе
@@ -810,7 +852,7 @@ def update_lesson_info(
     # Проверяем урок
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id")
+        .select("id,class_id,teacher_id,subject_id")
         .eq("id", payload.timetable_entry_id)
         .eq("class_id", class_id)
         .limit(1)
@@ -823,7 +865,7 @@ def update_lesson_info(
     entry_data = entry[0]
     
     # Проверяем права
-    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+    if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Not your lesson")
     
     # Проверяем есть ли уже записи для этого урока/даты
@@ -901,7 +943,7 @@ def get_lesson_info(
     subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
     
     # Проверяем доступ
-    if user["role"] == "teacher" and entry_data.get("teacher_id") != user["id"]:
+    if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Not your lesson")
     
     if user["role"] == "student":

@@ -1,7 +1,8 @@
 .container {
-  padding: var(--spacing-lg);
-  max-width: 1600px;
+  padding: 24px;
+  max-width: 1400px;
   margin: 0 auto;
+  width: 100%;
 }
 
 .header {
@@ -24,6 +25,26 @@
   align-items: center;
   margin-bottom: var(--spacing-lg);
   flex-wrap: wrap;
+}
+
+.quickWeek {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.quickBtn {
+  background: white;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.quickBtn:hover {
+  background: var(--color-bg);
 }
 
 .select {
@@ -70,7 +91,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: 80px repeat(6, 1fr); /* Time + 6 days */
+  grid-template-columns: 96px repeat(6, 1fr); /* Time + Mon-Sat */
   gap: 1px;
   background: var(--color-border);
   border: 1px solid var(--color-border);
@@ -85,6 +106,7 @@
   font-weight: 600;
   color: var(--color-text);
   font-size: 14px;
+  line-height: 1.2;
 }
 
 .cellTime {

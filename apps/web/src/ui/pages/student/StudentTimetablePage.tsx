@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { MapPin, User } from "lucide-react";
 import { apiTimetableWeek, type WeekTimetableItem } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
-import styles from "../admin/AdminTimetable.module.css";
+import styles from "../teacher/TeacherTimetable.module.css";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -37,15 +38,6 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-function mondayOf(d: Date) {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
 function ymd(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -54,10 +46,11 @@ function ymd(date: Date) {
 }
 
 function formatDate(date: Date): string {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
-  return `${day}/${month}/${year}`;
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
+
+function getDayName(date: Date): string {
+  return date.toLocaleDateString("ru-RU", { weekday: "short" }).toUpperCase();
 }
 
 export function StudentTimetablePage() {
@@ -72,8 +65,11 @@ export function StudentTimetablePage() {
   const [err, setErr] = useState<string | null>(null);
 
   const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    return Array.from({ length: 6 }, (_, i) => addDays(weekStart, i)); // Mon–Sat
   }, [weekStart]);
+
+  const today = new Date();
+  const isCurrentWeek = getMonday(today).getTime() === weekStart.getTime();
 
   useEffect(() => {
     if (!can || !token) return;
@@ -96,65 +92,87 @@ export function StudentTimetablePage() {
         { to: "/app/student/library", label: "Библиотека" },
       ]}
     >
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-      <div className={styles.weekNav}>
-        <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, -7))}>
-          ←
-        </button>
-        <div className={styles.weekLabel}>{formatDate(weekStart)}</div>
-        <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, 7))}>
-          →
-        </button>
-      </div>
-
-      <div className={styles.gridContainer}>
-        <div className={styles.timeHeader}>
-          <div className={styles.timeSlot}></div>
-          {timeSlots.map((ts) => (
-            <div key={ts.slot} className={styles.timeSlot}>
-              <span className={styles.slotNumber}>{ts.slot}</span>
-              <span className={styles.slotTime}>
-                {ts.start}-{ts.end}
-              </span>
-              {(ts as any).labelKey && (
-                <span className={styles.slotTime} style={{ fontSize: "10px", color: "#6ba92c" }}>
-                  {t((ts as any).labelKey)}
-                </span>
-              )}
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div className={styles.weekNav}>
+            <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, -7))}>
+              ←
+            </button>
+            <div className={styles.weekLabel}>
+              {formatDate(weekStart)} — {formatDate(addDays(weekStart, 6))}
             </div>
-          ))}
+            <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, 7))}>
+              →
+            </button>
+          </div>
+
+          {!isCurrentWeek && (
+            <button className={styles.todayButton} onClick={() => setWeekStart(getMonday(new Date()))}>
+              Вернуться к сегодня
+            </button>
+          )}
         </div>
 
-        <div className={styles.grid}>
-          {weekDays.map((day) => (
-            <div className={styles.dayRow} key={day.toISOString()}>
-              <div className={styles.dateCell}>{formatDate(day)}</div>
-              {timeSlots.map((ts) => {
-                const weekday = toDbWeekday(day);
-                const lesson =
-                  items.find(
+        {err && <div style={{ padding: 12, background: "#fee", color: "#c00", borderRadius: 8 }}>{err}</div>}
+
+        <div className={styles.timetableWrapper}>
+          <div className={styles.grid}>
+            {/* Header Row */}
+            <div className={styles.headerCell}></div>
+            {weekDays.map((day) => {
+              const isToday = ymd(day) === ymd(today);
+              return (
+                <div key={day.toISOString()} className={`${styles.headerCell} ${isToday ? styles.todayHeader : ""}`}>
+                  <div className={styles.dayName}>{getDayName(day)}</div>
+                  <div className={styles.dayDate}>{formatDate(day)}</div>
+                </div>
+              );
+            })}
+
+            {/* Time Slots */}
+            {timeSlots.map((ts) => (
+              <React.Fragment key={ts.slot}>
+                <div className={styles.timeCell}>
+                  <span className={styles.slotNumber}>{ts.slot}</span>
+                  <span className={styles.slotTime}>{ts.start}</span>
+                  <span className={styles.slotTime}>{ts.end}</span>
+                  {(ts as any).labelKey && <span className={styles.lunchLabel}>{t((ts as any).labelKey)}</span>}
+                </div>
+
+                {weekDays.map((day) => {
+                  const weekday = toDbWeekday(day);
+                  const lesson = items.find(
                     (e) =>
                       e.weekday === weekday &&
                       hhmm(e.start_time) === ts.start &&
                       hhmm(e.end_time) === ts.end
-                  ) || null;
-                return (
-                  <div key={ts.slot} className={styles.cell}>
-                    {lesson ? (
-                      <div className={styles.lesson}>
-                        {lesson.room && <div className={styles.lessonRoom}>{lesson.room}</div>}
-                        <div className={styles.lessonSubject}>{lesson.subject}</div>
-                        <div className={styles.lessonTeacher}>{lesson.teacher_name || "---"}</div>
-                      </div>
-                    ) : (
-                      <div className={styles.readonlyEmpty} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                  );
+
+                  return (
+                    <div key={day.toISOString()} className={styles.cell}>
+                      {lesson ? (
+                        <div className={styles.lessonCard} style={{ cursor: "default" }}>
+                          <div className={styles.lessonSubject}>{lesson.subject}</div>
+                          <div className={styles.lessonClass}>
+                            <User size={12} style={{ display: "inline", marginRight: 4 }} />
+                            {lesson.teacher_name || "---"}
+                          </div>
+                          {lesson.room && (
+                            <div className={styles.lessonRoom}>
+                              <MapPin size={12} />
+                              {lesson.room}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className={styles.emptyCell} />
+                      )}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
     </AppShell>

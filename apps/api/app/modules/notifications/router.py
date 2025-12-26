@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.deps import CurrentUser, require_role
+from app.core.monitor import timed
 from app.db.supabase_client import get_supabase
 from app.core.monitor import timed
 
