@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.core.deps import CurrentUser, require_role
 from app.db.supabase_client import get_supabase
+from app.core.monitor import timed
 
 router = APIRouter()
 
@@ -47,8 +48,6 @@ def create_notification(
 
 
 @router.get("")
-from app.core.monitor import timed
-
 @timed("list_notifications")
 def list_notifications(user: CurrentUser, limit: int = 30, offset: int = 0):
     """Get notifications for current user (supports pagination)."""

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from openpyxl import Workbook
 
 from app.core.deps import CurrentUser, require_role
+from app.core.monitor import timed
 from app.core.provisioning import (
     full_name_from_parts,
     generate_numeric_password,
@@ -258,8 +259,6 @@ def generate_credentials(payload: CredentialsIn, actor: dict = require_role("adm
 
     return {"username": username, "password": password}
 
-
-from app.core.monitor import timed
 
 @router.get("/users")
 @timed("admin_list_users")

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.core.deps import CurrentUser, require_role
 from app.db.supabase_client import get_supabase
+from app.core.monitor import timed
 
 router = APIRouter()
 
@@ -32,8 +33,6 @@ class AddGradeIn(BaseModel):
 
 
 @router.get("/teacher/classes")
-from app.core.monitor import timed
-
 @timed("get_teacher_classes")
 def get_teacher_classes(user: dict = require_role("teacher")):
     """Получить все классы учителя"""
@@ -93,8 +92,6 @@ def get_teacher_classes(user: dict = require_role("teacher")):
 
 
 @router.get("/teacher/schedule")
-from app.core.monitor import timed
-
 @timed("get_teacher_schedule")
 def get_teacher_schedule(
     date_from: str,
@@ -156,8 +153,6 @@ def get_teacher_schedule(
 
 
 @router.get("/teacher/lessons/{lesson_date}")
-from app.core.monitor import timed
-
 @timed("get_teacher_lessons_for_date")
 def get_teacher_lessons_for_date(
     lesson_date: str,

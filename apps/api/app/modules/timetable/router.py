@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import CurrentUser, require_role, get_current_user
 from app.db.supabase_client import get_supabase
+from app.core.monitor import timed
 
 router = APIRouter()
 
@@ -177,10 +178,8 @@ def list_entries(class_id: str | None = None, user: dict = require_role("admin",
 
 
 @router.get("/week")
-from app.core.monitor import timed
-
 @timed("get_week")
-def get_week(weekStart: str, user: CurrentUser):
+def get_week(weekStart: str, user: dict = Depends(get_current_user)):
     # weekStart is YYYY-MM-DD, Monday preferred.
     start = date.fromisoformat(weekStart)
     end = start + timedelta(days=7)
