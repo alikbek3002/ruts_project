@@ -109,6 +109,17 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessTokenDedup(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return await refreshPromise;
+}
+
 function hasAuthHeader(init?: RequestInit): boolean {
   const headers = init?.headers as any;
   if (!headers) return false;
@@ -136,7 +147,7 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
   }
 
   if (res.status === 401 && _retry && hasAuthHeader(init)) {
-    const newToken = await refreshAccessToken();
+    const newToken = await refreshAccessTokenDedup();
     if (newToken) {
       const nextInit: RequestInit = {
         ...(init ?? {}),

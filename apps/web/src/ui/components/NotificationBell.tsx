@@ -19,6 +19,8 @@ export function NotificationBell({ token }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!token) return;
+
     loadUnreadCount();
     // Poll for new notifications every 30 seconds
     const interval = setInterval(loadUnreadCount, 30000);
@@ -26,6 +28,7 @@ export function NotificationBell({ token }: Props) {
   }, [token]);
 
   async function loadUnreadCount() {
+    if (!token) return;
     try {
       const data = await apiGetUnreadNotificationCount(token);
       setUnreadCount(data.count);

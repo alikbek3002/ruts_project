@@ -124,7 +124,7 @@ class CurriculumTemplateResponse(BaseModel):
 
 
 class AutoScheduleRequest(BaseModel):
-    template_id: UUID
+    template_id: Optional[UUID] = None
     force: bool = Field(default=False, description="Force regenerate even if schedule exists")
 
 
@@ -252,7 +252,7 @@ async def list_streams(
         _raise_streams_schema_help(e)
 
 
-@router.get("/{stream_id}", response_model=StreamDetailResponse)
+@router.get("/{stream_id:uuid}", response_model=StreamDetailResponse)
 async def get_stream(
     stream_id: UUID,
     user: dict = require_role("admin", "manager", "teacher"),
@@ -318,7 +318,7 @@ async def get_stream(
         _raise_streams_schema_help(e)
 
 
-@router.patch("/{stream_id}", response_model=StreamResponse)
+@router.patch("/{stream_id:uuid}", response_model=StreamResponse)
 async def update_stream(
     stream_id: UUID,
     data: StreamUpdate,
@@ -397,7 +397,7 @@ async def update_stream(
     )
 
 
-@router.delete("/{stream_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{stream_id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_stream(
     stream_id: UUID,
     user: dict = require_role("admin"),
@@ -420,7 +420,7 @@ async def delete_stream(
 # STREAM CLASS MANAGEMENT
 # ============================================================================
 
-@router.post("/{stream_id}/classes", status_code=status.HTTP_201_CREATED)
+@router.post("/{stream_id:uuid}/classes", status_code=status.HTTP_201_CREATED)
 async def add_classes_to_stream(
     stream_id: UUID,
     data: AddClassesToStream,
@@ -473,7 +473,7 @@ async def add_classes_to_stream(
     }
 
 
-@router.delete("/{stream_id}/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{stream_id:uuid}/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_class_from_stream(
     stream_id: UUID,
     class_id: UUID,
@@ -650,14 +650,13 @@ async def delete_curriculum_item(
 from app.modules.streams.scheduler import generate_schedule
 
 
-@router.post("/{stream_id}/generate-schedule", response_model=AutoScheduleResponse)
+@router.post("/{stream_id:uuid}/generate-schedule", response_model=AutoScheduleResponse)
 async def auto_generate_schedule(
     stream_id: UUID,
     data: AutoScheduleRequest,
     user: dict = require_role("admin", "manager"),
 ):
-    """
-    Auto-generate timetable for a stream based on curriculum template
+    """Auto-generate timetable for a stream based on curriculum template
     
     This will:
     - Load curriculum template (subject hours per week)
@@ -673,7 +672,7 @@ async def auto_generate_schedule(
     result = await generate_schedule(
         sb=sb,
         stream_id=str(stream_id),
-        template_id=str(data.template_id),
+        template_id=str(data.template_id) if data.template_id else None,
         force=data.force,
         user_id=str(user["id"]),
     )

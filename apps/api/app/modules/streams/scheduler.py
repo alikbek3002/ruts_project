@@ -16,7 +16,8 @@ from uuid import UUID
 from collections import defaultdict
 import random
 from calendar import monthrange
-
+    # For each timetable entry, generate journal entries for all dates in range.
+    # IMPORTANT: do not overwrite existing marks/attendance. We insert only missing rows.
 from fastapi import HTTPException
 
 
@@ -206,70 +207,97 @@ def generate_journal_entries_for_stream(
     Returns number of entries created
     """
     # Get all timetable entries for this stream
-    timetable_result = sb.table("timetable_entries").select("*").eq("stream_id", stream_id).eq("active", True).execute()
+    timetable_result = (
+        sb.table("timetable_entries")
+        .select("id,weekday,class_id,class_ids")
+        .eq("stream_id", stream_id)
+        .eq("active", True)
+        .execute()
+    )
     
     if not timetable_result.data:
         return 0
     
-    # For each timetable entry, generate journal entries for all dates in range
-    journal_entries = []
-    
+    # Precompute lesson dates for each weekday in range (skip Saturday)
+    dates_by_weekday: Dict[int, List[date]] = {i: [] for i in range(7)}
+    current = start_date
+    while current <= end_date:
+        wd = current.weekday()  # Mon=0 .. Sun=6
+        if wd != 5:  # Skip Saturday
+            dates_by_weekday[wd].append(current)
+        current += timedelta(days=1)
+
+    # Load all students for all classes involved in this stream in one query
+    all_class_ids: Set[str] = set()
+    normalized_entries: List[Dict[str, Any]] = []
     for entry in timetable_result.data:
-        weekday = entry["weekday"]  # 0=Mon, 1=Tue, etc.
-        timetable_entry_id = entry["id"]
-        
-        # Get all class IDs (support both single class_id and class_ids array)
-        class_ids = entry.get("class_ids") or ([entry["class_id"]] if entry.get("class_id") else [])
-        
+        class_ids = entry.get("class_ids") or ([entry.get("class_id")] if entry.get("class_id") else [])
+        class_ids = [cid for cid in class_ids if cid]
         if not class_ids:
             continue
-        
-        # Find all dates matching this weekday in the date range
-        current = start_date
-        lesson_dates = []
-        
-        while current <= end_date:
-            # Skip Saturdays (weekday=5 in Python, but in DB we use 0-6 where 0=Mon)
-            # Python: Mon=0, Sat=5, Sun=6
-            # Our DB: Mon=0, Sat=5, Sun=6 (same)
-            if current.weekday() == weekday and current.weekday() != 5:  # Not Saturday
-                lesson_dates.append(current)
-            current += timedelta(days=1)
-        
-        # For each lesson date, create journal entries for all students in all classes
+        normalized_entries.append(
+            {
+                "id": entry["id"],
+                "weekday": entry["weekday"],
+                "class_ids": class_ids,
+            }
+        )
+        for cid in class_ids:
+            all_class_ids.add(str(cid))
+
+    class_to_students: Dict[str, List[str]] = {cid: [] for cid in all_class_ids}
+    if all_class_ids:
+        enrollments = (
+            sb.table("class_enrollments")
+            .select("class_id,student_id")
+            .in_("class_id", list(all_class_ids))
+            .execute()
+        )
+        for row in enrollments.data or []:
+            class_to_students[str(row["class_id"])].append(str(row["student_id"]))
+
+    # IMPORTANT: do not overwrite existing marks/attendance. Insert only missing rows.
+    inserted = 0
+    batch_size = 500
+    batch: List[Dict[str, Any]] = []
+
+    for entry in normalized_entries:
+        weekday = int(entry["weekday"])
+        timetable_entry_id = entry["id"]
+        lesson_dates = dates_by_weekday.get(weekday) or []
+        if not lesson_dates:
+            continue
+
         for lesson_date in lesson_dates:
-            for class_id in class_ids:
-                # Get all students in this class
-                students_result = sb.table("class_enrollments").select("student_id").eq("class_id", class_id).execute()
-                
-                for student_row in students_result.data:
-                    student_id = student_row["student_id"]
-                    
-                    # Check if entry already exists
-                    existing = sb.table("lesson_journal").select("student_id").eq("timetable_entry_id", timetable_entry_id).eq("lesson_date", lesson_date.isoformat()).eq("student_id", student_id).execute()
-                    
-                    if not existing.data:
-                        journal_entries.append({
+            lesson_date_str = lesson_date.isoformat()
+            for class_id in entry["class_ids"]:
+                for student_id in class_to_students.get(str(class_id), []):
+                    batch.append(
+                        {
                             "timetable_entry_id": timetable_entry_id,
-                            "lesson_date": lesson_date.isoformat(),
+                            "lesson_date": lesson_date_str,
                             "student_id": student_id,
-                            "present": None,  # Not marked yet
-                            "grade": None,
-                            "comment": None,
-                            "lesson_topic": None,
-                            "homework": None,
                             "created_by": created_by_id,
-                        })
-    
-    # Batch insert journal entries
-    if journal_entries:
-        # Insert in batches of 1000 to avoid payload limits
-        batch_size = 1000
-        for i in range(0, len(journal_entries), batch_size):
-            batch = journal_entries[i:i+batch_size]
-            sb.table("lesson_journal").insert(batch).execute()
-    
-    return len(journal_entries)
+                        }
+                    )
+                    if len(batch) >= batch_size:
+                        sb.table("lesson_journal").upsert(
+                            batch,
+                            on_conflict="timetable_entry_id,lesson_date,student_id",
+                            ignore_duplicates=True,
+                        ).execute()
+                        inserted += len(batch)
+                        batch = []
+
+    if batch:
+        sb.table("lesson_journal").upsert(
+            batch,
+            on_conflict="timetable_entry_id,lesson_date,student_id",
+            ignore_duplicates=True,
+        ).execute()
+        inserted += len(batch)
+
+    return inserted
 
 
 def group_classes_optimally(class_ids: List[str], min_group: int = 2, max_group: int = 4) -> List[List[str]]:
@@ -309,7 +337,7 @@ def group_classes_optimally(class_ids: List[str], min_group: int = 2, max_group:
 async def generate_schedule(
     sb,
     stream_id: str,
-    template_id: str,
+    template_id: Optional[str] = None,
     force: bool = False,
     user_id: str = None,  # User who triggered the generation
 ) -> Dict[str, Any]:
@@ -330,6 +358,8 @@ async def generate_schedule(
     7. Return summary
     """
     
+    warnings: List[str] = []
+
     # ========================================================================
     # 1. LOAD STREAM AND VALIDATE
     # ========================================================================
@@ -338,35 +368,168 @@ async def generate_schedule(
         raise HTTPException(status_code=404, detail="Stream not found")
     
     stream = stream_result.data[0]
-    
-    # Check if already has schedule
-    if not force:
-        existing_entries = sb.table("timetable_entries").select("id", count="exact").eq("stream_id", stream_id).eq("active", True).execute()
-        if existing_entries.count and existing_entries.count > 0:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Stream already has {existing_entries.count} timetable entries. Use force=true to regenerate."
+
+    # Check if stream already has timetable entries
+    existing_entries = (
+        sb.table("timetable_entries")
+        .select("id", count="exact")
+        .eq("stream_id", stream_id)
+        .eq("active", True)
+        .execute()
+    )
+
+    if existing_entries.data and not force:
+        # Stream already has schedule, don't regenerate but do fill journal for 3 months
+        journal_entries_created = generate_journal_entries_for_stream(
+            sb,
+            stream_id,
+            datetime.fromisoformat(stream["start_date"]).date(),
+            datetime.fromisoformat(stream["end_date"]).date(),
+            user_id or stream["created_by"],
+        )
+        return {
+            "stream_id": stream_id,
+            "entries_created": 0,
+            "journal_entries_created": journal_entries_created,
+            "message": "Расписание уже существует. Журнал успешно обновлён.",
+            "warnings": warnings,
+        }
+
+    if force and existing_entries.data:
+        # Deactivate old entries instead of deleting (preserve history)
+        sb.table("timetable_entries").update({"active": False}).eq("stream_id", stream_id).execute()
+
+    # ========================================================================
+    # 2. LOAD CLASSES
+    # ========================================================================
+    classes_result = sb.table("stream_classes").select("class_id").eq("stream_id", stream_id).execute()
+    if not classes_result.data:
+        raise HTTPException(status_code=400, detail="Stream has no classes. Add classes to the stream first.")
+
+    class_ids = [c["class_id"] for c in classes_result.data]
+
+    # ========================================================================
+    # 3. LOAD CURRICULUM TEMPLATE
+    # ========================================================================
+
+    # If template_id not provided, try to find default
+    if not template_id:
+        stream_direction_id = stream.get("direction_id")
+
+        # Try direction-specific default first
+        if stream_direction_id:
+            dir_default = (
+                sb.table("curriculum_templates")
+                .select("id")
+                .eq("is_default", True)
+                .eq("direction_id", stream_direction_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
             )
-    
-    # Get classes in stream
-    stream_classes_result = sb.table("stream_classes").select("class_id").eq("stream_id", stream_id).execute()
-    if not stream_classes_result.data:
-        raise HTTPException(status_code=400, detail="Stream has no classes. Add classes first.")
-    
-    class_ids = [sc["class_id"] for sc in stream_classes_result.data]
-    
-    # ========================================================================
-    # 2. LOAD CURRICULUM TEMPLATE
-    # ========================================================================
+            if dir_default.data:
+                template_id = dir_default.data[0]["id"]
+
+        # Fall back to global default
+        if not template_id:
+            global_default = (
+                sb.table("curriculum_templates")
+                .select("id")
+                .eq("is_default", True)
+                .is_("direction_id", "null")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if global_default.data:
+                template_id = global_default.data[0]["id"]
+
+        if not template_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Не найден учебный шаблон. Создайте шаблон по умолчанию или выберите существующий."
+            )
+
+    # Load selected template
     template_result = sb.table("curriculum_templates").select("*").eq("id", template_id).execute()
     if not template_result.data:
         raise HTTPException(status_code=404, detail="Curriculum template not found")
-    
+
+    selected_template = template_result.data[0]
+
     # Get template items (subjects with hours)
-    items_result = sb.table("curriculum_template_items").select("*, subjects(id, name)").eq("template_id", template_id).execute()
-    
+    items_result = (
+        sb.table("curriculum_template_items")
+        .select("*, subjects(id, name)")
+        .eq("template_id", template_id)
+        .execute()
+    )
+
+    # If selected template is empty, try to fall back to a default template
     if not items_result.data:
-        raise HTTPException(status_code=400, detail="Curriculum template has no subjects")
+        stream_direction_id = stream.get("direction_id")
+
+        def _template_has_items(tid: str) -> bool:
+            check = (
+                sb.table("curriculum_template_items")
+                .select("id", count="exact")
+                .eq("template_id", tid)
+                .limit(1)
+                .execute()
+            )
+            return bool(check.data)
+
+        fallback_template = None
+
+        if stream_direction_id:
+            direction_defaults = (
+                sb.table("curriculum_templates")
+                .select("id, name")
+                .eq("is_default", True)
+                .eq("direction_id", stream_direction_id)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            for t in direction_defaults.data or []:
+                if _template_has_items(t["id"]):
+                    fallback_template = t
+                    break
+
+        if not fallback_template:
+            global_defaults = (
+                sb.table("curriculum_templates")
+                .select("id, name")
+                .eq("is_default", True)
+                .is_("direction_id", "null")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            for t in global_defaults.data or []:
+                if _template_has_items(t["id"]):
+                    fallback_template = t
+                    break
+
+        if fallback_template:
+            warnings.append(
+                f"Выбранный шаблон был пуст. Использован шаблон '{fallback_template['name']}' по умолчанию."
+            )
+            template_id = fallback_template["id"]
+            selected_template = {**selected_template, **fallback_template}
+            items_result = (
+                sb.table("curriculum_template_items")
+                .select("*, subjects(id, name)")
+                .eq("template_id", template_id)
+                .execute()
+            )
+
+        if not items_result.data:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Curriculum template has no subjects. Add subjects (items) to the template "
+                    "and try again."
+                ),
+            )
     
     subject_requirements = []
     for item in items_result.data:
@@ -393,13 +556,12 @@ async def generate_schedule(
     # 5. SCHEDULE ALLOCATION
     # ========================================================================
     timetable_entries = []
-    warnings = []
     
     for subject_req in subject_requirements:
         # Find teacher for this subject
         teacher_id = get_teacher_for_subject(sb, subject_req.subject_id)
         if not teacher_id:
-            warnings.append(f"No teacher found for {subject_req.subject_name}. Schedule created without teacher.")
+            warnings.append(f"Не найден преподаватель для предмета '{subject_req.subject_name}'. Назначьте преподавателя в настройках.")
         
         # Schedule lessons for each class group
         for group in class_groups:
@@ -460,22 +622,21 @@ async def generate_schedule(
                 
                 if not scheduled:
                     warnings.append(
-                        f"Could not schedule lesson {attempt + 1}/{subject_req.lessons_needed} "
-                        f"for {subject_req.subject_name} (group {len(timetable_entries) % len(class_groups) + 1}). "
-                        f"No available slots found."
+                        f"Не удалось запланировать урок {attempt + 1}/{subject_req.lessons_needed} "
+                        f"по предмету '{subject_req.subject_name}'. Нет доступных временных слотов."
                     )
             
             if lessons_scheduled < subject_req.lessons_needed:
                 warnings.append(
-                    f"{subject_req.subject_name}: Only scheduled {lessons_scheduled}/{subject_req.lessons_needed} "
-                    f"lessons for class group. Increase time slots or reduce curriculum."
+                    f"'{subject_req.subject_name}': Запланировано только {lessons_scheduled} из {subject_req.lessons_needed} "
+                    f"занятий. Недостаточно времени в расписании."
                 )
     
     # ========================================================================
-    # 6. DELETE OLD ENTRIES IF FORCE=TRUE
+    # 6. DEACTIVATE OLD ENTRIES IF FORCE=TRUE
     # ========================================================================
     if force:
-        sb.table("timetable_entries").delete().eq("stream_id", stream_id).execute()
+        sb.table("timetable_entries").update({"active": False}).eq("stream_id", stream_id).execute()
     
     # ========================================================================
     # 7. INSERT NEW TIMETABLE ENTRIES
@@ -507,7 +668,7 @@ async def generate_schedule(
                 created_by_id=user_id,
             )
         except Exception as e:
-            warnings.append(f"Failed to auto-generate journal entries: {str(e)}")
+            warnings.append(f"Ошибка при создании журнала: {str(e)}")
     
     # ========================================================================
     # 10. RETURN SUMMARY
@@ -516,7 +677,7 @@ async def generate_schedule(
         "stream_id": stream_id,
         "entries_created": len(timetable_entries),
         "journal_entries_created": journal_entries_created,
-        "message": f"Successfully generated {len(timetable_entries)} timetable entries for {len(class_ids)} classes in {len(class_groups)} groups. Created {journal_entries_created} journal entries for 3-month period.",
+        "message": f"Расписание успешно создано: {len(timetable_entries)} занятий для {len(class_ids)} классов. Журнал заполнен на 3 месяца ({journal_entries_created} записей).",
         "warnings": warnings,
         "details": {
             "classes_count": len(class_ids),
