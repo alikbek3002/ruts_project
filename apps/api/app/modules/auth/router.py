@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, get_refresh_cookie
+from app.core.deps import get_current_user, get_refresh_cookie
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -153,7 +153,7 @@ def refresh(response: Response, refresh_cookie: str | None = Depends(get_refresh
 
 
 @router.get("/me")
-def me(user: CurrentUser):
+def me(user: dict = Depends(get_current_user)):
     return {"user": user}
 
 
@@ -163,7 +163,7 @@ class ChangePasswordIn(BaseModel):
 
 
 @router.post("/change-password")
-def change_password(payload: ChangePasswordIn, user: CurrentUser):
+def change_password(payload: ChangePasswordIn, user: dict = Depends(get_current_user)):
     # For MVP: require login + oldPassword; later can allow "temp password" flow.
     if not payload.oldPassword:
         raise HTTPException(status_code=400, detail="Требуется старый пароль")

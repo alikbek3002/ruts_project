@@ -121,6 +121,7 @@ export function AdminNotificationsPage() {
         { to: base, label: "Главная" },
         { to: `${base}/users`, label: "Пользователи" },
         { to: `${base}/classes`, label: "Группы" },
+        { to: `${base}/streams`, label: "Потоки" },
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },

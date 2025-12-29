@@ -1,0 +1,150 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 920px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: white;
+}
+
+.cardTitle {
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.meta {
+  opacity: 0.8;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.select {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.multi {
+  flex: 1;
+  min-height: 140px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.classList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.classRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.className {
+  font-weight: 700;
+}
+
+.hint {
+  opacity: 0.75;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.error {
+  padding: 10px 12px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.06);
+  border-radius: 10px;
+  color: #991b1b;
+  white-space: pre-wrap;
+}
+
+.ok {
+  padding: 10px 12px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+  border-radius: 10px;
+  color: #14532d;
+  white-space: pre-wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: white;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #111827;
+  color: white;
+  cursor: pointer;
+}
+
+.btnDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.06);
+  color: #991b1b;
+  cursor: pointer;
+}

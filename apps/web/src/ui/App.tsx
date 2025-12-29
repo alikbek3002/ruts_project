@@ -18,6 +18,8 @@ const AdminTimetablePage = React.lazy(() => import('./pages/admin/AdminTimetable
 const AdminSubjectsPage = React.lazy(() => import('./pages/admin/AdminSubjectsPage').then(m => ({ default: m.AdminSubjectsPage })));
 const AdminDirectionsPage = React.lazy(() => import('./pages/admin/AdminDirectionsPage').then(m => ({ default: m.AdminDirectionsPage })));
 const AdminNotificationsPage = React.lazy(() => import('./pages/admin/AdminNotificationsPage').then(m => ({ default: m.AdminNotificationsPage })));
+const AdminStreamsPage = React.lazy(() => import('./pages/admin/AdminStreamsPage').then(m => ({ default: m.AdminStreamsPage })));
+const AdminStreamDetailPage = React.lazy(() => import('./pages/admin/AdminStreamDetailPage').then(m => ({ default: m.AdminStreamDetailPage })));
 
 // Teacher Pages
 const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
@@ -102,6 +104,39 @@ export function App() {
             element={
               <RequireAuth>
                 <AdminClassesPage />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/app/admin/streams"
+            element={
+              <RequireAuth>
+                <AdminStreamsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/manager/streams"
+            element={
+              <RequireAuth>
+                <AdminStreamsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/admin/streams/:streamId"
+            element={
+              <RequireAuth>
+                <AdminStreamDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/app/manager/streams/:streamId"
+            element={
+              <RequireAuth>
+                <AdminStreamDetailPage />
               </RequireAuth>
             }
           />

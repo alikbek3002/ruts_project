@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, date, timedelta
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import get_current_user, require_role
 from app.core.monitor import timed
 from app.db.supabase_client import get_supabase
 from app.core.monitor import timed
@@ -921,7 +921,7 @@ def get_lesson_info(
     class_id: str,
     timetable_entry_id: str,
     lesson_date: str,
-    user: CurrentUser
+    user: dict = Depends(get_current_user),
 ):
     """Получить тему урока и домашнее задание для конкретного урока"""
     sb = get_supabase()

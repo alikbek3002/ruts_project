@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { User } from "lucide-react";
+import { User, Clock, Calendar } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { AppShell } from "../layout/AppShell";
 import { Loader } from "../components/Loader";
 import {
   apiGetProfile,
+  apiGetTeacherWorkload,
   type UserProfile,
+  type TeacherWorkload,
 } from "../../api/client";
 import styles from "./ProfilePage.module.css";
 
@@ -16,6 +18,7 @@ export function ProfilePage() {
   const token = state.accessToken;
   const authUser = state.user;
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [workload, setWorkload] = useState<TeacherWorkload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -31,6 +34,17 @@ export function ProfilePage() {
       setError("");
       const data = await apiGetProfile(token!);
       setProfile(data.profile);
+      
+      // Load workload if user is a teacher
+      if (authUser?.role === "teacher" && authUser?.id) {
+        try {
+          const workloadData = await apiGetTeacherWorkload(token!, authUser.id);
+          setWorkload(workloadData.workload);
+        } catch (err) {
+          console.error("Failed to load workload:", err);
+          // Don't fail the whole page if workload fails
+        }
+      }
     } catch (err: any) {
       setError(err.message || "Не удалось загрузить профиль");
     } finally {
@@ -182,6 +196,79 @@ export function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {isTeacher && workload && (
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>
+                  <Clock size={20} />
+                  Рабочая нагрузка
+                </h2>
+              </div>
+
+              <div className={styles.cardContent}>
+                <div className={styles.workloadGrid}>
+                  <div className={styles.workloadItem}>
+                    <div className={styles.workloadLabel}>
+                      <Calendar size={16} />
+                      <span>Еженедельно</span>
+                    </div>
+                    <div className={styles.workloadValue}>
+                      {workload.weekly_hours.toFixed(1)} ч ({workload.weekly_lessons} пар)
+                    </div>
+                  </div>
+
+                  <div className={styles.workloadItem}>
+                    <div className={styles.workloadLabel}>
+                      <Calendar size={16} />
+                      <span>Текущий месяц</span>
+                    </div>
+                    <div className={styles.workloadValue}>
+                      {workload.current_month_hours.toFixed(1)} ч ({workload.current_month_lessons} пар)
+                    </div>
+                  </div>
+
+                  <div className={styles.workloadItem}>
+                    <div className={styles.workloadLabel}>
+                      <Calendar size={16} />
+                      <span>За три месяца</span>
+                    </div>
+                    <div className={styles.workloadValue}>
+                      {workload.three_month_hours.toFixed(1)} ч ({workload.three_month_lessons} пар)
+                    </div>
+                  </div>
+                </div>
+
+                {workload.active_streams && workload.active_streams.length > 0 && (
+                  <div className={styles.streamsSection}>
+                    <h3 className={styles.streamsTitle}>Активные потоки</h3>
+                    <div className={styles.streamsList}>
+                      {workload.active_streams.map((stream) => (
+                        <div key={stream.stream_id} className={styles.streamItem}>
+                          <div className={styles.streamHeader}>
+                            <span className={styles.streamName}>{stream.stream_name}</span>
+                            <span className={`${styles.streamStatus} ${styles[stream.status]}`}>
+                              {stream.status === "active" ? "Активный" : 
+                               stream.status === "draft" ? "Черновик" : 
+                               stream.status === "completed" ? "Завершён" : "Архив"}
+                            </span>
+                          </div>
+                          <div className={styles.streamDates}>
+                            {new Date(stream.start_date).toLocaleDateString("ru-RU")} - {new Date(stream.end_date).toLocaleDateString("ru-RU")}
+                          </div>
+                          <div className={styles.streamStats}>
+                            <span>{stream.weekly_hours.toFixed(1)} ч/неделю</span>
+                            <span>•</span>
+                            <span>{stream.total_hours_3months.toFixed(1)} ч за курс</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

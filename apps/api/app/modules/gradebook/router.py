@@ -4,11 +4,11 @@ from datetime import date, datetime
 from collections import defaultdict
 from io import BytesIO
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import get_current_user, require_role
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
@@ -36,7 +36,7 @@ def create_assessment(payload: CreateAssessmentIn, user: dict = require_role("te
 
 
 @router.get("/classes/{class_id}/assessments")
-def list_assessments(class_id: str, _: CurrentUser):
+def list_assessments(class_id: str, _user: dict = Depends(get_current_user)):
     sb = get_supabase()
     resp = sb.table("assessments").select("*").eq("class_id", class_id).order("date", desc=True).execute()
     return {"assessments": resp.data or []}

@@ -1,15 +1,12 @@
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import get_current_user, require_role
 from app.core.monitor import timed
 from app.db.supabase_client import get_supabase
-from app.core.monitor import timed
 
 router = APIRouter()
 
@@ -24,9 +21,10 @@ class NotificationCreateIn(BaseModel):
 
 
 @router.post("")
+@timed("create_notification")
 def create_notification(
-    payload: NotificationCreateIn,
-    user: dict = require_role("admin", "manager")
+    payload: NotificationCreateIn = Body(...),
+    user: dict = require_role("admin", "manager"),
 ):
     """Create a new notification (admin/manager only)"""
     sb = get_supabase()
@@ -50,7 +48,7 @@ def create_notification(
 
 @router.get("")
 @timed("list_notifications")
-def list_notifications(user: CurrentUser, limit: int = 30, offset: int = 0):
+def list_notifications(user: dict = Depends(get_current_user), limit: int = 30, offset: int = 0):
     """Get notifications for current user (supports pagination)."""
     sb = get_supabase()
 
@@ -106,7 +104,7 @@ def list_notifications(user: CurrentUser, limit: int = 30, offset: int = 0):
 
 
 @router.get("/unread-count")
-def get_unread_count(user: CurrentUser):
+def get_unread_count(user: dict = Depends(get_current_user)):
     """Get count of unread notifications"""
     sb = get_supabase()
     
@@ -153,7 +151,7 @@ def get_unread_count(user: CurrentUser):
 
 
 @router.post("/{notification_id}/read")
-def mark_notification_read(notification_id: str, user: CurrentUser):
+def mark_notification_read(notification_id: str, user: dict = Depends(get_current_user)):
     """Mark notification as read"""
     sb = get_supabase()
     

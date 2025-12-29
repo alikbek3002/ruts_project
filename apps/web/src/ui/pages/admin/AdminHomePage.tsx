@@ -9,6 +9,7 @@ import {
   BookOpen, 
   Map, 
   Calendar, 
+  Layers,
   Bell, 
   Phone, 
   Cake, 
@@ -29,6 +30,7 @@ export function AdminHomePage() {
   const menuItems = [
     { to: `${base}/users`, label: "Пользователи", icon: Users, color: "blue" as const, desc: "Управление учителями и учениками" },
     { to: `${base}/classes`, label: "Группы", icon: GraduationCap, color: "green" as const, desc: "Создание групп и назначение кураторов" },
+    { to: `${base}/streams`, label: "Потоки", icon: Layers, color: "purple" as const, desc: "Потоки на 3 месяца и автогенерация" },
     { to: `${base}/subjects`, label: "Предметы", icon: BookOpen, color: "purple" as const, desc: "Список предметов и учителей" },
     { to: `${base}/directions`, label: "Направления", icon: Map, color: "orange" as const, desc: "Факультеты и специальности" },
     { to: `${base}/timetable`, label: "Расписание", icon: Calendar, color: "blue" as const, desc: "Редактирование расписания занятий" },
@@ -50,6 +52,7 @@ export function AdminHomePage() {
         { to: base, label: "Главная" },
         { to: `${base}/users`, label: "Пользователи" },
         { to: `${base}/classes`, label: "Группы" },
+        { to: `${base}/streams`, label: "Потоки" },
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },

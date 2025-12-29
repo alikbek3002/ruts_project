@@ -1,0 +1,154 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: block;
+  text-decoration: none;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  color: inherit;
+  background: white;
+}
+
+.cardTitle {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.cardMeta {
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.cardSubTitle {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.classChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.section {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: white;
+}
+
+.sectionTitle {
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.empty {
+  padding: 12px;
+  opacity: 0.75;
+}
+
+.error {
+  padding: 10px 12px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.06);
+  border-radius: 10px;
+  color: #991b1b;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: white;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #111827;
+  color: white;
+  cursor: pointer;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.modalTitle {
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.formRow input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

@@ -282,3 +282,352 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
     result = {"weekStart": weekStart, "entries": enriched}
     cache.set(cache_key, result, ttl=20)  # short TTL
     return result
+
+
+# ============================================================================
+# TEACHER WORKLOAD TRACKING
+# ============================================================================
+
+from typing import Optional
+from uuid import UUID
+
+
+class TeacherWorkloadResponse(BaseModel):
+    teacher_id: str
+    teacher_name: str
+    current_month_hours: float
+    current_month_lessons: int
+    three_month_hours: float
+    three_month_lessons: int
+    weekly_hours: float
+    weekly_lessons: int
+    active_streams: list[dict]
+
+
+def _add_months(d: date, months: int) -> date:
+    """Add months to a date, clamping day to month length."""
+    year = d.year + (d.month - 1 + months) // 12
+    month = (d.month - 1 + months) % 12 + 1
+    # clamp day
+    last_day = 31
+    if month in (4, 6, 9, 11):
+        last_day = 30
+    elif month == 2:
+        is_leap = (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+        last_day = 29 if is_leap else 28
+    day = min(d.day, last_day)
+    return date(year, month, day)
+
+
+def _norm_time_str(value: object, default: str) -> str:
+    s = str(value) if value is not None else default
+    # supabase may return HH:MM:SS
+    return s[:5] if len(s) >= 5 else default
+
+
+def _calculate_lesson_duration_hours(start_time: str, end_time: str) -> float:
+    """Calculate lesson duration in hours"""
+    try:
+        start_h, start_m = map(int, start_time.split(':'))
+        end_h, end_m = map(int, end_time.split(':'))
+        duration_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+        return duration_minutes / 60.0
+    except Exception:
+        return 1.5  # Default 1.5 hours
+
+
+def _get_unique_lessons_count(entries: list) -> int:
+    """
+    Count unique lessons for teacher.
+    If multiple classes (vzvodы) attend same lesson, it counts as 1 lesson.
+    """
+    unique_slots = set()
+    for entry in entries:
+        # Create unique key: weekday + start_time + end_time
+        slot = (entry.get("weekday"), entry.get("start_time"), entry.get("end_time"))
+        unique_slots.add(slot)
+    return len(unique_slots)
+
+
+def _calculate_total_hours(entries: list) -> float:
+    """Calculate total hours from unique lesson slots"""
+    unique_slots = {}
+    for entry in entries:
+        slot_key = (entry.get("weekday"), entry.get("start_time"), entry.get("end_time"))
+        if slot_key not in unique_slots:
+            duration = _calculate_lesson_duration_hours(
+                entry.get("start_time", "09:00"),
+                entry.get("end_time", "10:30")
+            )
+            unique_slots[slot_key] = duration
+    return sum(unique_slots.values())
+
+
+def _fetch_stream_bounds(sb, stream_ids: set[str]) -> dict[str, tuple[date, date]]:
+    if not stream_ids:
+        return {}
+    rows = (
+        sb.table("streams")
+        .select("id,start_date,end_date")
+        .in_("id", list(stream_ids))
+        .execute()
+        .data
+        or []
+    )
+    bounds: dict[str, tuple[date, date]] = {}
+    for r in rows:
+        try:
+            sid = str(r.get("id"))
+            s = date.fromisoformat(str(r.get("start_date")))
+            e = date.fromisoformat(str(r.get("end_date")))
+            bounds[sid] = (s, e)
+        except Exception:
+            continue
+    return bounds
+
+
+def _entry_effective_range(
+    entry: dict,
+    period_start: date,
+    period_end_excl: date,
+    stream_bounds: dict[str, tuple[date, date]],
+) -> tuple[date, date] | None:
+    sid = entry.get("stream_id")
+    if sid and str(sid) in stream_bounds:
+        s_start, s_end = stream_bounds[str(sid)]
+        eff_start = max(period_start, s_start)
+        eff_end_excl = min(period_end_excl, s_end + timedelta(days=1))
+        if eff_start >= eff_end_excl:
+            return None
+        return eff_start, eff_end_excl
+    return period_start, period_end_excl
+
+
+def _compute_period_totals(
+    entries: list[dict],
+    period_start: date,
+    period_end_excl: date,
+    stream_bounds: dict[str, tuple[date, date]],
+) -> tuple[int, float]:
+    """Count unique lesson slots per actual date in [start, end)."""
+    date_slots: dict[date, set[tuple[int, str, str]]] = {}
+    slot_duration: dict[tuple[int, str, str], float] = {}
+
+    for entry in entries:
+        eff = _entry_effective_range(entry, period_start, period_end_excl, stream_bounds)
+        if not eff:
+            continue
+        eff_start, eff_end = eff
+
+        weekday = int(entry.get("weekday", 0))
+        start_time = _norm_time_str(entry.get("start_time"), "09:00")
+        end_time = _norm_time_str(entry.get("end_time"), "10:30")
+        slot = (weekday, start_time, end_time)
+        if slot not in slot_duration:
+            slot_duration[slot] = _calculate_lesson_duration_hours(start_time, end_time)
+
+        # first occurrence in range
+        delta = (weekday - eff_start.weekday()) % 7
+        cur = eff_start + timedelta(days=delta)
+        while cur < eff_end:
+            date_slots.setdefault(cur, set()).add(slot)
+            cur += timedelta(days=7)
+
+    lessons = sum(len(s) for s in date_slots.values())
+    hours = 0.0
+    for slots in date_slots.values():
+        for slot in slots:
+            hours += float(slot_duration.get(slot, 0.0))
+    return lessons, hours
+
+
+def _entries_active_on_day(
+    entries: list[dict],
+    day: date,
+    stream_bounds: dict[str, tuple[date, date]],
+) -> list[dict]:
+    active: list[dict] = []
+    for e in entries:
+        sid = e.get("stream_id")
+        if sid and str(sid) in stream_bounds:
+            s, end = stream_bounds[str(sid)]
+            if not (s <= day <= end):
+                continue
+        active.append(e)
+    return active
+
+
+@router.get("/teachers/{teacher_id}/workload", response_model=TeacherWorkloadResponse)
+async def get_teacher_workload(
+    teacher_id: UUID,
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """
+    Get teacher's workload statistics:
+    - Current month hours and lessons
+    - Three-month period hours (for active streams)
+    - Weekly hours
+    """
+    sb = get_supabase()
+
+    if user.get("role") == "teacher" and str(user.get("id")) != str(teacher_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    # Check if teacher exists
+    teacher_result = sb.table("users").select("id, full_name, username, role").eq("id", str(teacher_id)).execute()
+    if not teacher_result.data:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    
+    teacher = teacher_result.data[0]
+    teacher_name = teacher.get("full_name") or teacher.get("username")
+    
+    # Get all active timetable entries for this teacher
+    entries_result = sb.table("timetable_entries").select("*").eq("teacher_id", str(teacher_id)).eq("active", True).execute()
+    
+    if not entries_result.data:
+        return TeacherWorkloadResponse(
+            teacher_id=str(teacher_id),
+            teacher_name=teacher_name,
+            current_month_hours=0,
+            current_month_lessons=0,
+            three_month_hours=0,
+            three_month_lessons=0,
+            weekly_hours=0,
+            weekly_lessons=0,
+            active_streams=[],
+        )
+    
+    entries = entries_result.data
+
+    stream_ids = {str(e.get("stream_id")) for e in entries if e.get("stream_id")}
+    stream_bounds = _fetch_stream_bounds(sb, stream_ids)
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    month_end_excl = _add_months(month_start, 1)
+    three_end_excl = _add_months(month_start, 3)
+
+    # Weekly stats: only entries active today
+    weekly_entries = _entries_active_on_day(entries, today, stream_bounds)
+    weekly_lessons = _get_unique_lessons_count(weekly_entries)
+    weekly_hours = _calculate_total_hours(weekly_entries)
+
+    # Calendar totals
+    current_month_lessons, current_month_hours = _compute_period_totals(
+        entries, month_start, month_end_excl, stream_bounds
+    )
+    three_month_lessons, three_month_hours = _compute_period_totals(
+        entries, month_start, three_end_excl, stream_bounds
+    )
+
+    # Streams breakdown
+    active_streams: list[dict] = []
+    if stream_ids:
+        streams_result = (
+            sb.table("streams")
+            .select("id,name,start_date,end_date,status")
+            .in_("id", list(stream_ids))
+            .execute()
+        )
+        for stream in streams_result.data or []:
+            sid = str(stream.get("id"))
+            stream_entries = [e for e in entries if str(e.get("stream_id")) == sid]
+
+            stream_weekly_lessons = _get_unique_lessons_count(stream_entries)
+            stream_weekly_hours = _calculate_total_hours(stream_entries)
+
+            stream_total_lessons_3m, stream_total_hours_3m = _compute_period_totals(
+                stream_entries, month_start, three_end_excl, stream_bounds
+            )
+
+            active_streams.append(
+                {
+                    "stream_id": sid,
+                    "stream_name": stream.get("name"),
+                    "start_date": stream.get("start_date"),
+                    "end_date": stream.get("end_date"),
+                    "status": stream.get("status"),
+                    "weekly_lessons": stream_weekly_lessons,
+                    "weekly_hours": round(stream_weekly_hours, 2),
+                    "total_lessons_3months": stream_total_lessons_3m,
+                    "total_hours_3months": round(stream_total_hours_3m, 2),
+                }
+            )
+    
+    return TeacherWorkloadResponse(
+        teacher_id=str(teacher_id),
+        teacher_name=teacher_name,
+        current_month_hours=round(current_month_hours, 2),
+        current_month_lessons=current_month_lessons,
+        three_month_hours=round(three_month_hours, 2),
+        three_month_lessons=three_month_lessons,
+        weekly_hours=round(weekly_hours, 2),
+        weekly_lessons=weekly_lessons,
+        active_streams=active_streams,
+    )
+
+
+@router.get("/teachers/workload/all")
+async def get_all_teachers_workload(
+    user: dict = require_role("admin", "manager"),
+):
+    """Get workload summary for all teachers"""
+    sb = get_supabase()
+    
+    # Get all teachers
+    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    
+    if not teachers_result.data:
+        return {"teachers": []}
+    
+    today = date.today()
+    month_start = today.replace(day=1)
+    month_end_excl = _add_months(month_start, 1)
+    three_end_excl = _add_months(month_start, 3)
+
+    workloads = []
+    for teacher in teachers_result.data:
+        teacher_id = teacher["id"]
+        teacher_name = teacher.get("full_name") or teacher.get("username")
+        
+        # Get entries
+        entries_result = sb.table("timetable_entries").select("*").eq("teacher_id", teacher_id).eq("active", True).execute()
+        
+        if not entries_result.data:
+            workloads.append({
+                "teacher_id": teacher_id,
+                "teacher_name": teacher_name,
+                "weekly_hours": 0,
+                "weekly_lessons": 0,
+                "monthly_hours": 0,
+                "three_month_hours": 0,
+            })
+            continue
+        
+        entries = entries_result.data
+
+        stream_ids = {str(e.get("stream_id")) for e in entries if e.get("stream_id")}
+        stream_bounds = _fetch_stream_bounds(sb, stream_ids)
+
+        weekly_entries = _entries_active_on_day(entries, today, stream_bounds)
+        weekly_lessons = _get_unique_lessons_count(weekly_entries)
+        weekly_hours = _calculate_total_hours(weekly_entries)
+
+        monthly_lessons, monthly_hours = _compute_period_totals(entries, month_start, month_end_excl, stream_bounds)
+        three_month_lessons, three_month_hours = _compute_period_totals(
+            entries, month_start, three_end_excl, stream_bounds
+        )
+        
+        workloads.append({
+            "teacher_id": teacher_id,
+            "teacher_name": teacher_name,
+            "weekly_hours": round(weekly_hours, 2),
+            "weekly_lessons": weekly_lessons,
+            "monthly_hours": round(monthly_hours, 2),
+            "three_month_hours": round(three_month_hours, 2),
+        })
+    
+    # Sort by weekly hours descending
+    workloads.sort(key=lambda x: x["weekly_hours"], reverse=True)
+    
+    return {"teachers": workloads}

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import get_current_user, require_role
 from app.core.security import verify_password
 from app.db.supabase_client import get_supabase
 
@@ -108,7 +108,7 @@ def delete_class_with_password(
 
 
 @router.get("")
-def list_classes(user: CurrentUser):
+def list_classes(user: dict = Depends(get_current_user)):
     sb = get_supabase()
     try:
         if user["role"] in ("admin", "manager"):
@@ -206,7 +206,7 @@ def list_curated_classes(user: dict = require_role("teacher")):
 
 
 @router.get("/{class_id}")
-def get_class(class_id: str, user: CurrentUser):
+def get_class(class_id: str, user: dict = Depends(get_current_user)):
     sb = get_supabase()
     try:
         # basic access control: admin always; teacher if has timetable entry; student if enrolled

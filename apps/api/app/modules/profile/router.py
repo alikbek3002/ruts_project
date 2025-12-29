@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.core.deps import CurrentUser
+from app.core.deps import get_current_user
 from app.core.security import hash_password, verify_password
 from app.db.supabase_client import get_supabase
 
@@ -28,7 +27,7 @@ class ChangePasswordIn(BaseModel):
 
 
 @router.get("")
-def get_profile(user: CurrentUser):
+def get_profile(user: dict = Depends(get_current_user)):
     """Получить профиль текущего пользователя"""
     sb = get_supabase()
 
@@ -82,7 +81,7 @@ def get_profile(user: CurrentUser):
 
 
 @router.put("")
-def update_profile(payload: UpdateProfileIn, user: CurrentUser):
+def update_profile(payload: UpdateProfileIn, user: dict = Depends(get_current_user)):
     """Обновить профиль пользователя"""
     sb = get_supabase()
     
@@ -125,7 +124,7 @@ def update_profile(payload: UpdateProfileIn, user: CurrentUser):
 
 
 @router.post("/change-password")
-def change_password(payload: ChangePasswordIn, user: CurrentUser):
+def change_password(payload: ChangePasswordIn, user: dict = Depends(get_current_user)):
     """Сменить пароль пользователя"""
     sb = get_supabase()
     
@@ -158,7 +157,7 @@ def change_password(payload: ChangePasswordIn, user: CurrentUser):
 @router.post("/upload-photo")
 async def upload_photo(
     photo: UploadFile = File(...),
-    user: CurrentUser = None
+    user: dict = Depends(get_current_user),
 ):
     """Загрузить фото профиля"""
     sb = get_supabase()
@@ -202,7 +201,7 @@ async def upload_photo(
 
 
 @router.delete("/photo")
-def delete_photo(user: CurrentUser):
+def delete_photo(user: dict = Depends(get_current_user)):
     """Удалить фото профиля"""
     sb = get_supabase()
     

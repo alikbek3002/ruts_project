@@ -1061,3 +1061,258 @@ export async function apiLibraryUploadTopicFiles(token: string, topicId: string,
     xhr.send(formData);
   });
 }
+
+// ============================================================================
+// STREAMS API
+// ============================================================================
+
+export interface Stream {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  direction_id?: string;
+  direction_name?: string;
+  status: "draft" | "active" | "completed" | "archived";
+  created_at: string;
+  updated_at: string;
+  class_count: number;
+  student_count: number;
+}
+
+export interface StreamDetail extends Stream {
+  classes: Array<{
+    id: string;
+    name: string;
+    direction_id?: string;
+    curator_id?: string;
+    curator_name?: string;
+    student_count: number;
+  }>;
+}
+
+export interface CurriculumTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  direction_id?: string;
+  direction_name?: string;
+  is_default: boolean;
+  created_at: string;
+  items: Array<{
+    id: string;
+    subject_id: string;
+    subject_name?: string;
+    hours_per_week: number;
+    lesson_type: string;
+  }>;
+}
+
+export interface TeacherWorkload {
+  teacher_id: string;
+  teacher_name: string;
+  current_month_hours: number;
+  current_month_lessons: number;
+  three_month_hours: number;
+  three_month_lessons: number;
+  weekly_hours: number;
+  weekly_lessons: number;
+  active_streams: Array<{
+    stream_id: string;
+    stream_name: string;
+    start_date: string;
+    end_date: string;
+    status: string;
+    weekly_lessons: number;
+    weekly_hours: number;
+    total_lessons_3months: number;
+    total_hours_3months: number;
+  }>;
+}
+
+export async function apiGetStreams(token: string, statusFilter?: string): Promise<{ streams: Stream[] }> {
+  const params = new URLSearchParams();
+  if (statusFilter) params.append("status_filter", statusFilter);
+
+  const res = await http<Stream[]>(`/streams${params.toString() ? `?${params.toString()}` : ""}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { streams: res };
+}
+
+export async function apiGetStream(token: string, streamId: string): Promise<{ stream: StreamDetail }> {
+  const res = await http<StreamDetail>(`/streams/${encodeURIComponent(streamId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { stream: res };
+}
+
+export async function apiCreateStream(
+  token: string,
+  data: {
+    name: string;
+    start_date: string;
+    end_date: string;
+    direction_id?: string;
+    status?: string;
+  }
+): Promise<{ stream: Stream }> {
+  const res = await http<Stream>("/streams", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return { stream: res };
+}
+
+export async function apiUpdateStream(
+  token: string,
+  streamId: string,
+  data: Partial<{
+    name: string;
+    start_date: string;
+    end_date: string;
+    direction_id: string;
+    status: string;
+  }>
+): Promise<{ stream: Stream }> {
+  const res = await http<Stream>(`/streams/${encodeURIComponent(streamId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return { stream: res };
+}
+
+export async function apiDeleteStream(token: string, streamId: string): Promise<void> {
+  await http<void>(`/streams/${encodeURIComponent(streamId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiAddClassesToStream(
+  token: string,
+  streamId: string,
+  classIds: string[]
+): Promise<{ message: string; added: number; skipped: number }> {
+  return await http<{ message: string; added: number; skipped: number }>(
+    `/streams/${encodeURIComponent(streamId)}/classes`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ class_ids: classIds }),
+    }
+  );
+}
+
+export async function apiRemoveClassFromStream(
+  token: string,
+  streamId: string,
+  classId: string
+): Promise<void> {
+  await http<void>(`/streams/${encodeURIComponent(streamId)}/classes/${encodeURIComponent(classId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiGetCurriculumTemplates(token: string): Promise<{ templates: CurriculumTemplate[] }> {
+  const res = await http<CurriculumTemplate[]>("/streams/curriculum-templates", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { templates: res };
+}
+
+export async function apiCreateCurriculumTemplate(
+  token: string,
+  data: {
+    name: string;
+    description?: string;
+    direction_id?: string;
+    is_default?: boolean;
+  }
+): Promise<{ template: CurriculumTemplate }> {
+  const res = await http<CurriculumTemplate>("/streams/curriculum-templates", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return { template: res };
+}
+
+export async function apiAddCurriculumItem(
+  token: string,
+  templateId: string,
+  data: {
+    subject_id: string;
+    hours_per_week: number;
+    lesson_type?: string;
+  }
+): Promise<{ message: string; item: any }> {
+  return await http<{ message: string; item: any }>(
+    `/streams/curriculum-templates/${encodeURIComponent(templateId)}/items`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export async function apiDeleteCurriculumItem(
+  token: string,
+  templateId: string,
+  itemId: string
+): Promise<void> {
+  await http<void>(
+    `/streams/curriculum-templates/${encodeURIComponent(templateId)}/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+}
+
+export async function apiGenerateStreamSchedule(
+  token: string,
+  streamId: string,
+  templateId: string,
+  force: boolean = false
+): Promise<{
+  stream_id: string;
+  entries_created: number;
+  journal_entries_created: number;
+  message: string;
+  warnings: string[];
+}> {
+  return await http<{
+    stream_id: string;
+    entries_created: number;
+    journal_entries_created: number;
+    message: string;
+    warnings: string[];
+  }>(`/streams/${encodeURIComponent(streamId)}/generate-schedule`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ template_id: templateId, force }),
+  });
+}
+
+export async function apiGetTeacherWorkload(token: string, teacherId: string): Promise<{ workload: TeacherWorkload }> {
+  const res = await http<TeacherWorkload>(`/timetable/teachers/${encodeURIComponent(teacherId)}/workload`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { workload: res };
+}
+
+export async function apiGetAllTeachersWorkload(token: string): Promise<{ teachers: any[] }> {
+  return await http<{ teachers: any[] }>("/timetable/teachers/workload/all", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
