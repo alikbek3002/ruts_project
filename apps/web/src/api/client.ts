@@ -1316,3 +1316,310 @@ export async function apiGetAllTeachersWorkload(token: string): Promise<{ teache
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// ============================================================================
+// COURSES API
+// ============================================================================
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string | null;
+  teacher_id: string;
+  teacher?: { id: string; full_name: string };
+  created_at: string;
+  updated_at: string;
+  topics?: CourseTopic[];
+}
+
+export interface CourseTopic {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+  presentation_storage_path: string | null;
+  presentation_original_filename: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+  tests?: CourseTest[];
+}
+
+export interface CourseTest {
+  id: string;
+  topic_id: string;
+  title: string;
+  description: string | null;
+  document_storage_path: string | null;
+  document_original_filename: string | null;
+  test_type: "quiz" | "document";
+  time_limit_minutes: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestQuestion {
+  id: string;
+  test_id: string;
+  question_text: string;
+  order_index: number;
+  created_at: string;
+  options?: TestQuestionOption[];
+}
+
+export interface TestQuestionOption {
+  id: string;
+  question_id: string;
+  option_text: string;
+  is_correct?: boolean; // Only visible to teachers/admins
+  order_index: number;
+}
+
+export interface TestAttempt {
+  id: string;
+  test_id: string;
+  student_id: string;
+  started_at: string;
+  submitted_at: string | null;
+  time_limit_seconds: number | null;
+  score: number | null;
+  total_questions: number | null;
+  percentage_score: number | null;
+  test?: { id: string; title: string; test_type: string };
+  student?: { id: string; full_name: string };
+}
+
+export async function apiListCourses(token: string): Promise<{ courses: Course[] }> {
+  return apiGet<{ courses: Course[] }>("/courses", token);
+}
+
+export async function apiGetCourse(token: string, courseId: string): Promise<{ course: Course }> {
+  return apiGet<{ course: Course }>(`/courses/${encodeURIComponent(courseId)}`, token);
+}
+
+export async function apiCreateCourse(token: string, data: { title: string; description?: string | null }): Promise<{ course: Course }> {
+  return apiPost<{ course: Course }>("/courses", data, token);
+}
+
+export async function apiUpdateCourse(token: string, courseId: string, data: { title?: string; description?: string | null }): Promise<{ course: Course }> {
+  return http<{ course: Course }>(`/courses/${encodeURIComponent(courseId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteCourse(token: string, courseId: string, password: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/courses/${encodeURIComponent(courseId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function apiCreateTopic(
+  token: string,
+  courseId: string,
+  data: { title: string; description?: string | null; order_index?: number },
+  presentation?: File | null,
+  onProgress?: (percent: number) => void
+): Promise<{ topic: CourseTopic }> {
+  const formData = new FormData();
+  formData.append("course_id", courseId);
+  formData.append("title", data.title);
+  if (data.description) formData.append("description", data.description);
+  formData.append("order_index", String(data.order_index || 0));
+  if (presentation) formData.append("presentation", presentation);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Create topic failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("POST", `${API_BASE}${withApiPrefix("/courses/topics")}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+export async function apiUpdateTopic(token: string, topicId: string, data: { title?: string; description?: string | null; order_index?: number }): Promise<{ topic: CourseTopic }> {
+  return http<{ topic: CourseTopic }>(`/courses/topics/${encodeURIComponent(topicId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteTopic(token: string, topicId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/courses/topics/${encodeURIComponent(topicId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiUploadTopicPresentation(
+  token: string,
+  topicId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ topic: CourseTopic }> {
+  const formData = new FormData();
+  formData.append("presentation", file);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("POST", `${API_BASE}${withApiPrefix(`/courses/topics/${encodeURIComponent(topicId)}/presentation`)}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+export async function apiCreateQuizTest(token: string, data: { topic_id: string; title: string; description?: string | null; time_limit_minutes: number }): Promise<{ test: CourseTest }> {
+  return apiPost<{ test: CourseTest }>("/courses/tests/quiz", data, token);
+}
+
+export async function apiCreateDocumentTest(
+  token: string,
+  topicId: string,
+  data: { title: string; description?: string | null },
+  document?: File | null,
+  onProgress?: (percent: number) => void
+): Promise<{ test: CourseTest }> {
+  const formData = new FormData();
+  formData.append("topic_id", topicId);
+  formData.append("title", data.title);
+  if (data.description) formData.append("description", data.description);
+  if (document) formData.append("document", document);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Create test failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("POST", `${API_BASE}${withApiPrefix("/courses/tests/document")}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
+  });
+}
+
+export async function apiUpdateTest(token: string, testId: string, data: { title?: string; description?: string | null; time_limit_minutes?: number }): Promise<{ test: CourseTest }> {
+  return http<{ test: CourseTest }>(`/courses/tests/${encodeURIComponent(testId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteTest(token: string, testId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/courses/tests/${encodeURIComponent(testId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiCreateQuestion(token: string, testId: string, data: { question_text: string; order_index?: number }): Promise<{ question: TestQuestion }> {
+  return apiPost<{ question: TestQuestion }>(`/courses/tests/${encodeURIComponent(testId)}/questions`, { ...data, test_id: testId }, token);
+}
+
+export async function apiListQuestions(token: string, testId: string): Promise<{ questions: TestQuestion[] }> {
+  return apiGet<{ questions: TestQuestion[] }>(`/courses/tests/${encodeURIComponent(testId)}/questions`, token);
+}
+
+export async function apiUpdateQuestion(token: string, questionId: string, data: { question_text?: string; order_index?: number }): Promise<{ question: TestQuestion }> {
+  return http<{ question: TestQuestion }>(`/courses/questions/${encodeURIComponent(questionId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteQuestion(token: string, questionId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/courses/questions/${encodeURIComponent(questionId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiCreateOption(token: string, questionId: string, data: { option_text: string; is_correct: boolean; order_index?: number }): Promise<{ option: TestQuestionOption }> {
+  return apiPost<{ option: TestQuestionOption }>(`/courses/questions/${encodeURIComponent(questionId)}/options`, { ...data, question_id: questionId }, token);
+}
+
+export async function apiUpdateOption(token: string, optionId: string, data: { option_text?: string; is_correct?: boolean; order_index?: number }): Promise<{ option: TestQuestionOption }> {
+  return http<{ option: TestQuestionOption }>(`/courses/options/${encodeURIComponent(optionId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteOption(token: string, optionId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/courses/options/${encodeURIComponent(optionId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiStartTestAttempt(token: string, testId: string): Promise<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }> {
+  return apiPost<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }>(`/courses/tests/${encodeURIComponent(testId)}/start`, {}, token);
+}
+
+export async function apiSubmitTestAttempt(token: string, attemptId: string, answers: Array<{ question_id: string; selected_option_id: string | null }>): Promise<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }> {
+  return apiPost<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }>(`/courses/attempts/${encodeURIComponent(attemptId)}/submit`, { answers }, token);
+}
+
+export async function apiGetTestAttempt(token: string, attemptId: string): Promise<{ attempt: TestAttempt; answers: Array<{ question_id: string; selected_option_id: string | null; is_correct: boolean }> }> {
+  return apiGet<{ attempt: TestAttempt; answers: Array<{ question_id: string; selected_option_id: string | null; is_correct: boolean }> }>(`/courses/attempts/${encodeURIComponent(attemptId)}`, token);
+}
+
+export async function apiListTestAttempts(token: string, testId: string): Promise<{ attempts: TestAttempt[] }> {
+  return apiGet<{ attempts: TestAttempt[] }>(`/courses/tests/${encodeURIComponent(testId)}/attempts`, token);
+}
+
+export async function apiListStudentAttempts(token: string): Promise<{ attempts: TestAttempt[] }> {
+  return apiGet<{ attempts: TestAttempt[] }>("/courses/student/attempts", token);
+}

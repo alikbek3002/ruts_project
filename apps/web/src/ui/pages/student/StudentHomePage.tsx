@@ -20,6 +20,7 @@ export function StudentHomePage() {
         { to: "/app/student/grades", label: "Оценки" },
         { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
+        { to: "/app/student/courses", label: "Курсы" },
       ]}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

@@ -85,6 +85,7 @@ export function TeacherHomePage() {
         { to: "/app/teacher/vzvody", label: "Мои взводы" },
         { to: "/app/teacher/timetable", label: "Расписание" },
         { to: "/app/teacher/library", label: "Библиотека" },
+        { to: "/app/teacher/courses", label: "Курсы" },
       ]}
     >
       <div className={styles.container}>

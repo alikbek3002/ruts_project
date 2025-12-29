@@ -27,6 +27,9 @@ const TeacherJournalPage = React.lazy(() => import('./pages/teacher/TeacherJourn
 const TeacherMyVzvodyPage = React.lazy(() => import('./pages/teacher/TeacherMyVzvodyPage').then(m => ({ default: m.TeacherMyVzvodyPage })));
 const TeacherTimetablePage = React.lazy(() => import('./pages/teacher/TeacherTimetablePage').then(m => ({ default: m.TeacherTimetablePage })));
 const TeacherLibraryPage = React.lazy(() => import('./pages/teacher/TeacherLibraryPage').then(m => ({ default: m.TeacherLibraryPage })));
+const TeacherCoursesPage = React.lazy(() => import('./pages/teacher/TeacherCoursesPage').then(m => ({ default: m.TeacherCoursesPage })));
+const TeacherCourseEditPage = React.lazy(() => import('./pages/teacher/TeacherCourseEditPage').then(m => ({ default: m.TeacherCourseEditPage })));
+const TeacherCourseNewPage = React.lazy(() => import('./pages/teacher/TeacherCourseNewPage').then(m => ({ default: m.TeacherCourseNewPage })));
 
 // Student Pages
 const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage').then(m => ({ default: m.StudentHomePage })));
@@ -34,6 +37,9 @@ const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTim
 const StudentGradesPage = React.lazy(() => import('./pages/student/StudentGradesPage').then(m => ({ default: m.StudentGradesPage })));
 const StudentLibraryPage = React.lazy(() => import('./pages/student/StudentLibraryPage').then(m => ({ default: m.StudentLibraryPage })));
 const StudentHomeworkPage = React.lazy(() => import('./pages/student/StudentHomeworkPage')); // Default export
+const StudentCoursesPage = React.lazy(() => import('./pages/student/StudentCoursesPage').then(m => ({ default: m.StudentCoursesPage })));
+const StudentCourseViewPage = React.lazy(() => import('./pages/student/StudentCourseViewPage').then(m => ({ default: m.StudentCourseViewPage })));
+const StudentTestPage = React.lazy(() => import('./pages/student/StudentTestPage').then(m => ({ default: m.StudentTestPage })));
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { state } = useAuth();
@@ -261,6 +267,30 @@ export function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/app/teacher/courses"
+          element={
+            <RequireAuth>
+              <TeacherCoursesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/teacher/courses/new"
+          element={
+            <RequireAuth>
+              <TeacherCourseNewPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/teacher/courses/:courseId"
+          element={
+            <RequireAuth>
+              <TeacherCourseEditPage />
+            </RequireAuth>
+          }
+        />
 
         <Route
           path="/app/student"
@@ -299,6 +329,30 @@ export function App() {
           element={
             <RequireAuth>
               <StudentHomeworkPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/courses"
+          element={
+            <RequireAuth>
+              <StudentCoursesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/courses/:courseId"
+          element={
+            <RequireAuth>
+              <StudentCourseViewPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/courses/:courseId/test/:testId"
+          element={
+            <RequireAuth>
+              <StudentTestPage />
             </RequireAuth>
           }
         />
