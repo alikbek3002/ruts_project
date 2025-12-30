@@ -111,9 +111,15 @@ export function AdminStreamDetailPage() {
     try {
       const res = await apiGenerateStreamSchedule(token, streamId, templateId, force);
       const warnings = (res.warnings || []).length ? `\n\nПредупреждения:\n- ${(res.warnings || []).join("\n- ")}` : "";
-      setGenResult(
-        `Готово: создано записей расписания: ${res.entries_created}, записей журнала: ${res.journal_entries_created}.${warnings}`
-      );
+      
+      let message = `Готово: создано записей расписания: ${res.entries_created}, записей журнала: ${res.journal_entries_created}.`;
+      
+      // Если не создано ни одной записи расписания, показать подсказку
+      if (res.entries_created === 0 && res.journal_entries_created > 0) {
+        message += `\n\n💡 Расписание уже существует. Если хотите пересоздать, включите "Перегенерировать (force)".`;
+      }
+      
+      setGenResult(message + warnings);
     } catch (e) {
       setErr(String(e));
     }
@@ -130,6 +136,7 @@ export function AdminStreamDetailPage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/workload`, label: "Часы работы" },
         { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
@@ -218,10 +225,13 @@ export function AdminStreamDetailPage() {
               </div>
               <label className={styles.checkbox}>
                 <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
-                Перегенерировать (force)
+                <span>Перегенерировать (force)</span>
               </label>
               <div className={styles.hint}>
-                Генерация создаст записи в расписании и автозаполнит журнал на даты потока.
+                {force 
+                  ? "⚠️ Старое расписание будет удалено и создано заново. Журнал будет обновлен."
+                  : "Генерация создаст расписание (если его нет) и автозаполнит журнал на даты потока."
+                }
               </div>
             </div>
           </div>

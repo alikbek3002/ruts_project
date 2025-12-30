@@ -470,33 +470,380 @@
 }
 
 .optionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 12px;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
-  font-size: 14px;
+  margin-bottom: 8px;
 }
 
-.correctOption {
+.optionText {
+  flex: 1;
+  font-size: 14px;
+  color: #374151;
+}
+
+.optionActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.optionActionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+}
+
+.optionActionButton.correct {
   color: #059669;
-  font-weight: 500;
+  background: #d1fae5;
+}
+
+.optionActionButton.incorrect {
+  color: #9ca3af;
+}
+
+.optionActionButton:hover {
+  background: #e5e7eb;
+}
+
+.optionActionButton.correct:hover {
+  background: #a7f3d0;
+}
+
+.optionDeleteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ef4444;
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.optionDeleteButton:hover {
+  background: #fee2e2;
 }
 
 .addOptionForm {
   margin-top: 8px;
+  display: flex;
+  gap: 8px;
 }
 
 .optionInput {
-  width: 100%;
-  padding: 8px;
+  flex: 1;
+  padding: 8px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   font-size: 14px;
-  margin-bottom: 4px;
 }
 
-.addOptionForm small {
-  color: #6b7280;
-  font-size: 12px;
+.addOptionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.addOptionButton:hover {
+  background: #1d4ed8;
+}
+
+.optionInput:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.newQuestionContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  background: #f3f4f6;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.newOptionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 2px solid #e5e7eb;
+}
+
+.newOptionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.addOptionButtonText {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
+.addOptionButtonText:hover {
+  background: #dbeafe;
+}
+
+/* Presentation Styles */
+.presentationBlock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.presentationInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.presentationIcon {
+  color: #0284c7;
+}
+
+.presentationName {
+  font-weight: 500;
+  color: #0c4a6e;
+  font-size: 14px;
+}
+
+.downloadButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.downloadButton:hover {
+  background: #e0f2fe;
+}
+
+/* File Input Styles */
+.fileInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.fileInputLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.fileInputLabel:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.clearFileButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.clearFileButton:hover {
+  background: #fecaca;
+}
+
+/* Topic Actions & Toolbar */
+.topicActions {
+  display: flex;
+  gap: 8px;
+}
+
+.topicToolbar {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.toolbarButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #4b5563;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbarButton:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  color: #111827;
+}
+
+/* Topic Links */
+.topicLinksList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.topicLinkItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.topicLinkItem:hover {
+  text-decoration: underline;
+}
+
+/* Links Section in Modal */
+.linksSection {
+  margin-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.linksList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.linkItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linkInputs {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.linkInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.removeLinkButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.addLinkRow {
+  display: flex;
+  gap: 8px;
+}
+
+.addLinkButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.addLinkButton:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.addLinkButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 

@@ -22,9 +22,31 @@
 .controls {
   display: flex;
   gap: var(--spacing-md);
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--spacing-lg);
   flex-wrap: wrap;
+}
+
+.selectors {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-end;
+  flex: 1;
+}
+
+.selectorGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.selectorLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .quickWeek {
@@ -48,13 +70,26 @@
 }
 
 .select {
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-bg);
+  background: white;
   color: var(--color-text);
   font-size: 14px;
   min-width: 200px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.select:hover {
+  border-color: var(--color-primary);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .weekNav {

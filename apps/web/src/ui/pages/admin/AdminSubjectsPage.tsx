@@ -94,6 +94,7 @@ export function AdminSubjectsPage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/workload`, label: "Часы работы" },
         { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >

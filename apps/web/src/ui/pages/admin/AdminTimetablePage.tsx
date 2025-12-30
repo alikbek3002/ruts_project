@@ -8,10 +8,13 @@ import {
   apiListTimetableEntries,
   apiUpdateTimetableEntry,
   apiListSubjects,
+  apiGetStreams,
+  apiGetStream,
   type AdminUser,
   type ClassItem,
   type TimetableEntry,
   type Subject,
+  type Stream,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -75,7 +78,11 @@ export function AdminTimetablePage() {
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
 
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [streams, setStreams] = useState<Stream[]>([]);
+  const [selectedStreamId, setSelectedStreamId] = useState("");
+  const [streamClasses, setStreamClasses] = useState<ClassItem[]>([]);
+  const [allClasses, setAllClasses] = useState<ClassItem[]>([]);
+  
   const [teachers, setTeachers] = useState<AdminUser[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [classId, setClassId] = useState("");
@@ -106,14 +113,17 @@ export function AdminTimetablePage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [c, t, s] = await Promise.all([
+      const [streamRes, classRes, t, s] = await Promise.all([
+        apiGetStreams(token),
         apiListClasses(token),
         apiAdminListUsers(token, "teacher"),
         apiListSubjects(token),
       ]);
-      setClasses(c.classes);
+      setStreams(streamRes.streams || []);
+      setAllClasses(classRes.classes || []);
       setTeachers(t.users);
       setSubjects(s.subjects || []);
+      
       if (classId) {
         const e = await apiListTimetableEntries(token, classId);
         setEntries(e.entries);
@@ -124,6 +134,33 @@ export function AdminTimetablePage() {
       setLoading(false);
     }
   }
+
+  // Load classes when stream is selected
+  useEffect(() => {
+    if (!token || !selectedStreamId) {
+      setStreamClasses([]);
+      setClassId("");
+      return;
+    }
+    
+    setLoading(true);
+    apiGetStream(token, selectedStreamId)
+      .then((res) => {
+        const classes = res.stream.classes || [];
+        setStreamClasses(classes.map(c => ({
+          id: c.id,
+          name: c.name,
+          direction_id: c.direction_id,
+          curator_id: c.curator_id
+        })));
+        // Auto-select first class if available
+        if (classes.length > 0 && !classId) {
+          setClassId(classes[0].id);
+        }
+      })
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
+  }, [selectedStreamId, token]);
 
   useEffect(() => {
     if (!can) return;
@@ -264,6 +301,7 @@ export function AdminTimetablePage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/workload`, label: "Часы работы" },
         { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
@@ -276,18 +314,42 @@ export function AdminTimetablePage() {
         {loading && <Loader text="Загрузка..." />}
 
         <div className={styles.controls}>
-          <select
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            className={styles.select}
-          >
-            <option value="">— Выберите группу —</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className={styles.selectors}>
+            <div className={styles.selectorGroup}>
+              <label className={styles.selectorLabel}>Поток:</label>
+              <select
+                value={selectedStreamId}
+                onChange={(e) => {
+                  setSelectedStreamId(e.target.value);
+                  setClassId(""); // Reset class selection
+                }}
+                className={styles.select}
+              >
+                <option value="">— Все группы —</option>
+                {streams.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.status === "active" ? "Активный" : s.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.selectorGroup}>
+              <label className={styles.selectorLabel}>Группа:</label>
+              <select
+                value={classId}
+                onChange={(e) => setClassId(e.target.value)}
+                className={styles.select}
+              >
+                <option value="">— Выберите группу —</option>
+                {(selectedStreamId ? streamClasses : allClasses).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div className={styles.weekNav}>
             <button className={styles.navBtn} onClick={() => setWeekStart(addDays(weekStart, -7))}>

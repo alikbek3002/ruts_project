@@ -89,6 +89,17 @@
   color: #6b7280;
 }
 
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.empty p {
+  margin: 0;
+  font-size: 16px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -138,6 +149,26 @@
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
+}
+
+.cardActionsHeader {
+  display: flex;
+  gap: 8px;
+}
+
+.editButton {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.editButton:hover {
+  color: #4f46e5;
+  background-color: #e0e7ff;
 }
 
 .deleteButton {
@@ -204,6 +235,35 @@
 
 .downloadIcon {
   color: #9ca3af;
+}
+
+.cardActions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.uploadButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.uploadButton:hover {
+  background-color: #f3f4f6;
+  border-color: #4f46e5;
+  color: #4f46e5;
 }
 
 /* Modal */

@@ -40,6 +40,14 @@
 			"isBackground": true,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "api:dev (restart)",
+			"type": "shell",
+			"command": "pids=$(lsof -ti tcp:8000 2>/dev/null || true); if [[ -n \"$pids\" ]]; then kill -9 $pids; fi\ncd /Users/chyngyz/Desktop/ruts_project/apps/api && /Users/chyngyz/Desktop/ruts_project/.venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+			"args": [],
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }

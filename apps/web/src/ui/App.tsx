@@ -20,6 +20,7 @@ const AdminDirectionsPage = React.lazy(() => import('./pages/admin/AdminDirectio
 const AdminNotificationsPage = React.lazy(() => import('./pages/admin/AdminNotificationsPage').then(m => ({ default: m.AdminNotificationsPage })));
 const AdminStreamsPage = React.lazy(() => import('./pages/admin/AdminStreamsPage').then(m => ({ default: m.AdminStreamsPage })));
 const AdminStreamDetailPage = React.lazy(() => import('./pages/admin/AdminStreamDetailPage').then(m => ({ default: m.AdminStreamDetailPage })));
+const AdminWorkloadPage = React.lazy(() => import('./pages/admin/AdminWorkloadPage').then(m => ({ default: m.AdminWorkloadPage })));
 
 // Teacher Pages
 const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
@@ -30,6 +31,7 @@ const TeacherLibraryPage = React.lazy(() => import('./pages/teacher/TeacherLibra
 const TeacherCoursesPage = React.lazy(() => import('./pages/teacher/TeacherCoursesPage').then(m => ({ default: m.TeacherCoursesPage })));
 const TeacherCourseEditPage = React.lazy(() => import('./pages/teacher/TeacherCourseEditPage').then(m => ({ default: m.TeacherCourseEditPage })));
 const TeacherCourseNewPage = React.lazy(() => import('./pages/teacher/TeacherCourseNewPage').then(m => ({ default: m.TeacherCourseNewPage })));
+const TeacherWorkloadPage = React.lazy(() => import('./pages/teacher/TeacherWorkloadPage').then(m => ({ default: m.TeacherWorkloadPage })));
 
 // Student Pages
 const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage').then(m => ({ default: m.StudentHomePage })));
@@ -211,6 +213,22 @@ export function App() {
           }
         />
         <Route
+          path="/app/admin/workload"
+          element={
+            <RequireAuth>
+              <AdminWorkloadPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/manager/workload"
+          element={
+            <RequireAuth>
+              <AdminWorkloadPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/app/admin/classes/:classId/journal"
           element={
             <RequireAuth>
@@ -264,6 +282,14 @@ export function App() {
           element={
             <RequireAuth>
               <TeacherLibraryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/teacher/workload"
+          element={
+            <RequireAuth>
+              <TeacherWorkloadPage />
             </RequireAuth>
           }
         />

@@ -39,6 +39,11 @@ export function TeacherCourseNewPage() {
       title="Создать курс"
       nav={[
         { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/workload", label: "Часы работы" },
+        { to: "/app/teacher/library", label: "Библиотека" },
         { to: "/app/teacher/courses", label: "Курсы" },
       ]}
     >

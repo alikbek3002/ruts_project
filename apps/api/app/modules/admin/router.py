@@ -697,3 +697,111 @@ def export_class_students(class_id: str, _: dict = require_role("admin", "manage
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
     )
+
+
+@router.get("/exports/classes-with-streams.xlsx")
+@timed("export_classes_with_streams")
+def export_classes_with_streams(_: dict = require_role("admin", "manager")):
+    """Export all classes with their associated streams to Excel"""
+    sb = get_supabase()
+    
+    # Get all classes
+    classes_result = sb.table("classes").select("id,name,curator_id,direction_id").execute()
+    classes = classes_result.data or []
+    
+    # Get all streams
+    streams_result = sb.table("streams").select("id,name,start_date,end_date,status").execute()
+    streams = streams_result.data or []
+    streams_by_id = {str(s["id"]): s for s in streams}
+    
+    # Get stream_classes associations
+    stream_classes_result = sb.table("stream_classes").select("stream_id,class_id").execute()
+    stream_classes = stream_classes_result.data or []
+    
+    # Build mapping: class_id -> [stream_names]
+    class_streams_map: dict[str, list[str]] = {}
+    for sc in stream_classes:
+        class_id = str(sc.get("class_id"))
+        stream_id = str(sc.get("stream_id"))
+        stream = streams_by_id.get(stream_id)
+        if stream:
+            stream_name = stream.get("name", "")
+            if class_id not in class_streams_map:
+                class_streams_map[class_id] = []
+            class_streams_map[class_id].append(stream_name)
+    
+    # Get curators
+    curator_ids = [c.get("curator_id") for c in classes if c.get("curator_id")]
+    curators_map = {}
+    if curator_ids:
+        curators_result = sb.table("users").select("id,full_name,username").in_("id", curator_ids).execute()
+        curators_map = {str(c["id"]): c for c in (curators_result.data or [])}
+    
+    # Get directions
+    direction_ids = [c.get("direction_id") for c in classes if c.get("direction_id")]
+    directions_map = {}
+    if direction_ids:
+        directions_result = sb.table("directions").select("id,name").in_("id", direction_ids).execute()
+        directions_map = {str(d["id"]): d for d in (directions_result.data or [])}
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Classes and Streams"
+    
+    # Headers
+    ws.append(["Группа", "Направление", "Куратор", "Потоки"])
+    
+    # Sort classes by name
+    classes.sort(key=lambda c: c.get("name", ""))
+    
+    # Fill data
+    for cls in classes:
+        class_id = str(cls.get("id"))
+        class_name = cls.get("name", "")
+        
+        # Get direction
+        direction_id = cls.get("direction_id")
+        direction_name = ""
+        if direction_id:
+            direction = directions_map.get(str(direction_id))
+            if direction:
+                direction_name = direction.get("name", "")
+        
+        # Get curator
+        curator_id = cls.get("curator_id")
+        curator_name = ""
+        if curator_id:
+            curator = curators_map.get(str(curator_id))
+            if curator:
+                curator_name = curator.get("full_name") or curator.get("username", "")
+        
+        # Get streams
+        streams_list = class_streams_map.get(class_id, [])
+        streams_str = ", ".join(streams_list) if streams_list else "—"
+        
+        ws.append([class_name, direction_name, curator_name, streams_str])
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    
+    filename = "classes_with_streams.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )

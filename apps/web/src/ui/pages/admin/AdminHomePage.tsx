@@ -34,6 +34,7 @@ export function AdminHomePage() {
     { to: `${base}/subjects`, label: "Предметы", icon: BookOpen, color: "purple" as const, desc: "Список предметов и учителей" },
     { to: `${base}/directions`, label: "Направления", icon: Map, color: "orange" as const, desc: "Факультеты и специальности" },
     { to: `${base}/timetable`, label: "Расписание", icon: Calendar, color: "blue" as const, desc: "Редактирование расписания занятий" },
+    { to: `${base}/workload`, label: "Часы работы", icon: Clock, color: "green" as const, desc: "Статистика часов учителей" },
     { to: `${base}/notifications`, label: "Уведомления", icon: Bell, color: "green" as const, desc: "Рассылка объявлений" },
   ];
 
@@ -56,6 +57,7 @@ export function AdminHomePage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/workload`, label: "Часы работы" },
         { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from postgrest.exceptions import APIError
 
@@ -246,11 +248,11 @@ def update_course(course_id: str, payload: UpdateCourseIn, user: dict = require_
 
 
 @router.delete("/{course_id}")
-def delete_course(course_id: str, payload: DeleteCourseIn, user: dict = require_role("admin")):
-    """Удалить курс (только админ, с подтверждением паролем)"""
+def delete_course(course_id: str, payload: DeleteCourseIn, user: dict = require_role("admin", "teacher")):
+    """Удалить курс (админ или автор курса, с подтверждением паролем)"""
     sb = get_supabase()
     try:
-        # Verify admin password
+        # Verify password
         user_resp = (
             sb.table("users")
             .select("password_hash")
@@ -268,16 +270,22 @@ def delete_course(course_id: str, payload: DeleteCourseIn, user: dict = require_
         if not verify_password(payload.password, password_hash):
             raise HTTPException(status_code=403, detail="Incorrect password")
         
-        # Check course exists
+        # Check course exists and ownership
         course_resp = (
             sb.table("courses")
-            .select("id")
+            .select("id, teacher_id")
             .eq("id", course_id)
             .single()
             .execute()
         )
         if not course_resp.data:
             raise HTTPException(status_code=404, detail="Course not found")
+        
+        course = course_resp.data
+        
+        # If user is teacher, check if they own the course
+        if user["role"] == "teacher" and course.get("teacher_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="You can only delete your own courses")
         
         # Delete course (cascade will delete topics, tests, etc.)
         sb.table("courses").delete().eq("id", course_id).execute()
@@ -316,6 +324,7 @@ async def create_topic(
     description: str | None = Form(None),
     order_index: int = Form(0),
     presentation: UploadFile | None = File(None),
+    links: str | None = Form(None),
     user: dict = require_role("teacher"),
 ):
     """Создать тему в курсе (только автор курса)"""
@@ -359,6 +368,13 @@ async def create_topic(
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Presentation upload failed: {str(e)}")
         
+        links_data = []
+        if links:
+            try:
+                links_data = json.loads(links)
+            except:
+                pass
+
         topic_resp = (
             sb.table("course_topics")
             .insert({
@@ -368,6 +384,7 @@ async def create_topic(
                 "presentation_storage_path": presentation_path,
                 "presentation_original_filename": presentation_filename,
                 "order_index": order_index,
+                "links": links_data,
             })
             .execute()
         )
@@ -382,15 +399,56 @@ async def create_topic(
         raise
 
 
+@router.get("/topics/{topic_id}/presentation/download")
+async def download_topic_presentation(
+    topic_id: str,
+    user: dict = require_role("teacher", "student", "admin")
+):
+    """Скачать презентацию темы"""
+    sb = get_supabase()
+    
+    # Get topic
+    topic_resp = sb.table("course_topics").select("presentation_storage_path").eq("id", topic_id).single().execute()
+    if not topic_resp.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+        
+    storage_path = topic_resp.data.get("presentation_storage_path")
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="No presentation found for this topic")
+        
+    # Create signed URL (valid for 1 hour)
+    try:
+        signed_url_resp = sb.storage.from_("library").create_signed_url(storage_path, 3600)
+        
+        if isinstance(signed_url_resp, dict) and "signedURL" in signed_url_resp:
+             return RedirectResponse(url=signed_url_resp["signedURL"])
+        elif isinstance(signed_url_resp, str):
+             if signed_url_resp.startswith("http"):
+                 return RedirectResponse(url=signed_url_resp)
+        
+        raise HTTPException(status_code=500, detail="Could not generate download URL")
+             
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate download link: {str(e)}")
+
+
 @router.put("/topics/{topic_id}")
-def update_topic(topic_id: str, payload: UpdateTopicIn, user: dict = require_role("teacher")):
+async def update_topic(
+    topic_id: str,
+    title: str | None = Form(None),
+    description: str | None = Form(None),
+    order_index: int | None = Form(None),
+    presentation: UploadFile | None = File(None),
+    links: str | None = Form(None),
+    user: dict = require_role("teacher"),
+):
     """Обновить тему (только автор курса)"""
     sb = get_supabase()
     try:
         # Check topic ownership via course
         topic_resp = (
             sb.table("course_topics")
-            .select("course_id")
+            .select("course_id, presentation_storage_path")
             .eq("id", topic_id)
             .single()
             .execute()
@@ -399,6 +457,8 @@ def update_topic(topic_id: str, payload: UpdateTopicIn, user: dict = require_rol
             raise HTTPException(status_code=404, detail="Topic not found")
         
         course_id = topic_resp.data.get("course_id")
+        old_presentation_path = topic_resp.data.get("presentation_storage_path")
+
         course_resp = (
             sb.table("courses")
             .select("teacher_id")
@@ -410,25 +470,51 @@ def update_topic(topic_id: str, payload: UpdateTopicIn, user: dict = require_rol
             raise HTTPException(status_code=403, detail="You can only edit topics in your own courses")
         
         update_data = {}
-        if payload.title is not None:
-            title = payload.title.strip()
+        if title is not None:
+            title = title.strip()
             if not title:
                 raise HTTPException(status_code=400, detail="Title cannot be empty")
             update_data["title"] = title
-        if payload.description is not None:
-            update_data["description"] = payload.description.strip() if payload.description else None
-        if payload.order_index is not None:
-            update_data["order_index"] = payload.order_index
+        if description is not None:
+            update_data["description"] = description.strip() if description else None
+        if order_index is not None:
+            update_data["order_index"] = order_index
         
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No fields to update")
+        if links is not None:
+            try:
+                update_data["links"] = json.loads(links)
+            except:
+                pass
+
+        if presentation:
+            # Upload presentation to Supabase Storage
+            file_ext = presentation.filename.split(".")[-1] if presentation.filename and "." in presentation.filename else ""
+            unique_filename = f"{uuid.uuid4().hex}.{file_ext}" if file_ext else uuid.uuid4().hex
+            storage_path = f"courses/{course_id}/topics/{unique_filename}"
+            file_content = await presentation.read()
+            
+            try:
+                if old_presentation_path:
+                    sb.storage.from_("library").remove([old_presentation_path])
+
+                sb.storage.from_("library").upload(
+                    path=storage_path,
+                    file=file_content,
+                    file_options={"content-type": presentation.content_type or "application/octet-stream"},
+                )
+                update_data["presentation_storage_path"] = storage_path
+                update_data["presentation_original_filename"] = presentation.filename
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Presentation upload failed: {str(e)}")
         
-        topic_resp = (
-            sb.table("course_topics")
-            .update(update_data)
-            .eq("id", topic_id)
-            .execute()
-        )
+        if update_data:
+            topic_resp = (
+                sb.table("course_topics")
+                .update(update_data)
+                .eq("id", topic_id)
+                .execute()
+            )
+        
         topic = topic_resp.data[0] if isinstance(topic_resp.data, list) and topic_resp.data else topic_resp.data
         return {"topic": topic}
     except APIError as e:
@@ -767,8 +853,8 @@ def update_test(test_id: str, payload: UpdateTestIn, user: dict = require_role("
 
 
 @router.delete("/tests/{test_id}")
-def delete_test(test_id: str, user: dict = require_role("teacher")):
-    """Удалить тест (только автор курса)"""
+def delete_test(test_id: str, user: dict = require_role("admin", "teacher")):
+    """Удалить тест (админ или автор курса)"""
     sb = get_supabase()
     try:
         # Check test ownership via topic -> course
@@ -798,7 +884,9 @@ def delete_test(test_id: str, user: dict = require_role("teacher")):
             .single()
             .execute()
         )
-        if course_resp.data.get("teacher_id") != user["id"]:
+        
+        # If user is teacher, check if they own the course
+        if user["role"] == "teacher" and course_resp.data.get("teacher_id") != user["id"]:
             raise HTTPException(status_code=403, detail="You can only delete tests in your own courses")
         
         sb.table("course_tests").delete().eq("id", test_id).execute()

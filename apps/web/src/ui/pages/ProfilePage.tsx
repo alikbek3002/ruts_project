@@ -39,7 +39,7 @@ export function ProfilePage() {
       if (authUser?.role === "teacher" && authUser?.id) {
         try {
           const workloadData = await apiGetTeacherWorkload(token!, authUser.id);
-          setWorkload(workloadData.workload);
+          setWorkload(workloadData);
         } catch (err) {
           console.error("Failed to load workload:", err);
           // Don't fail the whole page if workload fails

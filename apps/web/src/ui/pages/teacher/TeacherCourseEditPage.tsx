@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, useParams, Link } from "react-router-dom";
-import { ArrowLeft, Plus, Edit, Trash2, FileText, Clock, Save, X } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, FileText, Clock, Save, X, Check, CheckCircle, Circle, Download, Upload, Link as LinkIcon } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
@@ -12,11 +12,13 @@ import {
   apiDeleteTopic,
   apiCreateQuizTest,
   apiCreateDocumentTest,
+  apiUpdateTest,
   apiDeleteTest,
   apiCreateQuestion,
   apiListQuestions,
   apiDeleteQuestion,
   apiCreateOption,
+  apiUpdateOption,
   apiDeleteOption,
   type Course,
   type CourseTopic,
@@ -52,10 +54,29 @@ export function TeacherCourseEditPage() {
   const [questionText, setQuestionText] = useState("");
   const [questions, setQuestions] = useState<TestQuestion[]>([]);
   const [editingQuestion, setEditingQuestion] = useState<TestQuestion | null>(null);
+  const [editingTest, setEditingTest] = useState<CourseTest | null>(null);
+  const [topicFile, setTopicFile] = useState<File | null>(null);
+  const [topicLinks, setTopicLinks] = useState<{ title: string; url: string }[]>([]);
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [newQuestionOptions, setNewQuestionOptions] = useState<{ text: string; isCorrect: boolean }[]>([
+    { text: "", isCorrect: false },
+    { text: "", isCorrect: false },
+  ]);
 
   useEffect(() => {
     if (token && courseId) loadCourse();
   }, [token, courseId]);
+
+  function handleError(e: any) {
+    const msg = String(e);
+    if (msg.includes("Неверный токен") || msg.includes("401")) {
+      alert("Сессия истекла. Пожалуйста, войдите снова.");
+      window.location.href = "/login";
+    } else {
+      alert(`Ошибка: ${msg}`);
+    }
+  }
 
   async function loadCourse() {
     if (!token || !courseId) return;
@@ -80,25 +101,56 @@ export function TeacherCourseEditPage() {
       setEditingTitle(false);
       await loadCourse();
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
   }
 
   async function handleCreateTopic() {
     if (!token || !courseId) return;
     try {
-      await apiCreateTopic(token, courseId, {
-        title: topicTitle,
-        description: topicDescription || null,
-        order_index: course?.topics?.length || 0,
-      });
+      if (editingTopic) {
+        await apiUpdateTopic(
+          token,
+          editingTopic.id,
+          {
+            title: topicTitle,
+            description: topicDescription || null,
+            links: topicLinks,
+            presentation: topicFile,
+          }
+        );
+      } else {
+        await apiCreateTopic(
+          token, 
+          courseId, 
+          {
+            title: topicTitle,
+            description: topicDescription || null,
+            order_index: course?.topics?.length || 0,
+            links: topicLinks,
+          },
+          topicFile
+        );
+      }
       setShowTopicModal(false);
+      setEditingTopic(null);
       setTopicTitle("");
       setTopicDescription("");
+      setTopicFile(null);
+      setTopicLinks([]);
       await loadCourse();
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
+  }
+
+  function openEditTopicModal(topic: CourseTopic) {
+    setEditingTopic(topic);
+    setTopicTitle(topic.title);
+    setTopicDescription(topic.description || "");
+    setTopicLinks(topic.links || []);
+    setTopicFile(null);
+    setShowTopicModal(true);
   }
 
   async function handleDeleteTopic(topicId: string) {
@@ -107,35 +159,71 @@ export function TeacherCourseEditPage() {
       await apiDeleteTopic(token, topicId);
       await loadCourse();
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
   }
-
-  async function handleCreateTest() {
-    if (!token || !selectedTopicId) return;
+  async function handleSaveTest() {
+    if (!token) return;
+    
     try {
-      if (testType === "quiz") {
-        await apiCreateQuizTest(token, {
-          topic_id: selectedTopicId,
+      if (editingTest) {
+        await apiUpdateTest(token, editingTest.id, {
           title: testTitle,
           description: testDescription || null,
-          time_limit_minutes: testTimeLimit,
+          time_limit_minutes: testType === "quiz" ? testTimeLimit : undefined,
         });
       } else {
-        await apiCreateDocumentTest(token, selectedTopicId, {
-          title: testTitle,
-          description: testDescription || null,
-        });
+        if (!selectedTopicId) return;
+        if (testType === "quiz") {
+          const res = await apiCreateQuizTest(token, {
+            topic_id: selectedTopicId,
+            title: testTitle,
+            description: testDescription || null,
+            time_limit_minutes: testTimeLimit,
+          });
+          
+          // Auto-open questions modal for the new test
+          setShowTestModal(false);
+          setEditingTest(null);
+          setTestTitle("");
+          setTestDescription("");
+          setTestTimeLimit(30);
+          // Don't clear selectedTopicId yet if we might need it, but here we switch context
+          setSelectedTopicId(null); 
+          
+          await loadCourse();
+          
+          setSelectedTestId(res.test.id);
+          setQuestions([]);
+          setShowQuestionModal(true);
+          return; // Exit early to avoid double state updates
+        } else {
+          await apiCreateDocumentTest(token, selectedTopicId, {
+            title: testTitle,
+            description: testDescription || null,
+          });
+        }
       }
+      
       setShowTestModal(false);
+      setEditingTest(null);
       setTestTitle("");
       setTestDescription("");
       setTestTimeLimit(30);
       setSelectedTopicId(null);
       await loadCourse();
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
+  }
+
+  function openEditTestModal(test: CourseTest) {
+    setEditingTest(test);
+    setTestTitle(test.title);
+    setTestDescription(test.description || "");
+    setTestType(test.test_type as "quiz" | "document");
+    setTestTimeLimit(test.time_limit_minutes || 30);
+    setShowTestModal(true);
   }
 
   async function handleDeleteTest(testId: string) {
@@ -144,7 +232,7 @@ export function TeacherCourseEditPage() {
       await apiDeleteTest(token, testId);
       await loadCourse();
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
   }
 
@@ -161,12 +249,29 @@ export function TeacherCourseEditPage() {
   async function handleCreateQuestion() {
     if (!token || !selectedTestId) return;
     try {
-      await apiCreateQuestion(token, selectedTestId, { question_text: questionText });
-      setShowQuestionModal(false);
+      const res = await apiCreateQuestion(token, selectedTestId, { question_text: questionText });
+      
+      // Create options if any
+      if (newQuestionOptions.length > 0) {
+        for (const opt of newQuestionOptions) {
+          if (opt.text.trim()) {
+            await apiCreateOption(token, res.question.id, {
+              option_text: opt.text,
+              is_correct: opt.isCorrect,
+              order_index: 0,
+            });
+          }
+        }
+      }
+
       setQuestionText("");
+      setNewQuestionOptions([
+        { text: "", isCorrect: false },
+        { text: "", isCorrect: false },
+      ]);
       await loadQuestions(selectedTestId);
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
   }
 
@@ -176,21 +281,40 @@ export function TeacherCourseEditPage() {
       await apiDeleteQuestion(token, questionId);
       if (selectedTestId) await loadQuestions(selectedTestId);
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
     }
   }
-
-  async function handleAddOption(questionId: string, optionText: string, isCorrect: boolean) {
+  async function handleAddOption(questionId: string, optionText: string) {
     if (!token) return;
     try {
       await apiCreateOption(token, questionId, {
         option_text: optionText,
-        is_correct: isCorrect,
+        is_correct: false, // Default to false
         order_index: 0,
       });
       if (selectedTestId) await loadQuestions(selectedTestId);
     } catch (e) {
-      alert(`Ошибка: ${String(e)}`);
+      handleError(e);
+    }
+  }
+
+  async function handleUpdateOption(optionId: string, isCorrect: boolean) {
+    if (!token) return;
+    try {
+      await apiUpdateOption(token, optionId, { is_correct: isCorrect });
+      if (selectedTestId) await loadQuestions(selectedTestId);
+    } catch (e) {
+      handleError(e);
+    }
+  }
+
+  async function handleDeleteOption(optionId: string) {
+    if (!token) return;
+    try {
+      await apiDeleteOption(token, optionId);
+      if (selectedTestId) await loadQuestions(selectedTestId);
+    } catch (e) {
+      handleError(e);
     }
   }
 
@@ -228,6 +352,10 @@ export function TeacherCourseEditPage() {
       title="Редактирование курса"
       nav={[
         { to: "/app/teacher", label: "Главная" },
+        { to: "/app/teacher/journal", label: "Журнал" },
+        { to: "/app/teacher/vzvody", label: "Мои взводы" },
+        { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/workload", label: "Часы работы" },
         { to: "/app/teacher/courses", label: "Курсы" },
       ]}
     >
@@ -294,29 +422,84 @@ export function TeacherCourseEditPage() {
                 <div key={topic.id} className={styles.topicCard}>
                   <div className={styles.topicHeader}>
                     <h3>{topic.title}</h3>
-                    <button
-                      onClick={() => handleDeleteTopic(topic.id)}
-                      className={styles.deleteButton}
-                      title="Удалить тему"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className={styles.topicActions}>
+                      <button
+                        onClick={() => openEditTopicModal(topic)}
+                        className={styles.editButton}
+                        title="Редактировать тему"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTopic(topic.id)}
+                        className={styles.deleteButton}
+                        title="Удалить тему"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   {topic.description && <p className={styles.topicDescription}>{topic.description}</p>}
+                  
+                  {topic.presentation_storage_path && (
+                    <div className={styles.presentationBlock}>
+                      <div className={styles.presentationInfo}>
+                        <FileText size={20} className={styles.presentationIcon} />
+                        <span className={styles.presentationName}>
+                          {topic.presentation_original_filename || "Презентация"}
+                        </span>
+                      </div>
+                      <a 
+                        href={`${import.meta.env.VITE_API_URL || ""}/api/courses/topics/${topic.id}/presentation/download`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className={styles.downloadButton}
+                      >
+                        <Download size={16} />
+                        Скачать
+                      </a>
+                    </div>
+                  )}
 
-                  <div className={styles.testsSection}>
-                    <div className={styles.testsHeader}>
-                      <h4>Тесты</h4>
-                      <button
+                  {topic.links && topic.links.length > 0 && (
+                    <div className={styles.topicLinksList}>
+                      {topic.links.map((link, i) => (
+                        <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className={styles.topicLinkItem}>
+                          <LinkIcon size={16} />
+                          {link.title}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={styles.topicToolbar}>
+                     <button onClick={() => openEditTopicModal(topic)} className={styles.toolbarButton}>
+                        <Upload size={16} />
+                        Презентация
+                     </button>
+                     <button onClick={() => openEditTopicModal(topic)} className={styles.toolbarButton}>
+                        <FileText size={16} />
+                        Описание
+                     </button>
+                     <button onClick={() => openEditTopicModal(topic)} className={styles.toolbarButton}>
+                        <LinkIcon size={16} />
+                        Ссылки
+                     </button>
+                     <button
                         onClick={() => {
                           setSelectedTopicId(topic.id);
                           setShowTestModal(true);
                         }}
-                        className={styles.addTestButton}
+                        className={styles.toolbarButton}
                       >
                         <Plus size={16} />
-                        Добавить тест
+                        Тест
                       </button>
+                  </div>
+
+                  <div className={styles.testsSection}>
+                    <div className={styles.testsHeader}>
+                      <h4>Тесты</h4>
                     </div>
 
                     {topic.tests && topic.tests.length > 0 ? (
@@ -343,6 +526,13 @@ export function TeacherCourseEditPage() {
                                 {test.description && <p className={styles.testDescription}>{test.description}</p>}
                               </div>
                               <div className={styles.testActions}>
+                                <button
+                                  onClick={() => openEditTestModal(test)}
+                                  className={styles.editButton}
+                                  title="Редактировать тест"
+                                >
+                                  <Edit size={16} />
+                                </button>
                                 {test.test_type === "quiz" && (
                                   <button
                                     onClick={() => {
@@ -352,7 +542,7 @@ export function TeacherCourseEditPage() {
                                     }}
                                     className={styles.manageButton}
                                   >
-                                    Управление вопросами
+                                    Вопросы
                                   </button>
                                 )}
                                 <button
@@ -384,7 +574,7 @@ export function TeacherCourseEditPage() {
           <div className={styles.modalOverlay} onClick={() => setShowTopicModal(false)}>
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
               <div className={styles.modalHeader}>
-                <h3>Добавить тему</h3>
+                <h3>{editingTopic ? "Редактировать тему" : "Добавить тему"}</h3>
                 <button onClick={() => setShowTopicModal(false)} className={styles.closeButton}>
                   <X size={20} />
                 </button>
@@ -408,13 +598,107 @@ export function TeacherCourseEditPage() {
                     rows={3}
                   />
                 </div>
+                <div className={styles.formGroup}>
+                  <label>Презентация (необязательно)</label>
+                  <div className={styles.fileInputWrapper}>
+                    <input
+                      type="file"
+                      onChange={(e) => setTopicFile(e.target.files?.[0] || null)}
+                      accept=".pdf,.ppt,.pptx"
+                      id="topic-presentation-upload"
+                      className={styles.hiddenInput}
+                    />
+                    <label htmlFor="topic-presentation-upload" className={styles.fileInputLabel}>
+                      <Upload size={20} />
+                      {topicFile ? topicFile.name : "Выберите файл (PDF, PPTX)"}
+                    </label>
+                    {topicFile && (
+                      <button 
+                        onClick={() => setTopicFile(null)} 
+                        className={styles.clearFileButton}
+                        title="Удалить файл"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className={styles.linksSection}>
+                  <label>Ссылки (необязательно)</label>
+                  {topicLinks.map((link, index) => (
+                    <div key={index} className={styles.linkItem}>
+                      <input
+                        type="text"
+                        value={link.title}
+                        onChange={(e) => {
+                          const newLinks = [...topicLinks];
+                          newLinks[index].title = e.target.value;
+                          setTopicLinks(newLinks);
+                        }}
+                        placeholder="Название ссылки"
+                        className={styles.linkTitleInput}
+                      />
+                      <input
+                        type="url"
+                        value={link.url}
+                        onChange={(e) => {
+                          const newLinks = [...topicLinks];
+                          newLinks[index].url = e.target.value;
+                          setTopicLinks(newLinks);
+                        }}
+                        placeholder="URL ссылки"
+                        className={styles.linkUrlInput}
+                      />
+                      <button
+                        onClick={() => {
+                          const newLinks = topicLinks.filter((_, i) => i !== index);
+                          setTopicLinks(newLinks);
+                        }}
+                        className={styles.removeLinkButton}
+                        title="Удалить ссылку"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <div className={styles.addLinkForm}>
+                    <input
+                      type="text"
+                      value={newLinkTitle}
+                      onChange={(e) => setNewLinkTitle(e.target.value)}
+                      placeholder="Название новой ссылки"
+                      className={styles.newLinkTitleInput}
+                    />
+                    <input
+                      type="url"
+                      value={newLinkUrl}
+                      onChange={(e) => setNewLinkUrl(e.target.value)}
+                      placeholder="URL новой ссылки"
+                      className={styles.newLinkUrlInput}
+                    />
+                    <button
+                      onClick={() => {
+                        if (newLinkTitle.trim() && newLinkUrl.trim()) {
+                          setTopicLinks([...topicLinks, { title: newLinkTitle, url: newLinkUrl }]);
+                          setNewLinkTitle("");
+                          setNewLinkUrl("");
+                        }
+                      }}
+                      className={styles.addLinkButton}
+                    >
+                      <Plus size={16} />
+                      Добавить ссылку
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className={styles.modalFooter}>
                 <button onClick={() => setShowTopicModal(false)} className={styles.cancelButton}>
                   Отмена
                 </button>
                 <button onClick={handleCreateTopic} className={styles.saveButton} disabled={!topicTitle.trim()}>
-                  Создать
+                  {editingTopic ? "Сохранить" : "Создать"}
                 </button>
               </div>
             </div>
@@ -426,19 +710,33 @@ export function TeacherCourseEditPage() {
           <div className={styles.modalOverlay} onClick={() => setShowTestModal(false)}>
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
               <div className={styles.modalHeader}>
-                <h3>Добавить тест</h3>
+                <h3>{editingTest ? "Редактировать тест" : "Добавить тест"}</h3>
                 <button onClick={() => setShowTestModal(false)} className={styles.closeButton}>
                   <X size={20} />
                 </button>
               </div>
               <div className={styles.modalContent}>
-                <div className={styles.formGroup}>
-                  <label>Тип теста</label>
-                  <select value={testType} onChange={(e) => setTestType(e.target.value as "quiz" | "document")}>
-                    <option value="quiz">Тест с вопросами</option>
-                    <option value="document">Документ/Домашнее задание</option>
-                  </select>
-                </div>
+                {!editingTest && (
+                  <div className={styles.formGroup}>
+                    <label>Тип теста</label>
+                    <div className={styles.typeSelector}>
+                      <button
+                        className={`${styles.typeButton} ${testType === "quiz" ? styles.active : ""}`}
+                        onClick={() => setTestType("quiz")}
+                      >
+                        <Clock size={16} />
+                        Тест (вопросы)
+                      </button>
+                      <button
+                        className={`${styles.typeButton} ${testType === "document" ? styles.active : ""}`}
+                        onClick={() => setTestType("document")}
+                      >
+                        <FileText size={16} />
+                        Документ (ДЗ)
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className={styles.formGroup}>
                   <label>Название теста</label>
                   <input
@@ -473,15 +771,13 @@ export function TeacherCourseEditPage() {
                 <button onClick={() => setShowTestModal(false)} className={styles.cancelButton}>
                   Отмена
                 </button>
-                <button onClick={handleCreateTest} className={styles.saveButton} disabled={!testTitle.trim()}>
-                  Создать
+                <button onClick={handleSaveTest} className={styles.saveButton} disabled={!testTitle.trim()}>
+                  {editingTest ? "Сохранить" : "Создать"}
                 </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Question Modal */}
+        )}        {/* Question Modal */}
         {showQuestionModal && selectedTestId && (
           <div className={styles.modalOverlay} onClick={() => setShowQuestionModal(false)}>
             <div className={styles.modalLarge} onClick={(e) => e.stopPropagation()}>
@@ -493,21 +789,75 @@ export function TeacherCourseEditPage() {
               </div>
               <div className={styles.modalContent}>
                 <div className={styles.addQuestionForm}>
-                  <input
-                    type="text"
-                    value={questionText}
-                    onChange={(e) => setQuestionText(e.target.value)}
-                    placeholder="Текст вопроса"
-                    className={styles.questionInput}
-                  />
-                  <button
-                    onClick={handleCreateQuestion}
-                    className={styles.addQuestionButton}
-                    disabled={!questionText.trim()}
-                  >
-                    <Plus size={16} />
-                    Добавить вопрос
-                  </button>
+                  <div className={styles.newQuestionContainer}>
+                    <input
+                      type="text"
+                      value={questionText}
+                      onChange={(e) => setQuestionText(e.target.value)}
+                      placeholder="Текст вопроса"
+                      className={styles.questionInput}
+                    />
+                    
+                    <div className={styles.newOptionsList}>
+                      {newQuestionOptions.map((opt, idx) => (
+                        <div key={idx} className={styles.newOptionItem}>
+                          <button 
+                            className={`${styles.optionActionButton} ${opt.isCorrect ? styles.correct : styles.incorrect}`}
+                            onClick={() => {
+                                const newOpts = [...newQuestionOptions];
+                                newOpts[idx].isCorrect = !newOpts[idx].isCorrect;
+                                setNewQuestionOptions(newOpts);
+                            }}
+                            title={opt.isCorrect ? "Правильный ответ" : "Пометить как правильный"}
+                          >
+                            {opt.isCorrect ? <CheckCircle size={18} /> : <Circle size={18} />}
+                          </button>
+                          <input 
+                            value={opt.text}
+                            onChange={(e) => {
+                                const newOpts = [...newQuestionOptions];
+                                newOpts[idx].text = e.target.value;
+                                setNewQuestionOptions(newOpts);
+                            }}
+                            placeholder={`Вариант ${idx + 1}`}
+                            className={styles.optionInput}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                if (idx === newQuestionOptions.length - 1) {
+                                  setNewQuestionOptions([...newQuestionOptions, { text: "", isCorrect: false }]);
+                                }
+                              }
+                            }}
+                          />
+                          <button 
+                            onClick={() => {
+                                const newOpts = newQuestionOptions.filter((_, i) => i !== idx);
+                                setNewQuestionOptions(newOpts);
+                            }}
+                            className={styles.optionDeleteButton}
+                            title="Удалить вариант"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      <button 
+                        className={styles.addOptionButtonText}
+                        onClick={() => setNewQuestionOptions([...newQuestionOptions, { text: "", isCorrect: false }])}
+                      >
+                        <Plus size={14} /> Добавить вариант
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleCreateQuestion}
+                      className={styles.addQuestionButton}
+                      disabled={!questionText.trim()}
+                    >
+                      <Plus size={16} />
+                      Сохранить вопрос
+                    </button>
+                  </div>
                 </div>
 
                 <div className={styles.questionsList}>
@@ -526,28 +876,49 @@ export function TeacherCourseEditPage() {
                       <div className={styles.optionsList}>
                         {question.options?.map((option) => (
                           <div key={option.id} className={styles.optionItem}>
-                            <span className={option.is_correct ? styles.correctOption : ""}>
+                            <div className={styles.optionText}>
                               {option.option_text}
-                              {option.is_correct && " ✓"}
-                            </span>
+                            </div>
+                            <div className={styles.optionActions}>
+                              <button
+                                onClick={() => handleUpdateOption(option.id, !option.is_correct)}
+                                className={`${styles.optionActionButton} ${option.is_correct ? styles.correct : styles.incorrect}`}
+                                title={option.is_correct ? "Правильный ответ" : "Пометить как правильный"}
+                              >
+                                {option.is_correct ? <CheckCircle size={18} /> : <Circle size={18} />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOption(option.id)}
+                                className={styles.optionDeleteButton}
+                                title="Удалить вариант"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </div>
                         ))}
-                        <div className={styles.addOptionForm}>
+                        <form
+                          className={styles.addOptionForm}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = e.currentTarget;
+                            const input = form.elements.namedItem("optionText") as HTMLInputElement;
+                            if (input.value.trim()) {
+                              handleAddOption(question.id, input.value.trim());
+                              input.value = "";
+                            }
+                          }}
+                        >
                           <input
+                            name="optionText"
                             type="text"
-                            placeholder="Вариант ответа"
+                            placeholder="Добавить вариант ответа..."
                             className={styles.optionInput}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                                const text = e.currentTarget.value;
-                                const isCorrect = window.confirm("Это правильный ответ?");
-                                handleAddOption(question.id, text, isCorrect);
-                                e.currentTarget.value = "";
-                              }
-                            }}
                           />
-                          <small>Нажмите Enter для добавления</small>
-                        </div>
+                          <button type="submit" className={styles.addOptionButton} title="Добавить вариант">
+                            <Plus size={16} />
+                          </button>
+                        </form>
                       </div>
                     </div>
                   ))}

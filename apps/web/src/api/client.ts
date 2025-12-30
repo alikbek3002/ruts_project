@@ -191,6 +191,14 @@ function apiPost<T>(path: string, body: any, accessToken: string) {
   });
 }
 
+function apiPut<T>(path: string, body: any, accessToken: string) {
+  return http<T>(path, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function apiLogin(username: string, password: string) {
   return await http<{ accessToken: string; user: any }>(`/api/auth/login`, {
     method: 'POST',
@@ -1038,11 +1046,15 @@ export async function apiLibraryListTopics(token: string) {
 
 export async function apiLibraryCreateTopic(token: string, data: {
   title: string;
-  description: string;
-  class_id: string;
-  subject_id: string;
+  description?: string;
+  class_id?: string;
+  subject_id?: string;
 }) {
   return apiPost<Topic>("/library/topics", data, token);
+}
+
+export async function apiLibraryUpdateTopic(token: string, id: string, data: { title?: string; description?: string }) {
+  return apiPut<Topic>(`/library/topics/${id}`, data, token);
 }
 
 export async function apiLibraryDeleteTopic(token: string, id: string) {
@@ -1313,21 +1325,6 @@ export async function apiGenerateStreamSchedule(
   });
 }
 
-export async function apiGetTeacherWorkload(token: string, teacherId: string): Promise<{ workload: TeacherWorkload }> {
-  const res = await http<TeacherWorkload>(`/timetable/teachers/${encodeURIComponent(teacherId)}/workload`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return { workload: res };
-}
-
-export async function apiGetAllTeachersWorkload(token: string): Promise<{ teachers: any[] }> {
-  return await http<{ teachers: any[] }>("/timetable/teachers/workload/all", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
 // ============================================================================
 // COURSES API
 // ============================================================================
@@ -1354,6 +1351,7 @@ export interface CourseTopic {
   created_at: string;
   updated_at: string;
   tests?: CourseTest[];
+  links?: { title: string; url: string }[];
 }
 
 export interface CourseTest {
@@ -1431,7 +1429,7 @@ export async function apiDeleteCourse(token: string, courseId: string, password:
 export async function apiCreateTopic(
   token: string,
   courseId: string,
-  data: { title: string; description?: string | null; order_index?: number },
+  data: { title: string; description?: string | null; order_index?: number; links?: { title: string; url: string }[] },
   presentation?: File | null,
   onProgress?: (percent: number) => void
 ): Promise<{ topic: CourseTopic }> {
@@ -1441,6 +1439,7 @@ export async function apiCreateTopic(
   if (data.description) formData.append("description", data.description);
   formData.append("order_index", String(data.order_index || 0));
   if (presentation) formData.append("presentation", presentation);
+  if (data.links) formData.append("links", JSON.stringify(data.links));
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1467,11 +1466,41 @@ export async function apiCreateTopic(
   });
 }
 
-export async function apiUpdateTopic(token: string, topicId: string, data: { title?: string; description?: string | null; order_index?: number }): Promise<{ topic: CourseTopic }> {
-  return http<{ topic: CourseTopic }>(`/courses/topics/${encodeURIComponent(topicId)}`, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(data),
+export async function apiUpdateTopic(
+  token: string, 
+  topicId: string, 
+  data: { 
+    title?: string; 
+    description?: string | null; 
+    order_index?: number;
+    presentation?: File | null;
+    links?: { title: string; url: string }[];
+  }
+): Promise<{ topic: CourseTopic }> {
+  const formData = new FormData();
+  if (data.title !== undefined) formData.append("title", data.title);
+  if (data.description !== undefined) formData.append("description", data.description || "");
+  if (data.order_index !== undefined) formData.append("order_index", String(data.order_index));
+  if (data.presentation) formData.append("presentation", data.presentation);
+  if (data.links) formData.append("links", JSON.stringify(data.links));
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (e) {
+          reject(new Error("Invalid JSON response"));
+        }
+      } else {
+        reject(new Error(xhr.responseText || "Upload failed"));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.open("PUT", `${API_BASE}${withApiPrefix(`/courses/topics/${encodeURIComponent(topicId)}`)}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.send(formData);
   });
 }
 
@@ -1633,4 +1662,49 @@ export async function apiListTestAttempts(token: string, testId: string): Promis
 
 export async function apiListStudentAttempts(token: string): Promise<{ attempts: TestAttempt[] }> {
   return apiGet<{ attempts: TestAttempt[] }>("/courses/student/attempts", token);
+}
+
+// ============================================================================
+// WORKLOAD & EXPORTS
+// ============================================================================
+
+export async function apiGetTeacherWorkload(token: string, teacherId: string): Promise<TeacherWorkload> {
+  return http<TeacherWorkload>(`/timetable/teachers/${encodeURIComponent(teacherId)}/workload`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiGetAllTeachersWorkload(token: string): Promise<{ teachers: Array<{
+  teacher_id: string;
+  teacher_name: string;
+  weekly_hours: number;
+  weekly_lessons: number;
+  monthly_hours: number;
+  three_month_hours: number;
+}> }> {
+  return http<{ teachers: Array<{
+    teacher_id: string;
+    teacher_name: string;
+    weekly_hours: number;
+    weekly_lessons: number;
+    monthly_hours: number;
+    three_month_hours: number;
+  }> }>("/timetable/teachers/workload/all", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiDownloadClassesWithStreams(token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${withApiPrefix("/admin/exports/classes-with-streams.xlsx")}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.blob();
 }

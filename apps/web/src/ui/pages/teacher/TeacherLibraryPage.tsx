@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   apiLibraryListTopics, 
   apiLibraryCreateTopic, 
+  apiLibraryUpdateTopic,
   apiLibraryDeleteTopic, 
   apiLibraryUploadTopicFiles,
   apiListClasses,
@@ -14,7 +15,7 @@ import {
 import { useAuth } from '../../auth/AuthProvider';
 import { AppShell } from '../../layout/AppShell';
 import styles from './TeacherLibrary.module.css';
-import { Search, Plus, FileText, Download, Trash2, X, Upload, Filter } from 'lucide-react';
+import { Search, Plus, FileText, Download, Trash2, X, Upload, Edit2 } from 'lucide-react';
 
 export const TeacherLibraryPage: React.FC = () => {
   const { state } = useAuth();
@@ -25,7 +26,6 @@ export const TeacherLibraryPage: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,6 +35,9 @@ export const TeacherLibraryPage: React.FC = () => {
   const [newTopicSubjectId, setNewTopicSubjectId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Edit state
+  const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -46,17 +49,35 @@ export const TeacherLibraryPage: React.FC = () => {
     if (!token) return;
     try {
       setLoading(true);
-      const [topicsData, classesData, subjectsData] = await Promise.all([
-        apiLibraryListTopics(token),
-        apiListClasses(token),
-        apiListSubjects(token)
-      ]);
-      setTopics(Array.isArray(topicsData) ? topicsData : []);
-      setClasses(classesData.classes || []);
-      setSubjects(subjectsData.subjects || []);
+      console.log('Loading library data...');
+      
+      // Load data independently to avoid one failure blocking everything
+      try {
+        const response = await apiLibraryListTopics(token);
+        console.log('Topics received:', response);
+        // Handle both array and object response formats
+        const topicsList = Array.isArray(response) ? response : (response as any).topics || [];
+        setTopics(topicsList);
+      } catch (e) {
+        console.error('Failed to load topics:', e);
+      }
+
+      try {
+        const classesData = await apiListClasses(token);
+        setClasses(classesData.classes || []);
+      } catch (e) {
+        console.error('Failed to load classes:', e);
+      }
+
+      try {
+        const subjectsData = await apiListSubjects(token);
+        setSubjects(subjectsData.subjects || []);
+      } catch (e) {
+        console.error('Failed to load subjects:', e);
+      }
+
     } catch (error) {
-      console.error('Failed to load library data:', error);
-      setTopics([]);
+      console.error('Failed to load library data (general error):', error);
     } finally {
       setLoading(false);
     }
@@ -64,38 +85,51 @@ export const TeacherLibraryPage: React.FC = () => {
 
   const handleCreateTopic = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !newTopicTitle || !newTopicClassId || !newTopicSubjectId) {
-      alert('Пожалуйста, заполните все обязательные поля');
+    if (!token || !newTopicTitle) {
+      alert('Пожалуйста, введите название темы');
       return;
     }
 
     try {
       setUploading(true);
       
-      // 1. Create topic
-      const topic = await apiLibraryCreateTopic(token, {
-        title: newTopicTitle,
-        description: newTopicDesc,
-        class_id: newTopicClassId,
-        subject_id: newTopicSubjectId
+      // Create FormData for topic creation
+      const formData = new FormData();
+      formData.append('title', newTopicTitle);
+      if (newTopicDesc) {
+        formData.append('description', newTopicDesc);
+      }
+      
+      // Create topic with files (if no files, backend will create topic without files)
+      const response = await fetch('/api/library/topics', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
       });
       
-      // 2. Upload files if any
+      if (!response.ok) {
+        throw new Error('Failed to create topic');
+      }
+      
+      const topic = await response.json();
+      const topicId = topic.id;
+      
+      // Upload additional files if any
       if (selectedFiles.length > 0) {
-        const formData = new FormData();
+        const filesFormData = new FormData();
         selectedFiles.forEach(file => {
-          formData.append('files', file);
+          filesFormData.append('files', file);
         });
         
-        await apiLibraryUploadTopicFiles(token, topic.id, formData);
+        await apiLibraryUploadTopicFiles(token, topicId, filesFormData);
       }
 
       // Reset and reload
       setIsModalOpen(false);
       setNewTopicTitle('');
       setNewTopicDesc('');
-      setNewTopicClassId(null);
-      setNewTopicSubjectId(null);
       setSelectedFiles([]);
       loadData();
     } catch (error) {
@@ -104,6 +138,40 @@ export const TeacherLibraryPage: React.FC = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleUpdateTopic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !editingTopic || !newTopicTitle) return;
+
+    try {
+      setUploading(true);
+      await apiLibraryUpdateTopic(token, editingTopic.id, {
+        title: newTopicTitle,
+        description: newTopicDesc
+      });
+      
+      setTopics(topics.map(t => t.id === editingTopic.id ? {
+        ...t,
+        title: newTopicTitle,
+        description: newTopicDesc
+      } : t));
+      
+      setEditingTopic(null);
+      setNewTopicTitle('');
+      setNewTopicDesc('');
+    } catch (error) {
+      console.error('Failed to update topic:', error);
+      alert('Не удалось обновить тему');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openEditModal = (topic: Topic) => {
+    setEditingTopic(topic);
+    setNewTopicTitle(topic.title);
+    setNewTopicDesc(topic.description || '');
   };
 
   const handleDeleteTopic = async (id: string) => {
@@ -126,11 +194,9 @@ export const TeacherLibraryPage: React.FC = () => {
   const filteredTopics = topics.filter(topic => {
     const matchesSearch = topic.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          topic.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = selectedClassId ? topic.class_id === selectedClassId : true;
-    return matchesSearch && matchesClass;
+    return matchesSearch;
   });
 
-  const getClassName = (id: string | null) => classes.find(c => c.id === id)?.name || 'Неизвестный класс';
   const getSubjectName = (id: string | null) => subjects.find(s => s.id === id)?.name || 'Неизвестный предмет';
 
   return (
@@ -141,7 +207,9 @@ export const TeacherLibraryPage: React.FC = () => {
         { to: "/app/teacher/journal", label: "Журнал" },
         { to: "/app/teacher/vzvody", label: "Мои взводы" },
         { to: "/app/teacher/timetable", label: "Расписание" },
+        { to: "/app/teacher/workload", label: "Часы работы" },
         { to: "/app/teacher/library", label: "Библиотека" },
+        { to: "/app/teacher/courses", label: "Курсы" },
       ]}
     >
       <div className={styles.container}>
@@ -164,40 +232,39 @@ export const TeacherLibraryPage: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <div className={styles.filterWrapper}>
-            <Filter className={styles.filterIcon} size={20} />
-            <select 
-              className={styles.filterSelect}
-              value={selectedClassId || ''}
-              onChange={(e) => setSelectedClassId(e.target.value || null)}
-            >
-              <option value="">Все классы</option>
-              {classes.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {loading ? (
           <div className={styles.loading}>Загрузка библиотеки...</div>
+        ) : filteredTopics.length === 0 ? (
+          <div className={styles.empty}>
+            <p>Нет тем для отображения</p>
+            <p style={{fontSize: '14px', color: '#6b7280', marginTop: '8px'}}>Всего тем: {topics.length}</p>
+          </div>
         ) : (
           <div className={styles.grid}>
             {filteredTopics.map(topic => (
               <div key={topic.id} className={styles.card}>
                 <div className={styles.cardHeader}>
                   <div className={styles.cardMeta}>
-                    <span className={styles.badge}>{getClassName(topic.class_id)}</span>
-                    <span className={styles.badgeSecondary}>{getSubjectName(topic.subject_id)}</span>
+                    <span className={styles.badge}>{getSubjectName(topic.subject_id)}</span>
                   </div>
-                  <button 
-                    className={styles.deleteButton}
-                    onClick={() => handleDeleteTopic(topic.id)}
-                    title="Удалить тему"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className={styles.cardActionsHeader}>
+                    <button 
+                      className={styles.editButton}
+                      onClick={() => openEditModal(topic)}
+                      title="Редактировать тему"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      className={styles.deleteButton}
+                      onClick={() => handleDeleteTopic(topic.id)}
+                      title="Удалить тему"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 
                 <h3 className={styles.cardTitle}>{topic.title}</h3>
@@ -220,22 +287,53 @@ export const TeacherLibraryPage: React.FC = () => {
                     </a>
                   ))}
                 </div>
+                
+                <div className={styles.cardActions}>
+                  <label className={styles.uploadButton}>
+                    <Upload size={16} />
+                    <span>Загрузить файлы</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      style={{display: 'none'}}
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (!files.length || !token) return;
+                        try {
+                          const formData = new FormData();
+                          files.forEach(f => formData.append('files', f));
+                          await apiLibraryUploadTopicFiles(token, topic.id, formData);
+                          loadData();
+                        } catch (err) {
+                          console.error('Upload failed:', err);
+                          alert('Ошибка загрузки файлов');
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             ))}
           </div>
         )}
 
-        {isModalOpen && (
+        {(isModalOpen || editingTopic) && (
           <div className={styles.modalOverlay}>
             <div className={styles.modal}>
               <div className={styles.modalHeader}>
-                <h2>Добавить новую тему</h2>
-                <button onClick={() => setIsModalOpen(false)} className={styles.closeButton}>
+                <h2>{editingTopic ? 'Редактировать тему' : 'Добавить новую тему'}</h2>
+                <button 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingTopic(null);
+                  }} 
+                  className={styles.closeButton}
+                >
                   <X size={24} />
                 </button>
               </div>
               
-              <form onSubmit={handleCreateTopic} className={styles.form}>
+              <form onSubmit={editingTopic ? handleUpdateTopic : handleCreateTopic} className={styles.form}>
                 <div className={styles.formGroup}>
                   <label>Название</label>
                   <input
@@ -257,57 +355,35 @@ export const TeacherLibraryPage: React.FC = () => {
                   />
                 </div>
 
-                <div className={styles.formRow}>
+                {!editingTopic && (
                   <div className={styles.formGroup}>
-                    <label>Класс</label>
-                    <select
-                      value={newTopicClassId || ''}
-                      onChange={(e) => setNewTopicClassId(e.target.value)}
-                      required
-                    >
-                      <option value="">Выберите класс</option>
-                      {classes.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                    <label>Файлы</label>
+                    <div className={styles.fileUpload}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={handleFileChange}
+                        id="file-upload"
+                        className={styles.fileInput}
+                      />
+                      <label htmlFor="file-upload" className={styles.fileLabel}>
+                        <Upload size={20} />
+                        <span>{selectedFiles.length ? `${selectedFiles.length} файлов выбрано` : 'Выберите файлы'}</span>
+                      </label>
+                    </div>
+                    <small style={{ color: '#666', fontSize: '13px' }}>
+                      Тема будет доступна всем классам по вашему предмету
+                    </small>
                   </div>
-
-                  <div className={styles.formGroup}>
-                    <label>Предмет</label>
-                    <select
-                      value={newTopicSubjectId || ''}
-                      onChange={(e) => setNewTopicSubjectId(e.target.value)}
-                      required
-                    >
-                      <option value="">Выберите предмет</option>
-                      {subjects.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Файлы</label>
-                  <div className={styles.fileUpload}>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={handleFileChange}
-                      id="file-upload"
-                      className={styles.fileInput}
-                    />
-                    <label htmlFor="file-upload" className={styles.fileLabel}>
-                      <Upload size={20} />
-                      <span>{selectedFiles.length ? `${selectedFiles.length} файлов выбрано` : 'Выберите файлы'}</span>
-                    </label>
-                  </div>
-                </div>
+                )}
 
                 <div className={styles.modalActions}>
                   <button 
                     type="button" 
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingTopic(null);
+                    }}
                     className={styles.cancelButton}
                   >
                     Отмена
@@ -317,7 +393,7 @@ export const TeacherLibraryPage: React.FC = () => {
                     className={styles.submitButton}
                     disabled={uploading}
                   >
-                    {uploading ? 'Создание...' : 'Создать тему'}
+                    {uploading ? 'Сохранение...' : (editingTopic ? 'Сохранить' : 'Создать тему')}
                   </button>
                 </div>
               </form>

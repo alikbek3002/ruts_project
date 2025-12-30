@@ -39,6 +39,10 @@ LUNCH_START = time(13, 20)
 LUNCH_END = time(14, 20)
 
 # How many classes can attend one lesson (2-4 vzvodы)
+# Это означает, что на одной паре могут сидеть от 2 до 4 классов вместе
+# Например: если в потоке 2 класса - они будут вместе на всех парах
+#           если в потоке 4 класса - все 4 вместе на каждой паре
+#           если в потоке 5 классов - будет группа из 3 и группа из 2
 MIN_CLASSES_PER_LESSON = 2
 MAX_CLASSES_PER_LESSON = 4
 
@@ -548,14 +552,16 @@ async def generate_schedule(
     rooms = get_available_rooms(sb)
     
     # ========================================================================
-    # 4. GROUP CLASSES FOR SHARED LESSONS
+    # 4. GROUP CLASSES OPTIMALLY (2-4 groups per lesson)
     # ========================================================================
     class_groups = group_classes_optimally(class_ids, MIN_CLASSES_PER_LESSON, MAX_CLASSES_PER_LESSON)
     
     # ========================================================================
-    # 5. SCHEDULE ALLOCATION
+    # 5. SCHEDULE ALLOCATION - CREATE ONE ENTRY PER GROUP
     # ========================================================================
+    # Группируем классы (2-4 на одну пару), но гарантируем, что каждый класс получит все занятия
     timetable_entries = []
+    base_schedule = []  # [(subject_req, slot, teacher_id, room, group), ...]
     
     for subject_req in subject_requirements:
         # Find teacher for this subject
@@ -563,74 +569,94 @@ async def generate_schedule(
         if not teacher_id:
             warnings.append(f"Не найден преподаватель для предмета '{subject_req.subject_name}'. Назначьте преподавателя в настройках.")
         
-        # Schedule lessons for each class group
-        for group in class_groups:
-            lessons_scheduled = 0
+        lessons_scheduled = 0
+        
+        # Try to distribute lessons across the week
+        for attempt in range(subject_req.lessons_needed):
+            scheduled = False
             
-            # Try to distribute lessons across the week
-            for attempt in range(subject_req.lessons_needed):
-                scheduled = False
+            # Shuffle slots for variety
+            slot_candidates = available_slots.copy()
+            random.shuffle(slot_candidates)
+            
+            for slot in slot_candidates:
+                # Check teacher availability
+                if teacher_id and not constraints.is_teacher_available(teacher_id, slot.weekday, slot.start_time, slot.end_time):
+                    continue
                 
-                # Shuffle slots for variety
-                slot_candidates = available_slots.copy()
-                random.shuffle(slot_candidates)
+                # Find available room
+                room = None
+                for r in rooms:
+                    if constraints.is_room_available(r, slot.weekday, slot.start_time, slot.end_time):
+                        room = r
+                        break
                 
-                for slot in slot_candidates:
-                    # Check all constraints
-                    if not constraints.are_classes_available(group, slot.weekday, slot.start_time, slot.end_time):
-                        continue
-                    
-                    if teacher_id and not constraints.is_teacher_available(teacher_id, slot.weekday, slot.start_time, slot.end_time):
-                        continue
-                    
-                    # Find available room
-                    room = None
-                    for r in rooms:
-                        if constraints.is_room_available(r, slot.weekday, slot.start_time, slot.end_time):
-                            room = r
-                            break
-                    
-                    if not room:
-                        continue  # No room available
-                    
-                    # SLOT IS AVAILABLE! Book it
-                    constraints.book_slot(teacher_id, room, group, slot.weekday, slot.start_time, slot.end_time)
-                    
-                    # Create timetable entry
-                    # Note: class_id will be first in group for backward compatibility
-                    # class_ids array contains all classes
-                    timetable_entries.append({
-                        "stream_id": stream_id,
-                        "class_id": group[0],  # Primary class for backward compat
-                        "class_ids": group,  # All classes in this lesson
+                if not room:
+                    continue  # No room available
+                
+                # Check if ALL classes can attend at this time
+                all_classes_available = True
+                for class_id in class_ids:
+                    if not constraints.is_class_available(class_id, slot.weekday, slot.start_time, slot.end_time):
+                        all_classes_available = False
+                        break
+                
+                if not all_classes_available:
+                    continue
+                
+                # SLOT IS AVAILABLE! Book it for all classes
+                constraints.book_slot(teacher_id, room, class_ids, slot.weekday, slot.start_time, slot.end_time)
+                
+                # Save to base schedule (one entry per group, not per class)
+                for group in class_groups:
+                    base_schedule.append({
+                        "subject_req": subject_req,
+                        "slot": slot,
                         "teacher_id": teacher_id,
-                        "subject": subject_req.subject_name,
-                        "subject_id": subject_req.subject_id,
-                        "weekday": slot.weekday,
-                        "start_time": slot.start_time,
-                        "end_time": slot.end_time,
                         "room": room,
-                        "lesson_type": subject_req.lesson_type,
-                        "active": True,
-                        "auto_generated": True,
-                        "notes": f"Auto-generated for stream {stream['name']}. Classes: {len(group)} vzvodы.",
+                        "group": group,
                     })
-                    
-                    lessons_scheduled += 1
-                    scheduled = True
-                    break
                 
-                if not scheduled:
-                    warnings.append(
-                        f"Не удалось запланировать урок {attempt + 1}/{subject_req.lessons_needed} "
-                        f"по предмету '{subject_req.subject_name}'. Нет доступных временных слотов."
-                    )
+                lessons_scheduled += 1
+                scheduled = True
+                break
             
-            if lessons_scheduled < subject_req.lessons_needed:
+            if not scheduled:
                 warnings.append(
-                    f"'{subject_req.subject_name}': Запланировано только {lessons_scheduled} из {subject_req.lessons_needed} "
-                    f"занятий. Недостаточно времени в расписании."
+                    f"Не удалось запланировать урок {attempt + 1}/{subject_req.lessons_needed} "
+                    f"по предмету '{subject_req.subject_name}'. Нет доступных временных слотов."
                 )
+        
+        if lessons_scheduled < subject_req.lessons_needed:
+            warnings.append(
+                f"'{subject_req.subject_name}': Запланировано только {lessons_scheduled} из {subject_req.lessons_needed} "
+                f"занятий. Недостаточно времени в расписании."
+            )
+    
+    # Создаем записи: одна запись на группу классов (2-4 класса сидят вместе)
+    for lesson in base_schedule:
+        subject_req = lesson["subject_req"]
+        slot = lesson["slot"]
+        teacher_id = lesson["teacher_id"]
+        room = lesson["room"]
+        group = lesson["group"]
+        
+        timetable_entries.append({
+            "stream_id": stream_id,
+            "class_id": group[0],  # Первый класс для обратной совместимости
+            "class_ids": group,  # Все классы в этой группе (2-4 класса)
+            "teacher_id": teacher_id,
+            "subject": subject_req.subject_name,
+            "subject_id": subject_req.subject_id,
+            "weekday": slot.weekday,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "room": room,
+            "lesson_type": subject_req.lesson_type,
+            "active": True,
+            "auto_generated": True,
+            "notes": f"Auto-generated for stream {stream['name']}. Группа: {len(group)} классов.",
+        })
     
     # ========================================================================
     # 6. DEACTIVATE OLD ENTRIES IF FORCE=TRUE
@@ -673,15 +699,17 @@ async def generate_schedule(
     # ========================================================================
     # 10. RETURN SUMMARY
     # ========================================================================
+    total_lessons = len(base_schedule) // len(class_groups) if class_groups else 0
     return {
         "stream_id": stream_id,
         "entries_created": len(timetable_entries),
         "journal_entries_created": journal_entries_created,
-        "message": f"Расписание успешно создано: {len(timetable_entries)} занятий для {len(class_ids)} классов. Журнал заполнен на 3 месяца ({journal_entries_created} записей).",
+        "message": f"Расписание успешно создано: {total_lessons} занятий × {len(class_groups)} групп = {len(timetable_entries)} записей (по {len(class_groups[0]) if class_groups else 0}-{len(class_groups[-1]) if class_groups else 0} классов в группе). Журнал заполнен на 3 месяца ({journal_entries_created} записей).",
         "warnings": warnings,
         "details": {
             "classes_count": len(class_ids),
-            "class_groups": len(class_groups),
+            "class_groups_count": len(class_groups),
+            "lessons_scheduled": total_lessons,
             "subjects_scheduled": len(subject_requirements),
         }
     }

@@ -1,15 +1,25 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+import logging
+from datetime import date, datetime, timedelta, time as dt_time
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.deps import CurrentUser, require_role
 from app.core.monitor import timed
 from app.db.supabase_client import get_supabase
+from .auto_scheduler import (
+    AutoScheduler, 
+    ScheduleConstraints, 
+    Lesson, 
+    ScheduleConflictError,
+    calculate_schedule_quality
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _infer_teacher_id_for_subject(sb, subject_id: str) -> str | None:
@@ -631,3 +641,389 @@ async def get_all_teachers_workload(
     workloads.sort(key=lambda x: x["weekly_hours"], reverse=True)
     
     return {"teachers": workloads}
+
+
+# ============================================================================
+# AUTO-GENERATION ENDPOINTS
+# ============================================================================
+
+class AutoGenerateScheduleRequest(BaseModel):
+    """Request to auto-generate schedule for a class."""
+    class_id: str
+    stream_id: Optional[str] = None
+    
+    # Optional constraints (will use defaults from DB if not provided)
+    max_lessons_per_day: Optional[int] = Field(None, ge=1, le=8)
+    min_lessons_per_day: Optional[int] = Field(None, ge=1, le=8)
+    allow_gaps: Optional[bool] = None
+    working_days: Optional[List[int]] = Field(None, description="List of weekday numbers (0=Mon, ..., 6=Sun)")
+    earliest_start_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    latest_end_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    lesson_duration_minutes: Optional[int] = Field(None, ge=30, le=180)
+    break_duration_minutes: Optional[int] = Field(None, ge=0, le=60)
+    
+    # Generation options
+    clear_existing: bool = Field(False, description="Clear existing schedule before generating")
+    dry_run: bool = Field(False, description="Only validate, don't save to database")
+
+
+class SubjectLessonPlanInput(BaseModel):
+    """Input for configuring subject lessons in a stream."""
+    subject_id: str
+    theoretical_lessons_count: int = Field(ge=0, le=20)
+    practical_lessons_count: int = Field(ge=0, le=20)
+    max_per_week: int = Field(default=2, ge=1, le=7)
+    preferred_teacher_id: Optional[str] = None
+
+
+@router.post("/auto-generate")
+def auto_generate_schedule(
+    payload: AutoGenerateScheduleRequest, 
+    _: dict = require_role("admin", "manager")
+):
+    """
+    Auto-generate schedule for a class based on subject lesson plans.
+    
+    Algorithm:
+    1. Load subject lesson plans for the stream/class
+    2. Create lessons list (theory + practice)
+    3. Apply constraint satisfaction algorithm
+    4. Validate hard constraints (no conflicts, theory before practice)
+    5. Save to database (if not dry_run)
+    
+    Returns:
+        Generated schedule with quality metrics
+    """
+    sb = get_supabase()
+    
+    try:
+        # 1. Load class info
+        class_resp = sb.table("classes").select("*").eq("id", payload.class_id).execute()
+        if not class_resp.data:
+            raise HTTPException(status_code=404, detail="Class not found")
+        class_data = class_resp.data[0]
+        
+        # 2. Load or create schedule constraints
+        constraints = _load_or_create_constraints(sb, payload)
+        
+        # 3. Load subject lesson plans
+        if payload.stream_id:
+            lesson_plans = _load_lesson_plans_for_stream(sb, payload.stream_id)
+        else:
+            # If no stream, check if class has stream_id or use default subjects
+            stream_id = class_data.get("stream_id")
+            if stream_id:
+                lesson_plans = _load_lesson_plans_for_stream(sb, stream_id)
+            else:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="No stream_id provided and class is not assigned to a stream. Cannot determine subject lesson plans."
+                )
+        
+        if not lesson_plans:
+            raise HTTPException(
+                status_code=400,
+                detail="No subject lesson plans found. Please configure subject_lesson_plans first."
+            )
+        
+        # 4. Convert lesson plans to lessons list
+        lessons = _create_lessons_from_plans(sb, lesson_plans)
+        
+        logger.info(f"Generating schedule for class {payload.class_id} with {len(lessons)} lessons")
+        
+        # 5. Clear existing schedule if requested
+        if payload.clear_existing:
+            sb.table("timetable_entries").update({"active": False}).eq("class_id", payload.class_id).execute()
+            logger.info(f"Cleared existing schedule for class {payload.class_id}")
+        
+        # 6. Run auto-scheduler
+        scheduler = AutoScheduler(constraints)
+        
+        try:
+            scheduled_lessons = scheduler.generate_schedule(
+                class_id=payload.class_id,
+                lessons=lessons
+            )
+        except ScheduleConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Schedule conflict: {str(e)}")
+        
+        # 7. Calculate quality metrics
+        quality = calculate_schedule_quality(scheduled_lessons, constraints)
+        
+        # 8. Save to database (if not dry_run)
+        saved_entries = []
+        if not payload.dry_run:
+            for scheduled in scheduled_lessons:
+                entry_data = {
+                    "class_id": scheduled.class_id,
+                    "subject_id": scheduled.lesson.subject_id,
+                    "subject": scheduled.lesson.subject_name,
+                    "teacher_id": scheduled.lesson.teacher_id,
+                    "lesson_type": scheduled.lesson.lesson_type,
+                    "weekday": scheduled.time_slot.weekday,
+                    "start_time": scheduled.time_slot.start_time.strftime("%H:%M"),
+                    "end_time": scheduled.time_slot.end_time.strftime("%H:%M"),
+                    "room": scheduled.room,
+                    "active": True
+                }
+                
+                result = sb.table("timetable_entries").insert(entry_data).execute()
+                if result.data:
+                    saved_entries.append(result.data[0])
+            
+            logger.info(f"Saved {len(saved_entries)} lessons to database")
+        
+        # 9. Log generation
+        log_data = {
+            "class_id": payload.class_id,
+            "stream_id": payload.stream_id,
+            "status": "success",
+            "total_lessons_planned": len(lessons),
+            "lessons_scheduled": len(scheduled_lessons),
+            "completed_at": datetime.now().isoformat(),
+            "config": {
+                "constraints": constraints.__dict__,
+                "quality": quality
+            }
+        }
+        sb.table("schedule_generation_logs").insert(log_data).execute()
+        
+        return {
+            "success": True,
+            "class_id": payload.class_id,
+            "lessons_scheduled": len(scheduled_lessons),
+            "quality_metrics": quality,
+            "dry_run": payload.dry_run,
+            "schedule": [
+                {
+                    "subject": s.lesson.subject_name,
+                    "lesson_type": s.lesson.lesson_type,
+                    "weekday": s.time_slot.weekday,
+                    "start_time": s.time_slot.start_time.strftime("%H:%M"),
+                    "end_time": s.time_slot.end_time.strftime("%H:%M"),
+                    "teacher_id": s.lesson.teacher_id,
+                    "room": s.room
+                }
+                for s in scheduled_lessons
+            ] if payload.dry_run else saved_entries
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating schedule: {e}", exc_info=True)
+        
+        # Log failed attempt
+        try:
+            sb.table("schedule_generation_logs").insert({
+                "class_id": payload.class_id,
+                "stream_id": payload.stream_id,
+                "status": "failed",
+                "error_message": str(e),
+                "completed_at": datetime.now().isoformat()
+            }).execute()
+        except:
+            pass
+        
+        raise HTTPException(status_code=500, detail=f"Failed to generate schedule: {str(e)}")
+
+
+@router.post("/subject-lesson-plans")
+def create_subject_lesson_plan(
+    stream_id: str,
+    plans: List[SubjectLessonPlanInput],
+    _: dict = require_role("admin", "manager")
+):
+    """
+    Configure subject lesson plans for a stream.
+    
+    This defines how many theory/practice lessons each subject should have.
+    """
+    sb = get_supabase()
+    
+    # Validate stream exists
+    stream = sb.table("streams").select("id").eq("id", stream_id).execute()
+    if not stream.data:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    
+    created = []
+    for plan in plans:
+        # Validate subject exists
+        subject = sb.table("subjects").select("id, name").eq("id", plan.subject_id).execute()
+        if not subject.data:
+            raise HTTPException(status_code=404, detail=f"Subject {plan.subject_id} not found")
+        
+        # Check if plan already exists
+        existing = sb.table("subject_lesson_plans").select("id").eq("stream_id", stream_id).eq("subject_id", plan.subject_id).execute()
+        
+        data = {
+            "stream_id": stream_id,
+            "subject_id": plan.subject_id,
+            "theoretical_lessons_count": plan.theoretical_lessons_count,
+            "practical_lessons_count": plan.practical_lessons_count,
+            "max_per_week": plan.max_per_week,
+            "preferred_teacher_id": plan.preferred_teacher_id
+        }
+        
+        if existing.data:
+            # Update existing
+            result = sb.table("subject_lesson_plans").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            # Insert new
+            result = sb.table("subject_lesson_plans").insert(data).execute()
+        
+        if result.data:
+            created.append(result.data[0])
+    
+    return {"plans": created, "count": len(created)}
+
+
+@router.get("/subject-lesson-plans/{stream_id}")
+def get_subject_lesson_plans(stream_id: str, _: dict = require_role("admin", "manager", "teacher")):
+    """Get all subject lesson plans for a stream."""
+    sb = get_supabase()
+    
+    plans = sb.table("subject_lesson_plans").select("*, subjects(name)").eq("stream_id", stream_id).execute()
+    
+    return {"plans": plans.data or []}
+
+
+@router.get("/validate/{class_id}")
+def validate_schedule(class_id: str, _: dict = require_role("admin", "manager")):
+    """
+    Validate schedule for a class against all constraints.
+    
+    Returns list of violations.
+    """
+    sb = get_supabase()
+    
+    # Use SQL function for validation
+    result = sb.rpc("validate_schedule_constraints", {"p_class_id": class_id}).execute()
+    
+    violations = [r for r in result.data if r.get("violated")]
+    
+    return {
+        "class_id": class_id,
+        "valid": len(violations) == 0,
+        "violations": violations
+    }
+
+
+@router.get("/generation-logs")
+def get_generation_logs(
+    limit: int = 20,
+    stream_id: Optional[str] = None,
+    _: dict = require_role("admin", "manager")
+):
+    """Get schedule generation history."""
+    sb = get_supabase()
+    
+    query = sb.table("schedule_generation_logs").select("*").order("started_at", desc=True).limit(limit)
+    
+    if stream_id:
+        query = query.eq("stream_id", stream_id)
+    
+    logs = query.execute()
+    
+    return {"logs": logs.data or []}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _load_or_create_constraints(sb, payload: AutoGenerateScheduleRequest) -> ScheduleConstraints:
+    """Load constraints from DB or use payload values."""
+    
+    # Try to load from DB first
+    db_constraints = None
+    if payload.stream_id:
+        result = sb.table("schedule_constraints").select("*").eq("stream_id", payload.stream_id).execute()
+        if result.data:
+            db_constraints = result.data[0]
+    else:
+        result = sb.table("schedule_constraints").select("*").eq("class_id", payload.class_id).execute()
+        if result.data:
+            db_constraints = result.data[0]
+    
+    # Build constraints object
+    constraints = ScheduleConstraints()
+    
+    if db_constraints:
+        constraints.max_lessons_per_day = db_constraints.get("max_lessons_per_day", 4)
+        constraints.min_lessons_per_day = db_constraints.get("min_lessons_per_day", 3)
+        constraints.allow_gaps = db_constraints.get("allow_gaps", False)
+        constraints.working_days = db_constraints.get("working_days", [0, 1, 2, 3, 4])
+        
+        if db_constraints.get("earliest_start_time"):
+            constraints.earliest_start = dt_time.fromisoformat(str(db_constraints["earliest_start_time"]))
+        if db_constraints.get("latest_end_time"):
+            constraints.latest_end = dt_time.fromisoformat(str(db_constraints["latest_end_time"]))
+        
+        constraints.lesson_duration_minutes = db_constraints.get("lesson_duration_minutes", 90)
+        constraints.break_duration_minutes = db_constraints.get("break_duration_minutes", 15)
+    
+    # Override with payload values if provided
+    if payload.max_lessons_per_day is not None:
+        constraints.max_lessons_per_day = payload.max_lessons_per_day
+    if payload.min_lessons_per_day is not None:
+        constraints.min_lessons_per_day = payload.min_lessons_per_day
+    if payload.allow_gaps is not None:
+        constraints.allow_gaps = payload.allow_gaps
+    if payload.working_days is not None:
+        constraints.working_days = payload.working_days
+    if payload.earliest_start_time:
+        constraints.earliest_start = dt_time.fromisoformat(payload.earliest_start_time)
+    if payload.latest_end_time:
+        constraints.latest_end = dt_time.fromisoformat(payload.latest_end_time)
+    if payload.lesson_duration_minutes is not None:
+        constraints.lesson_duration_minutes = payload.lesson_duration_minutes
+    if payload.break_duration_minutes is not None:
+        constraints.break_duration_minutes = payload.break_duration_minutes
+    
+    return constraints
+
+
+def _load_lesson_plans_for_stream(sb, stream_id: str) -> list:
+    """Load subject lesson plans for a stream."""
+    result = sb.table("subject_lesson_plans").select("*").eq("stream_id", stream_id).execute()
+    return result.data or []
+
+
+def _create_lessons_from_plans(sb, lesson_plans: list) -> List[Lesson]:
+    """Convert lesson plans to list of individual lessons."""
+    lessons = []
+    
+    for plan in lesson_plans:
+        subject_id = plan["subject_id"]
+        
+        # Get subject info
+        subject = sb.table("subjects").select("name").eq("id", subject_id).execute()
+        subject_name = subject.data[0]["name"] if subject.data else f"Subject {subject_id}"
+        
+        # Get teacher
+        teacher_id = plan.get("preferred_teacher_id")
+        if not teacher_id:
+            # Try to infer from teacher_subjects
+            teacher_id = _infer_teacher_id_for_subject(sb, subject_id)
+        
+        # Create theoretical lessons
+        for i in range(plan.get("theoretical_lessons_count", 0)):
+            lessons.append(Lesson(
+                subject_id=subject_id,
+                subject_name=subject_name,
+                lesson_type="theoretical",
+                teacher_id=teacher_id
+            ))
+        
+        # Create practical lessons
+        for i in range(plan.get("practical_lessons_count", 0)):
+            lessons.append(Lesson(
+                subject_id=subject_id,
+                subject_name=subject_name,
+                lesson_type="practical",
+                teacher_id=teacher_id
+            ))
+    
+    return lessons
+

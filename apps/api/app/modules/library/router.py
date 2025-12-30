@@ -172,34 +172,45 @@ async def create_topic_with_file(
 ):
     """Create a topic (theme). If file is provided, upload it as the first file in the topic."""
     sb = get_supabase()
+    
+    topic_data = {
+        "title": title,
+        "description": description,
+        "created_by": user["id"],
+    }
+    
+    # For teachers: auto-assign their subject_id
+    if user["role"] == "teacher":
+        teacher_subjects = sb.table("teacher_subjects").select("subject_id").eq("teacher_id", user["id"]).limit(1).execute()
+        if teacher_subjects.data:
+            topic_data["subject_id"] = teacher_subjects.data[0].get("subject_id")
+    
+    # Don't assign class_id - topics are for all classes
 
     try:
-        topic_resp = (
-            sb.table("library_topics")
-            .insert(
-                {
-                    "title": title,
-                    "description": description,
-                    "class_id": class_id,
-                    "created_by": user["id"],
-                }
-            )
-            .execute()
-        )
+        topic_resp = sb.table("library_topics").insert(topic_data).execute()
     except APIError as e:
         if _is_missing_table_api_error(e, "public.library_topics"):
             raise HTTPException(
                 status_code=500,
                 detail="Library topics schema is missing. Apply migration supabase/migrations/20251225_000012_library_topics.sql",
             )
-        raise
+        if _is_missing_column_api_error(e, "subject_id"):
+            topic_data.pop("subject_id", None)
+            topic_resp = sb.table("library_topics").insert(topic_data).execute()
+        else:
+            raise
     topic = topic_resp.data[0] if isinstance(topic_resp.data, list) and topic_resp.data else topic_resp.data
     topic_id = topic.get("id") if isinstance(topic, dict) else None
     if not topic_id:
         raise HTTPException(status_code=500, detail="Failed to create topic")
 
+    # Initialize empty files array
+    if isinstance(topic, dict):
+        topic["files"] = []
+
     if file is None:
-        return {"topic": topic, "item": None, "originalFilename": None}
+        return topic
 
     # Upload file
     file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else ""
@@ -233,7 +244,20 @@ async def create_topic_with_file(
         .execute()
     )
     item = item_resp.data[0] if isinstance(item_resp.data, list) and item_resp.data else item_resp.data
-    return {"topic": topic, "item": item, "originalFilename": file.filename}
+    
+    # Add file info to topic
+    if isinstance(topic, dict) and isinstance(item, dict):
+        # Generate signed URL for the file
+        try:
+            signed = sb.storage.from_("library").create_signed_url(storage_path, 3600)
+            item["file_path"] = signed["signedURL"]
+        except Exception:
+            item["file_path"] = "#"
+        item["file_name"] = file.filename
+        item["file_size"] = 0
+        topic["files"] = [item]
+    
+    return topic
 
 
 @router.post("/topics/{topic_id}/upload")
@@ -426,8 +450,8 @@ def delete_item(item_id: str, user: dict = require_role("teacher", "admin")):
 class TopicCreateIn(BaseModel):
     title: str
     description: str | None = None
-    class_id: str | None = None
-    subject_id: str | None = None
+    class_id: str | None = None  # Deprecated - не используется, темы для всех классов
+    subject_id: str | None = None  # Опционально - для учителя определяется автоматически
 
 
 @router.get("/topics")
@@ -436,6 +460,7 @@ def list_topics(
     subject_id: str | None = None,
     user: dict = require_role("admin", "teacher", "student")
 ):
+    print(f"Listing topics for user {user.get('id')} role {user.get('role')}")
     sb = get_supabase()
     
     # Get topics
@@ -447,7 +472,9 @@ def list_topics(
         
     try:
         topics_resp = q.order("created_at", desc=True).execute()
+        print(f"Topics found: {len(topics_resp.data) if topics_resp.data else 0}")
     except APIError as e:
+        print(f"Error listing topics: {e}")
         # Fallback if subject_id column missing
         if _is_missing_column_api_error(e, "subject_id"):
             q = sb.table("library_topics").select("id,title,description,class_id,created_by,created_at")
@@ -460,7 +487,7 @@ def list_topics(
     topics = topics_resp.data or []
     
     if not topics:
-        return []
+        return {"topics": []}
         
     topic_ids = [t["id"] for t in topics]
     
@@ -498,25 +525,36 @@ def list_topics(
     for t in topics:
         t["files"] = files_by_topic.get(t["id"], [])
         
-    return topics
+    return {"topics": topics}
 
 
-@router.post("/topics")
-def create_topic(payload: TopicCreateIn, user: dict = require_role("teacher", "admin")):
+# Note: Topic creation is handled by the Form-based endpoint above (@router.post("/topics"))
+# which supports both JSON and file uploads
+
+
+class TopicUpdateIn(BaseModel):
+    title: str | None = None
+    description: str | None = None
+
+
+@router.put("/topics/{topic_id}")
+def update_topic(topic_id: str, payload: TopicUpdateIn, user: dict = require_role("teacher", "admin")):
     sb = get_supabase()
-    data = payload.model_dump()
-    data["created_by"] = user["id"]
     
-    try:
-        resp = sb.table("library_topics").insert(data).execute()
-    except APIError as e:
-        if _is_missing_column_api_error(e, "subject_id"):
-            data.pop("subject_id", None)
-            resp = sb.table("library_topics").insert(data).execute()
-        else:
-            raise
-            
-    return resp.data[0]
+    # Check ownership
+    t = sb.table("library_topics").select("created_by").eq("id", topic_id).single().execute()
+    if not t.data:
+        raise HTTPException(404, "Topic not found")
+        
+    if user["role"] != "admin" and t.data.get("created_by") != user["id"]:
+        raise HTTPException(403, "Permission denied")
+        
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        return t.data
+        
+    resp = sb.table("library_topics").update(data).eq("id", topic_id).execute()
+    return resp.data[0] if resp.data else None
 
 
 @router.delete("/topics/{topic_id}")

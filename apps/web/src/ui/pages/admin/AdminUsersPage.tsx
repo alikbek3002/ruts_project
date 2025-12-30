@@ -13,11 +13,13 @@ import {
   apiListSubjects,
   apiGetTeacherSubjects,
   apiSetTeacherSubjects,
+  apiGetTeacherWorkload,
   type AdminUser,
   type AdminUserDetails,
   type ClassItem,
   type Subject,
   type UserRole,
+  type TeacherWorkload,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
@@ -39,7 +41,8 @@ import {
   Camera, 
   Save,
   Briefcase,
-  Shield
+  Shield,
+  Clock
 } from "lucide-react";
 
 function normalizeKgPhone(input: string): string {
@@ -69,6 +72,7 @@ export function AdminUsersPage() {
   const [viewLoading, setViewLoading] = useState(false);
   const [viewUser, setViewUser] = useState<AdminUserDetails | null>(null);
   const [viewClass, setViewClass] = useState<{ id: string; name: string | null } | null>(null);
+  const [viewWorkload, setViewWorkload] = useState<TeacherWorkload | null>(null);
   const [viewErr, setViewErr] = useState<string | null>(null);
   const [viewTempPassword, setViewTempPassword] = useState<string | null>(null);
   const [viewTeacherSubjectIds, setViewTeacherSubjectIds] = useState<string[]>([]);
@@ -152,6 +156,7 @@ export function AdminUsersPage() {
     setViewErr(null);
     setViewUser(null);
     setViewClass(null);
+    setViewWorkload(null);
     setViewTempPassword(null);
     setViewTeacherSubjectIds([]);
     setViewEdit(false);
@@ -183,6 +188,13 @@ export function AdminUsersPage() {
           const ts = await apiGetTeacherSubjects(token, resp.user.id);
           const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
           setViewTeacherSubjectIds(ids.slice(0, 2));
+          // Load teacher workload
+          try {
+            const workloadData = await apiGetTeacherWorkload(token, resp.user.id);
+            setViewWorkload(workloadData);
+          } catch (err) {
+            console.error("Failed to load workload:", err);
+          }
         } catch {
           setViewTeacherSubjectIds([]);
         }
@@ -245,6 +257,7 @@ export function AdminUsersPage() {
         { to: `${base}/subjects`, label: "Предметы" },
         { to: `${base}/directions`, label: "Направления" },
         { to: `${base}/timetable`, label: "Расписание" },
+        { to: `${base}/workload`, label: "Часы работы" },
         { to: `${base}/notifications`, label: "Уведомления" },
       ]}
     >
@@ -892,6 +905,48 @@ export function AdminUsersPage() {
                         </div>
                         <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
                           Сейчас: {viewUser.teacher_subject || "—"}
+                        </div>
+                      </div>
+                    )}
+
+                    {viewUser.role === "teacher" && viewWorkload && (
+                      <div style={{ 
+                        border: "1px solid var(--color-border)", 
+                        borderRadius: "var(--radius-md)", 
+                        padding: "var(--spacing-md)",
+                        background: "var(--color-bg-subtle)",
+                        marginTop: "var(--spacing-md)"
+                      }}>
+                        <div style={{ 
+                          fontSize: 13, 
+                          fontWeight: 500, 
+                          marginBottom: "var(--spacing-md)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8
+                        }}>
+                          <Clock size={16} />
+                          Рабочая нагрузка
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
+                          <div>
+                            <div style={{ fontSize: 11, color: "var(--color-text-light)", marginBottom: 4 }}>В неделю</div>
+                            <div style={{ fontSize: 16, fontWeight: 600 }}>
+                              {viewWorkload.weekly_hours.toFixed(1)} ч
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--color-text-light)" }}>
+                              {viewWorkload.weekly_lessons} занятий
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, color: "var(--color-text-light)", marginBottom: 4 }}>За месяц</div>
+                            <div style={{ fontSize: 16, fontWeight: 600 }}>
+                              {viewWorkload.current_month_hours.toFixed(1)} ч
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--color-text-light)" }}>
+                              {viewWorkload.current_month_lessons} занятий
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
