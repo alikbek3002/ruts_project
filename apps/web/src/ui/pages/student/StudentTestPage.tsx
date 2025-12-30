@@ -32,7 +32,7 @@ export function StudentTestPage() {
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
