@@ -2,6 +2,8 @@
 Тесты для загрузки файлов в библиотеку
 Запуск: pytest tests/test_library_upload.py -v
 """
+import os
+
 import pytest
 from io import BytesIO
 from fastapi.testclient import TestClient
@@ -9,8 +11,9 @@ from app.main import app
 
 client = TestClient(app)
 
-# Моковые данные для тестов
-TEACHER_TOKEN = "test_teacher_token"  # В реальных тестах нужно получать через login
+# Для эндпоинтов с авторизацией нужен валидный JWT.
+# Чтобы прогнать auth-required тесты локально, установите RUTS_TEST_TEACHER_TOKEN.
+TEACHER_TOKEN = os.getenv("RUTS_TEST_TEACHER_TOKEN")
 
 
 class TestLibraryUpload:
@@ -18,6 +21,8 @@ class TestLibraryUpload:
     
     def test_upload_file_success(self):
         """Тест успешной загрузки файла"""
+        if not TEACHER_TOKEN:
+            pytest.skip("Set RUTS_TEST_TEACHER_TOKEN to run auth-required upload tests")
         # Создаем тестовый файл
         file_content = b"Test file content for library"
         file = BytesIO(file_content)
@@ -32,13 +37,11 @@ class TestLibraryUpload:
             }
         )
         
-        # Проверяем ответ
-        assert response.status_code in [200, 401]  # 401 если токен невалидный
-        if response.status_code == 200:
-            data = response.json()
-            assert "item" in data
-            assert "originalFilename" in data
-            assert data["item"]["title"] == "Test Document"
+        assert response.status_code == 200
+        data = response.json()
+        assert "item" in data
+        assert "originalFilename" in data
+        assert data["item"]["title"] == "Test Document"
     
     def test_upload_without_auth(self):
         """Тест загрузки без авторизации"""
@@ -54,6 +57,8 @@ class TestLibraryUpload:
     
     def test_upload_missing_title(self):
         """Тест загрузки без обязательного поля title"""
+        if not TEACHER_TOKEN:
+            pytest.skip("Set RUTS_TEST_TEACHER_TOKEN to run auth-required upload tests")
         file = BytesIO(b"test")
         
         response = client.post(

@@ -30,7 +30,7 @@ def print_error(text):
 def print_info(text):
     print(f"{YELLOW}ℹ{RESET} {text}")
 
-def test_endpoint(method, path, expected_status, description, headers=None, data=None, files=None):
+def endpoint_check(method, path, expected_status, description, headers=None, data=None, files=None):
     """Тестирует один endpoint"""
     url = f"{API_BASE}{path}"
     try:
@@ -71,27 +71,27 @@ def main():
     
     # Test 1: Health check
     print_info("Testing basic endpoints...")
-    results.append(test_endpoint("GET", "/health", 200, "Health check"))
+    results.append(endpoint_check("GET", "/health", 200, "Health check"))
     
     # Test 2: Library endpoints (без авторизации - должны вернуть 401)
     print_info("\nTesting library endpoints (unauthorized)...")
-    results.append(test_endpoint("GET", "/library", 401, "List library items (no auth)"))
-    results.append(test_endpoint("POST", "/library/upload", 401, "Upload file (no auth)"))
-    results.append(test_endpoint("GET", "/library/fake-id/download-url", 401, "Get download URL (no auth)"))
-    results.append(test_endpoint("DELETE", "/library/fake-id", 401, "Delete library item (no auth)"))
+    results.append(endpoint_check("GET", "/library", 401, "List library items (no auth)"))
+    results.append(endpoint_check("POST", "/library/upload", 401, "Upload file (no auth)"))
+    results.append(endpoint_check("GET", "/library/fake-id/download-url", 401, "Get download URL (no auth)"))
+    results.append(endpoint_check("DELETE", "/library/fake-id", 401, "Delete library item (no auth)"))
     
     # Test 3: Zoom endpoints (без авторизации - должны вернуть 401)
     print_info("\nTesting Zoom endpoints (unauthorized)...")
-    results.append(test_endpoint("GET", "/zoom/status", 401, "Zoom status (no auth)"))
-    results.append(test_endpoint("GET", "/zoom/oauth/start", 401, "Zoom OAuth start (no auth)"))
-    results.append(test_endpoint("GET", "/zoom/meetings", 401, "List Zoom meetings (no auth)"))
-    results.append(test_endpoint("POST", "/zoom/meetings", 401, "Create Zoom meeting (no auth)", 
+    results.append(endpoint_check("GET", "/zoom/status", 401, "Zoom status (no auth)"))
+    results.append(endpoint_check("GET", "/zoom/oauth/start", 401, "Zoom OAuth start (no auth)"))
+    results.append(endpoint_check("GET", "/zoom/meetings", 401, "List Zoom meetings (no auth)"))
+    results.append(endpoint_check("POST", "/zoom/meetings", 401, "Create Zoom meeting (no auth)", 
                                 data={"timetableEntryId": "fake", "startsAt": "2025-12-25T10:00:00"}))
-    results.append(test_endpoint("DELETE", "/zoom/meetings/fake-id", 401, "Delete Zoom meeting (no auth)"))
+    results.append(endpoint_check("DELETE", "/zoom/meetings/fake-id", 401, "Delete Zoom meeting (no auth)"))
     
     # Test 4: Auth endpoints
     print_info("\nTesting auth endpoints...")
-    results.append(test_endpoint("POST", "/auth/login", 401, "Login with invalid credentials",
+    results.append(endpoint_check("POST", "/auth/login", 401, "Login with invalid credentials",
                                 data={"username": "invalid", "password": "invalid"}))
     
     # Summary
