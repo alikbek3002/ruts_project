@@ -109,6 +109,12 @@ class AutoScheduler:
         # Subject tracking (for theory before practice rule)
         self.subject_scheduled: Dict[Tuple[str, str], List[TimeSlot]] = {}  # (subject_id, type) -> slots
     
+    def load_context(self, context_lessons: List[ScheduledLesson]):
+        """Load existing lessons from OTHER classes to prevent conflicts."""
+        for scheduled in context_lessons:
+            self.scheduled.append(scheduled)
+            self._mark_slots_occupied(scheduled)
+
     def generate_schedule(
         self,
         class_id: str,
@@ -124,7 +130,7 @@ class AutoScheduler:
             existing_schedule: Already scheduled lessons (for updates)
             
         Returns:
-            List of scheduled lessons
+            List of scheduled lessons (only for the target class)
             
         Raises:
             ScheduleConflictError: If schedule cannot be generated
@@ -157,11 +163,13 @@ class AutoScheduler:
         # Validate final schedule
         self._validate_schedule()
         
-        return self.scheduled
+        # Return only lessons for this class
+        return [s for s in self.scheduled if s.class_id == class_id]
     
     def _prioritize_lessons(self, lessons: List[Lesson]) -> List[Lesson]:
         """Sort lessons by priority: theory -> practice -> credit."""
         priority_map = {'theoretical': 1, 'practical': 2, 'credit': 3}
+        # Sort by type priority, then by subject name to keep related lessons close
         return sorted(lessons, key=lambda l: (priority_map.get(l.lesson_type, 999), l.subject_name))
     
     def _find_slot_for_lesson(self, class_id: str, lesson: Lesson) -> Optional[TimeSlot]:
@@ -173,7 +181,7 @@ class AutoScheduler:
         - No conflicts (teacher, room, class)
         - Theory before practice rule
         - Daily lesson limits
-        - No gaps (if configured)
+        - No gaps (strict rule: must be consecutive)
         """
         # Check theory before practice rule
         if lesson.lesson_type == 'practical':
@@ -195,6 +203,16 @@ class AutoScheduler:
             
             for slot in day_slots:
                 if self._can_schedule_at_slot(class_id, lesson, slot):
+                    # Additional check for theory before practice on the SAME day
+                    if lesson.lesson_type == 'practical':
+                        # If theory is on the same day, practice must be AFTER theory
+                        theory_slots = self.subject_scheduled.get((lesson.subject_id, 'theoretical'), [])
+                        same_day_theory = [s for s in theory_slots if s.weekday == weekday]
+                        if same_day_theory:
+                            latest_theory_end = max(s.end_time for s in same_day_theory)
+                            if slot.start_time < latest_theory_end:
+                                continue # Practice cannot be before theory on same day
+
                     return slot
         
         return None
@@ -209,38 +227,40 @@ class AutoScheduler:
             key=lambda s: s.start_time
         )
         
-        if self.constraints.allow_gaps:
-            # Can have gaps - generate all possible slots
+        # STRICT NO GAPS RULE:
+        # If there are existing lessons, we can ONLY schedule immediately after the last one.
+        # If there are NO lessons, we can schedule at the earliest start time.
+        
+        if not existing_slots:
+            # No lessons yet, try ALL possible start times for the first lesson
+            # This allows starting later in the day if the morning is blocked
             current_time = self.constraints.earliest_start
-            
             while True:
                 end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
                 if end_time > self.constraints.latest_end:
                     break
                 
-                slot = TimeSlot(weekday, current_time, end_time)
+                slots.append(TimeSlot(weekday, current_time, end_time))
                 
-                # Check if slot overlaps with existing
-                if not any(s.overlaps(slot) for s in existing_slots):
-                    slots.append(slot)
-                
+                # Move to next potential slot (assuming standard break or lesson duration)
+                # We step by (lesson + break) to align with standard grid
                 current_time = self._add_minutes(end_time, self.constraints.break_duration_minutes)
         else:
-            # No gaps - slots must be consecutive
-            if not existing_slots:
-                # No lessons yet, start from beginning
-                current_time = self.constraints.earliest_start
-                end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
-                if end_time <= self.constraints.latest_end:
-                    slots.append(TimeSlot(weekday, current_time, end_time))
-            else:
-                # Add slot right after last lesson
-                last_slot = existing_slots[-1]
-                current_time = self._add_minutes(last_slot.end_time, self.constraints.break_duration_minutes)
-                end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
-                
-                if end_time <= self.constraints.latest_end:
-                    slots.append(TimeSlot(weekday, current_time, end_time))
+            # Add slot right after last lesson
+            last_slot = existing_slots[-1]
+            
+            # Check if last slot was lunch (special case if needed, but for now just add break)
+            # Assuming break is included or handled.
+            
+            current_time = self._add_minutes(last_slot.end_time, self.constraints.break_duration_minutes)
+            
+            # Special handling for lunch break if needed (e.g. if current_time is lunch time)
+            # For now, simple logic:
+            
+            end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
+            
+            if end_time <= self.constraints.latest_end:
+                slots.append(TimeSlot(weekday, current_time, end_time))
         
         return slots
     
@@ -248,13 +268,54 @@ class AutoScheduler:
         """Check if lesson can be scheduled at given slot (no conflicts)."""
         # Check teacher availability (using set lookup - O(1))
         if lesson.teacher_id and lesson.teacher_id in self.teacher_slots:
-            if any(s.overlaps(slot) for s in self.teacher_slots[lesson.teacher_id]):
-                return False
+            # Allow merging: if teacher is already teaching THIS subject (and type) at THIS slot, it's OK (merged class)
+            # But we must ensure it's the SAME subject and type.
+            
+            teacher_slots_at_time = [s for s in self.teacher_slots[lesson.teacher_id] if s.overlaps(slot)]
+            if teacher_slots_at_time:
+                # Teacher is busy. Check if we can merge.
+                # We need to find the lesson scheduled at this slot for this teacher.
+                # Since self.teacher_slots only stores slots, we need to look up the scheduled lesson.
+                
+                can_merge = False
+                for scheduled in self.scheduled:
+                    if (scheduled.lesson.teacher_id == lesson.teacher_id and 
+                        scheduled.time_slot.overlaps(slot)):
+                        
+                        # Check if same subject and type
+                        if (scheduled.lesson.subject_id == lesson.subject_id and 
+                            scheduled.lesson.lesson_type == lesson.lesson_type):
+                            # Check if room capacity allows (optional, skipping for now as per request "two groups can sit")
+                            # Also ensure it's a lecture/theory (usually practice is split, but user said "two groups can sit on one pair")
+                            # Let's allow merging for all types if subject matches.
+                            can_merge = True
+                            # Use the same room as the existing lesson
+                            lesson.preferred_room = scheduled.room 
+                        break
+                
+                if not can_merge:
+                    return False
         
-        # Check room availability (using set lookup - O(1))
+        # Check room availability
+        # If we are merging, we already set preferred_room to the existing room, so we share it.
+        # If not merging, we must check if room is free.
         if lesson.preferred_room and lesson.preferred_room in self.room_slots:
-            if any(s.overlaps(slot) for s in self.room_slots[lesson.preferred_room]):
-                return False
+             # If we are merging, the room slot is already taken by the teacher's other class.
+             # We need to check if the room is taken by SOMEONE ELSE (not this teacher/subject).
+             
+             room_slots_at_time = [s for s in self.room_slots[lesson.preferred_room] if s.overlaps(slot)]
+             if room_slots_at_time:
+                 # Room is busy.
+                 # If we are merging (teacher is same), then it's fine.
+                 # If teacher is different, conflict.
+                 
+                 # Find who is occupying the room
+                 for scheduled in self.scheduled:
+                     if (scheduled.room == lesson.preferred_room and 
+                         scheduled.time_slot.overlaps(slot)):
+                         if scheduled.lesson.teacher_id != lesson.teacher_id:
+                             return False # Room taken by another teacher
+                         # If same teacher, it's the merge case we allowed above.
         
         # Class availability already checked in _get_available_slots_for_day
         return True

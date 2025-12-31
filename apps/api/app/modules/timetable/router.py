@@ -4,6 +4,11 @@ import logging
 from datetime import date, datetime, timedelta, time as dt_time
 from typing import List, Optional
 
+try:
+    from postgrest.exceptions import APIError as PostgrestAPIError
+except Exception:  # pragma: no cover
+    PostgrestAPIError = None  # type: ignore
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
@@ -15,11 +20,133 @@ from .auto_scheduler import (
     ScheduleConstraints, 
     Lesson, 
     ScheduleConflictError,
-    calculate_schedule_quality
+    calculate_schedule_quality,
+    ScheduledLesson,
+    TimeSlot
 )
+
+from io import BytesIO
+from openpyxl import Workbook
+from fastapi.responses import StreamingResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# Fixed rooms list for manual scheduling (auditoria): 20, 22, 30..52
+FIXED_ROOMS: list[str] = ["20", "22"] + [str(n) for n in range(30, 53)]
+
+
+def _raise_db_http_exception(exc: Exception, *, fallback: str) -> None:
+    msg = str(exc) or fallback
+    code = getattr(exc, "code", None)
+    details = getattr(exc, "details", None)
+    hint = getattr(exc, "hint", None)
+    message = getattr(exc, "message", None)
+
+    if PostgrestAPIError is not None and isinstance(exc, PostgrestAPIError):
+        msg = message or msg
+
+    full = " ".join([str(x) for x in [msg, details, hint] if x]).strip() or fallback
+    low = full.lower()
+
+    if code in {"42501"} or "row-level security" in low or "rls" in low or "permission" in low:
+        raise HTTPException(status_code=403, detail=f"Недостаточно прав для операции. {full}")
+    if code == "23505" or "duplicate key" in low or "unique" in low:
+        raise HTTPException(status_code=409, detail=f"Конфликт данных. {full}")
+    if code in {"23502", "23503", "23514"} or "violates" in low or "foreign key" in low or "not-null" in low:
+        raise HTTPException(status_code=400, detail=f"Некорректные данные. {full}")
+
+    raise HTTPException(status_code=500, detail=fallback + f" ({full})")
+
+
+def _norm_time_str(value: object, default: str) -> str:
+    if value is None:
+        return default
+    s = str(value).strip()
+    if not s:
+        return default
+    # TIME from DB may be HH:MM:SS
+    return s[:5]
+
+
+def _parse_hhmm(value: str) -> dt_time:
+    s = _norm_time_str(value, "00:00")
+    return dt_time.fromisoformat(s)
+
+
+def _entry_class_ids(entry: dict) -> list[str]:
+    cls = entry.get("class_ids")
+    if isinstance(cls, list) and cls:
+        return [str(x) for x in cls if x]
+    cid = entry.get("class_id")
+    return [str(cid)] if cid else []
+
+
+def _subject_key(entry: dict) -> str:
+    sid = entry.get("subject_id")
+    if sid:
+        return f"id:{sid}"
+    return f"name:{(entry.get('subject') or '').strip().lower()}"
+
+
+def _infer_stream_id_for_class(sb, class_id: str) -> str | None:
+    # In current DB schema, class -> stream is stored in junction table stream_classes.
+    resp = (
+        sb.table("stream_classes")
+        .select("stream_id")
+        .eq("class_id", class_id)
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        return None
+    sid = resp.data[0].get("stream_id")
+    return str(sid) if sid else None
+
+
+def _validate_stream_and_classes(sb, *, class_id: str, stream_id: str | None, class_ids: list[str] | None) -> tuple[str, list[str]]:
+    ids = [str(x) for x in (class_ids or [class_id]) if x]
+    # Ensure class_id is included
+    if class_id and class_id not in ids:
+        ids.insert(0, class_id)
+    # Unique, preserve order
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="class_id/class_ids is required")
+
+    sid = stream_id or _infer_stream_id_for_class(sb, ids[0])
+    if not sid:
+        raise HTTPException(status_code=400, detail="Class has no stream_id; select a stream")
+
+    # Validate all classes belong to this stream.
+    # DB schema uses junction table stream_classes(stream_id, class_id).
+    rels = sb.table("stream_classes").select("stream_id,class_id").in_("class_id", ids).execute().data or []
+    by_class: dict[str, list[str]] = {}
+    for r in rels:
+        cid = str(r.get("class_id"))
+        sid_r = r.get("stream_id")
+        if not cid or not sid_r:
+            continue
+        by_class.setdefault(cid, []).append(str(sid_r))
+
+    # Ensure all selected classes exist
+    classes = sb.table("classes").select("id").in_("id", ids).execute().data or []
+    existing_ids = {str(c.get("id")) for c in classes if c.get("id")}
+    missing = [cid for cid in ids if cid not in existing_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Class not found: {missing[0]}")
+
+    for cid in ids:
+        sids = list(dict.fromkeys(by_class.get(cid, [])))
+        if not sids:
+            raise HTTPException(status_code=400, detail=f"Группа не привязана к потоку: {cid}")
+        if len(sids) > 1:
+            raise HTTPException(status_code=409, detail=f"Группа привязана к нескольким потокам: {cid}")
+        if str(sids[0]) != str(sid):
+            raise HTTPException(status_code=409, detail="Нельзя смешивать группы из разных потоков в одной паре")
+
+    return str(sid), ids
 
 
 def _infer_teacher_id_for_subject(sb, subject_id: str) -> str | None:
@@ -47,16 +174,147 @@ def _room_supported(sb) -> bool:
         return False
 
 
+_WEEKDAY_RU: dict[int, str] = {
+    0: "Пн",
+    1: "Вт",
+    2: "Ср",
+    3: "Чт",
+    4: "Пт",
+    5: "Сб",
+    6: "Вс",
+}
+
+
+def _weekday_label(weekday: int) -> str:
+    return _WEEKDAY_RU.get(int(weekday), str(weekday))
+
+
+def _fetch_class_names(sb, class_ids: list[str]) -> dict[str, str]:
+    ids = [str(x) for x in class_ids if x]
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return {}
+    rows = sb.table("classes").select("id,name").in_("id", ids).execute().data or []
+    out: dict[str, str] = {}
+    for r in rows:
+        cid = r.get("id")
+        if not cid:
+            continue
+        out[str(cid)] = (r.get("name") or "").strip() or str(cid)
+    return out
+
+
+def _format_conflict_entry(entry: dict, class_name_by_id: dict[str, str]) -> dict:
+    cids = _entry_class_ids(entry)
+    cnames = [class_name_by_id.get(cid, cid) for cid in cids]
+    return {
+        "id": entry.get("id"),
+        "weekday": int(entry.get("weekday", 0)),
+        "weekday_label": _weekday_label(int(entry.get("weekday", 0))),
+        "start_time": _norm_time_str(entry.get("start_time"), "00:00"),
+        "end_time": _norm_time_str(entry.get("end_time"), "00:00"),
+        "room": entry.get("room"),
+        "subject": entry.get("subject"),
+        "lesson_type": entry.get("lesson_type"),
+        "teacher_id": entry.get("teacher_id"),
+        "stream_id": entry.get("stream_id"),
+        "class_ids": cids,
+        "class_names": cnames,
+    }
+
+
+def _build_conflicts_payload(
+    sb,
+    *,
+    overlapping: list[dict],
+    proposed_weekday: int,
+    proposed_start: str,
+    proposed_end: str,
+    proposed_class_ids: list[str],
+    proposed_teacher_id: str | None,
+    proposed_room: str | None,
+) -> dict:
+    all_class_ids: list[str] = []
+    for e in overlapping:
+        all_class_ids.extend(_entry_class_ids(e))
+    all_class_ids.extend(proposed_class_ids)
+    class_name_by_id = _fetch_class_names(sb, list(dict.fromkeys([str(x) for x in all_class_ids if x])))
+
+    conflicts: list[dict] = []
+    proposed_set = set([str(x) for x in proposed_class_ids if x])
+
+    for e in overlapping:
+        e_groups = set(_entry_class_ids(e))
+        intersect = sorted(proposed_set.intersection(e_groups))
+        if intersect:
+            conflicts.append(
+                {
+                    "type": "CLASS_BUSY",
+                    "title": "Конфликт: у группы уже есть пара",
+                    "affected_class_ids": intersect,
+                    "affected_class_names": [class_name_by_id.get(cid, cid) for cid in intersect],
+                    "entry": _format_conflict_entry(e, class_name_by_id),
+                }
+            )
+
+        if proposed_teacher_id and str(e.get("teacher_id") or "") == str(proposed_teacher_id):
+            conflicts.append(
+                {
+                    "type": "TEACHER_BUSY",
+                    "title": "Конфликт: преподаватель занят",
+                    "entry": _format_conflict_entry(e, class_name_by_id),
+                }
+            )
+
+        if proposed_room and str(e.get("room") or "") == str(proposed_room):
+            conflicts.append(
+                {
+                    "type": "ROOM_BUSY",
+                    "title": "Конфликт: аудитория занята",
+                    "entry": _format_conflict_entry(e, class_name_by_id),
+                }
+            )
+
+    # Dedupe by (type, entry.id, affected)
+    seen: set[str] = set()
+    uniq: list[dict] = []
+    for c in conflicts:
+        eid = (c.get("entry") or {}).get("id")
+        aff = ",".join(c.get("affected_class_ids") or [])
+        key = f"{c.get('type')}|{eid}|{aff}"
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(c)
+
+    return {
+        "message": "Конфликт расписания",
+        "proposed": {
+            "weekday": int(proposed_weekday),
+            "weekday_label": _weekday_label(int(proposed_weekday)),
+            "start_time": _norm_time_str(proposed_start, "00:00"),
+            "end_time": _norm_time_str(proposed_end, "00:00"),
+            "room": proposed_room,
+            "teacher_id": proposed_teacher_id,
+            "class_ids": [str(x) for x in proposed_class_ids if x],
+            "class_names": [class_name_by_id.get(str(x), str(x)) for x in proposed_class_ids if x],
+        },
+        "conflicts": uniq,
+    }
+
+
 class TimetableEntryIn(BaseModel):
     class_id: str
+    stream_id: str | None = None
+    class_ids: list[str] | None = None
     teacher_id: str | None = None
     subject: str
-    subject_id: str | None = None  # ID предмета из таблицы subjects
+    subject_id: str | None = None  # ID предметa из таблицы subjects
     weekday: int  # 0..6
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     room: str | None = None
-    lesson_type: str = "lecture"  # lecture или credit (зачет)
+    lesson_type: str = "theoretical"  # theoretical, practical, credit
 
 
 @router.post("/entries")
@@ -64,6 +322,25 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
     sb = get_supabase()
     try:
         data = payload.model_dump(exclude_none=True)
+
+        # Validate stream/classes (multi-group lecture)
+        stream_id, class_ids = _validate_stream_and_classes(
+            sb,
+            class_id=str(payload.class_id),
+            stream_id=payload.stream_id,
+            class_ids=payload.class_ids,
+        )
+
+        lesson_type = (payload.lesson_type or "theoretical").strip()
+        if len(class_ids) > 1 and lesson_type != "theoretical":
+            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции (ТЕОРИЯ)")
+        if lesson_type == "theoretical" and len(class_ids) > 4:
+            raise HTTPException(status_code=409, detail="Нельзя больше 4 групп на одной паре")
+
+        # Persist multi-group fields
+        data["stream_id"] = stream_id
+        data["class_ids"] = class_ids
+        data["class_id"] = class_ids[0]
 
         if not data.get("teacher_id"):
             subject_id = data.get("subject_id")
@@ -73,6 +350,73 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
                     data["teacher_id"] = inferred
             else:
                 raise HTTPException(status_code=400, detail="teacher_id or subject_id is required")
+
+        # Conflict detection + lecture merge
+        weekday = int(data.get("weekday", 0))
+        new_start = _norm_time_str(data.get("start_time"), "00:00")
+        new_end = _norm_time_str(data.get("end_time"), "00:00")
+        teacher_id = data.get("teacher_id")
+        room = data.get("room")
+
+        overlapping = (
+            sb.table("timetable_entries")
+            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room")
+            .eq("active", True)
+            .eq("weekday", weekday)
+            .lt("start_time", new_end)
+            .gt("end_time", new_start)
+            .execute()
+            .data
+            or []
+        )
+
+        # Try to merge into an existing lecture in the same stream/time/subject/teacher/room
+        if lesson_type == "theoretical" and len(class_ids) >= 1:
+            new_subj_key = _subject_key(data)
+            for e in overlapping:
+                if str(e.get("stream_id") or "") != str(stream_id):
+                    continue
+                if (e.get("lesson_type") or "").strip() != "theoretical":
+                    continue
+                if int(e.get("weekday", -1)) != weekday:
+                    continue
+                if _norm_time_str(e.get("start_time"), "") != new_start:
+                    continue
+                if _norm_time_str(e.get("end_time"), "") != new_end:
+                    continue
+                if str(e.get("teacher_id") or "") != str(teacher_id or ""):
+                    continue
+                if _subject_key(e) != new_subj_key:
+                    continue
+                # If room specified, it must match to be the same lecture.
+                if room and str(e.get("room") or "") and str(e.get("room") or "") != str(room):
+                    continue
+                existing_groups = _entry_class_ids(e)
+                merged = list(dict.fromkeys(existing_groups + class_ids))
+                if len(merged) > 4:
+                    raise HTTPException(status_code=409, detail="Нельзя больше 4 групп на одной паре")
+
+                # Update the existing entry with merged class_ids (and set room if missing)
+                patch: dict[str, object] = {"class_ids": merged}
+                if room and not e.get("room"):
+                    patch["room"] = room
+                resp = sb.table("timetable_entries").update(patch).eq("id", e["id"]).execute()
+                row = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
+                return {"entry": row, "merged": True}
+
+        # Hard conflicts: class, teacher, room (with overlap)
+        payload = _build_conflicts_payload(
+            sb,
+            overlapping=overlapping,
+            proposed_weekday=weekday,
+            proposed_start=new_start,
+            proposed_end=new_end,
+            proposed_class_ids=class_ids,
+            proposed_teacher_id=str(teacher_id) if teacher_id else None,
+            proposed_room=str(room) if room else None,
+        )
+        if payload.get("conflicts"):
+            raise HTTPException(status_code=409, detail=payload)
         room = data.get("room")
         if isinstance(room, str) and not room.strip():
             data.pop("room", None)
@@ -89,12 +433,13 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
         return {"entry": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Failed to create timetable entry. If you recently updated the code, make sure DB migrations are applied "
-                "(see supabase/migrations/20251223_000003_timetable_room_and_crud.sql) and restart the API."
+    except Exception as e:
+        logger.exception("Failed to create timetable entry")
+        _raise_db_http_exception(
+            e,
+            fallback=(
+                "Не удалось создать занятие. "
+                "Проверьте данные (преподаватель/предмет/группа/аудитория) и права доступа."
             ),
         )
 
@@ -104,7 +449,9 @@ class TimetableEntryUpdateIn(BaseModel):
     subject: str | None = None
     subject_id: str | None = None
     room: str | None = None
-    lesson_type: str | None = None  # lecture или credit
+    lesson_type: str | None = None
+    stream_id: str | None = None
+    class_ids: list[str] | None = None
 
 
 @router.put("/entries/{entry_id}")
@@ -126,12 +473,88 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         update["room"] = payload.room
     if payload.lesson_type is not None:
         update["lesson_type"] = payload.lesson_type
+    if payload.stream_id is not None:
+        update["stream_id"] = payload.stream_id
+    if payload.class_ids is not None:
+        update["class_ids"] = payload.class_ids
 
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
 
     sb = get_supabase()
     try:
+        # Load existing entry (needed for conflict validation)
+        existing_resp = sb.table("timetable_entries").select("*").eq("id", entry_id).limit(1).execute()
+        if not existing_resp.data:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        existing = existing_resp.data[0]
+
+        # Compute resulting fields
+        result_weekday = int(update.get("weekday", existing.get("weekday", 0)))
+        result_start = _norm_time_str(update.get("start_time", existing.get("start_time")), "00:00")
+        result_end = _norm_time_str(update.get("end_time", existing.get("end_time")), "00:00")
+        result_room = update.get("room", existing.get("room"))
+        result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
+        result_lesson_type = (update.get("lesson_type", existing.get("lesson_type")) or "theoretical").strip()
+        
+        # Validate stream/classes (if class_ids/stream_id are being changed)
+        # If class_ids not explicitly provided, keep existing class_ids/class_id.
+        proposed_class_ids = None
+        if "class_ids" in update:
+            proposed_class_ids = update.get("class_ids") if isinstance(update.get("class_ids"), list) else None
+        else:
+            proposed_class_ids = existing.get("class_ids") if isinstance(existing.get("class_ids"), list) else [str(existing.get("class_id"))]
+
+        proposed_stream_id = str(update.get("stream_id")) if "stream_id" in update else (str(existing.get("stream_id")) if existing.get("stream_id") else None)
+        base_class_id = str(existing.get("class_id"))
+        stream_id, class_ids = _validate_stream_and_classes(
+            sb,
+            class_id=base_class_id,
+            stream_id=proposed_stream_id,
+            class_ids=proposed_class_ids,
+        )
+        
+        if len(class_ids) > 1 and result_lesson_type != "theoretical":
+            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции (ТЕОРИЯ)")
+        if result_lesson_type == "theoretical" and len(class_ids) > 4:
+            raise HTTPException(status_code=409, detail="Нельзя больше 4 групп на одной паре")
+
+        # Ensure stored compatibility fields
+        update.setdefault("stream_id", stream_id)
+        update.setdefault("class_ids", class_ids)
+        update.setdefault("class_id", class_ids[0])
+
+        # Conflict detection (exclude current entry)
+        overlapping = (
+            sb.table("timetable_entries")
+            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room")
+            .eq("active", True)
+            .eq("weekday", result_weekday)
+            .lt("start_time", result_end)
+            .gt("end_time", result_start)
+            .neq("id", entry_id)
+            .execute()
+            .data
+            or []
+        )
+
+        for e in overlapping:
+            # handled below via structured conflict payload
+            pass
+
+        payload = _build_conflicts_payload(
+            sb,
+            overlapping=overlapping,
+            proposed_weekday=result_weekday,
+            proposed_start=result_start,
+            proposed_end=result_end,
+            proposed_class_ids=class_ids,
+            proposed_teacher_id=str(result_teacher_id) if result_teacher_id else None,
+            proposed_room=str(result_room) if result_room else None,
+        )
+        if payload.get("conflicts"):
+            raise HTTPException(status_code=409, detail=payload)
+
         if "room" in update and isinstance(update.get("room"), str) and not str(update.get("room")).strip():
             update.pop("room", None)
         if "room" in update and not _room_supported(sb):
@@ -150,12 +573,13 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         return {"entry": row}
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Failed to update timetable entry. If DB migrations are not applied yet, apply them "
-                "(see supabase/migrations/20251223_000003_timetable_room_and_crud.sql) and restart the API."
+    except Exception as e:
+        logger.exception("Failed to update timetable entry")
+        _raise_db_http_exception(
+            e,
+            fallback=(
+                "Не удалось обновить занятие. "
+                "Проверьте данные (преподаватель/предмет/группа/аудитория) и права доступа."
             ),
         )
 
@@ -175,16 +599,27 @@ def delete_entry(entry_id: str, _: dict = require_role("admin", "manager")):
         raise HTTPException(status_code=500, detail="Failed to delete timetable entry")
 
 
+@router.get("/rooms")
+def list_rooms(_: dict = require_role("admin", "manager", "teacher")):
+    return {"rooms": FIXED_ROOMS}
+
+
 @router.get("/entries")
 def list_entries(class_id: str | None = None, user: dict = require_role("admin", "manager", "teacher")):
     sb = get_supabase()
     q = sb.table("timetable_entries").select("*").eq("active", True)
-    if class_id:
-        q = q.eq("class_id", class_id)
     if user["role"] == "teacher":
         q = q.eq("teacher_id", user["id"])
     resp = q.order("weekday").order("start_time").execute()
-    return {"entries": resp.data or []}
+    rows = resp.data or []
+    if class_id:
+        cid = str(class_id)
+        rows = [
+            r
+            for r in rows
+            if str(r.get("class_id") or "") == cid or cid in _entry_class_ids(r)
+        ]
+    return {"entries": rows}
 
 
 @router.get("/week")
@@ -196,20 +631,14 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
 
     sb = get_supabase()
 
-    select_fields = "id,class_id,teacher_id,subject,weekday,start_time,end_time"
+    select_fields = "id,class_id,class_ids,stream_id,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time"
     if _room_supported(sb):
         select_fields += ",room"
 
     if user["role"] == "student":
         enr = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
         class_ids = [r["class_id"] for r in (enr.data or [])]
-        tt = (
-            sb.table("timetable_entries")
-            .select(select_fields)
-            .in_("class_id", class_ids)
-            .eq("active", True)
-            .execute()
-        )
+        tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
     elif user["role"] == "teacher":
         tt = (
             sb.table("timetable_entries")
@@ -231,6 +660,9 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
     )
 
     entries = tt.data or []
+    if user["role"] == "student":
+        enrolled = {str(x) for x in class_ids}
+        entries = [e for e in entries if str(e.get("class_id") or "") in enrolled or enrolled.intersection(_entry_class_ids(e))]
 
     # Use a short-lived cache to avoid repeated lookups for classes/teachers and zooms
     cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}"
@@ -739,6 +1171,49 @@ def auto_generate_schedule(
         # 6. Run auto-scheduler
         scheduler = AutoScheduler(constraints)
         
+        # Load context (other classes) to prevent conflicts and allow merging
+        try:
+            all_entries = sb.table("timetable_entries").select("*").eq("active", True).neq("class_id", payload.class_id).execute()
+            if all_entries.data:
+                context_lessons = []
+                for entry in all_entries.data:
+                    try:
+                        # Parse times
+                        start_t = dt_time.fromisoformat(str(entry["start_time"]))
+                        end_t = dt_time.fromisoformat(str(entry["end_time"]))
+                        
+                        lesson = Lesson(
+                            subject_id=entry.get("subject_id", "unknown"),
+                            subject_name=entry.get("subject", "Unknown"),
+                            lesson_type=entry.get("lesson_type", "theoretical"),
+                            teacher_id=entry.get("teacher_id"),
+                            preferred_room=entry.get("room")
+                        )
+                        
+                        slot = TimeSlot(
+                            weekday=entry["weekday"],
+                            start_time=start_t,
+                            end_time=end_t
+                        )
+                        
+                        scheduled = ScheduledLesson(
+                            lesson=lesson,
+                            time_slot=slot,
+                            class_id=entry["class_id"],
+                            room=entry.get("room")
+                        )
+                        context_lessons.append(scheduled)
+                    except Exception as e:
+                        logger.warning(f"Skipping invalid entry {entry.get('id')}: {e}")
+                        continue
+                
+                if context_lessons:
+                    scheduler.load_context(context_lessons)
+                    logger.info(f"Loaded {len(context_lessons)} existing lessons from other classes")
+        except Exception as e:
+            logger.error(f"Failed to load context schedule: {e}")
+            # Continue without context (risk of conflicts)
+        
         try:
             scheduled_lessons = scheduler.generate_schedule(
                 class_id=payload.class_id,
@@ -1026,4 +1501,93 @@ def _create_lessons_from_plans(sb, lesson_plans: list) -> List[Lesson]:
             ))
     
     return lessons
+
+
+@router.get("/exports/teachers-workload.xlsx")
+def export_teachers_workload_excel(user: dict = require_role("admin", "manager")):
+    """Export teachers workload to Excel"""
+    sb = get_supabase()
+    
+    # Get all teachers
+    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    teachers = teachers_result.data or []
+    
+    today = date.today()
+    month_start = today.replace(day=1)
+    month_end_excl = _add_months(month_start, 1)
+    three_end_excl = _add_months(month_start, 3)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Teachers Workload"
+    
+    # Headers
+    headers = [
+        "ФИО Преподавателя",
+        "Часов в неделю",
+        "Уроков в неделю",
+        "Часов в месяц (текущий)",
+        "Уроков в месяц (текущий)",
+        "Часов за 3 месяца",
+        "Уроков за 3 месяца"
+    ]
+    ws.append(headers)
+    
+    for teacher in teachers:
+        teacher_id = teacher["id"]
+        teacher_name = teacher.get("full_name") or teacher.get("username")
+        
+        # Get entries
+        entries_result = sb.table("timetable_entries").select("*").eq("teacher_id", teacher_id).eq("active", True).execute()
+        entries = entries_result.data or []
+        
+        if not entries:
+            ws.append([teacher_name, 0, 0, 0, 0, 0, 0])
+            continue
+
+        stream_ids = {str(e.get("stream_id")) for e in entries if e.get("stream_id")}
+        stream_bounds = _fetch_stream_bounds(sb, stream_ids)
+
+        weekly_entries = _entries_active_on_day(entries, today, stream_bounds)
+        weekly_lessons = _get_unique_lessons_count(weekly_entries)
+        weekly_hours = _calculate_total_hours(weekly_entries)
+
+        monthly_lessons, monthly_hours = _compute_period_totals(entries, month_start, month_end_excl, stream_bounds)
+        three_month_lessons, three_month_hours = _compute_period_totals(
+            entries, month_start, three_end_excl, stream_bounds
+        )
+        
+        ws.append([
+            teacher_name,
+            round(weekly_hours, 2),
+            weekly_lessons,
+            round(monthly_hours, 2),
+            monthly_lessons,
+            round(three_month_hours, 2),
+            three_month_lessons
+        ])
+        
+    # Adjust column widths
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column].width = adjusted_width
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    
+    filename = f"teachers_workload_{today.isoformat()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 

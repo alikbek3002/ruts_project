@@ -6,6 +6,7 @@ import {
   apiDeleteTimetableEntry,
   apiListClasses,
   apiListTimetableEntries,
+  apiListTimetableRooms,
   apiUpdateTimetableEntry,
   apiListSubjects,
   apiGetStreams,
@@ -71,6 +72,95 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+function normalizeUiError(e: unknown): string {
+  const raw = String(e ?? "").trim();
+  const noPrefix = raw.replace(/^Error:\s*/i, "").trim();
+  // Drop trailing technical details like "(... does not exist)" that can be huge on mobile.
+  const noParensTail = noPrefix.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return noParensTail || noPrefix || raw;
+}
+
+type ConflictEntryInfo = {
+  id?: string;
+  weekday?: number;
+  weekday_label?: string;
+  start_time?: string;
+  end_time?: string;
+  room?: string | null;
+  subject?: string | null;
+  lesson_type?: string | null;
+  class_names?: string[] | null;
+};
+
+type TimetableConflictDetail = {
+  message?: string;
+  proposed?: {
+    weekday_label?: string;
+    start_time?: string;
+    end_time?: string;
+  };
+  conflicts?: Array<{
+    type?: "CLASS_BUSY" | "TEACHER_BUSY" | "ROOM_BUSY" | string;
+    title?: string;
+    affected_class_names?: string[];
+    entry?: ConflictEntryInfo;
+  }>;
+};
+
+type UiErrorState =
+  | { kind: "text"; title: string; message: string }
+  | { kind: "conflict"; title: string; detail: TimetableConflictDetail };
+
+function weekdayRuShortFromLabel(label?: string): string {
+  const s = String(label ?? "").trim();
+  return s || "";
+}
+
+function formatConflictLine(c: NonNullable<TimetableConflictDetail["conflicts"]>[number]): string {
+  const entry = c.entry || {};
+  const day = weekdayRuShortFromLabel(entry.weekday_label);
+  const time = `${(entry.start_time ?? "").slice(0, 5)}–${(entry.end_time ?? "").slice(0, 5)}`.replace(/^–|–$/g, "");
+  const room = entry.room ? `каб. ${entry.room}` : "";
+  const subject = entry.subject ? `предмет: ${entry.subject}` : "";
+  const groups = Array.isArray(entry.class_names) && entry.class_names.length ? `группы: ${entry.class_names.join(", ")}` : "";
+  const parts = [c.title || "Конфликт", [day, time].filter(Boolean).join(" "), room, subject, groups].filter(Boolean);
+  return parts.join(" — ");
+}
+
+function toUiError(e: unknown): UiErrorState {
+  const anyErr = e as any;
+  const detail: TimetableConflictDetail | undefined = anyErr?.detail;
+  if (detail && typeof detail === "object" && Array.isArray(detail.conflicts) && detail.conflicts.length) {
+    const types = new Set(detail.conflicts.map((c) => c.type));
+    let title = "Конфликт расписания";
+    if (types.size === 1) {
+      const t = Array.from(types)[0];
+      if (t === "TEACHER_BUSY") title = "Преподаватель занят";
+      if (t === "ROOM_BUSY") title = "Аудитория занята";
+      if (t === "CLASS_BUSY") title = "Группа занята";
+    }
+    return { kind: "conflict", title, detail };
+  }
+
+  return { kind: "text", title: "Ошибка", message: normalizeUiError(e) };
+}
+
+function renderUiErrorBody(err: UiErrorState): React.ReactNode {
+  if (err.kind === "text") return <div style={{ whiteSpace: "pre-wrap" }}>{err.message}</div>;
+  return (
+    <div style={{ whiteSpace: "pre-wrap" }}>
+      <div style={{ marginBottom: 8 }}>{err.detail.message || "Конфликт расписания"}</div>
+      <div>
+        {(err.detail.conflicts || []).map((c, idx) => (
+          <div key={idx} style={{ marginBottom: 6 }}>
+            {formatConflictLine(c)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AdminTimetablePage() {
   const { state } = useAuth();
   const { t } = useI18n();
@@ -87,8 +177,10 @@ export function AdminTimetablePage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [classId, setClassId] = useState("");
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<UiErrorState | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [rooms, setRooms] = useState<string[]>([]);
 
   const [weekStart, setWeekStart] = useState<Date>(getMonday(new Date()));
 
@@ -102,7 +194,8 @@ export function AdminTimetablePage() {
   const [formSubjectId, setFormSubjectId] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formRoom, setFormRoom] = useState("");
-  const [formLessonType, setFormLessonType] = useState<"lecture" | "credit">("lecture");
+  const [formLessonType, setFormLessonType] = useState<"theoretical" | "practical" | "credit">("theoretical");
+  const [formClassIds, setFormClassIds] = useState<string[]>([]);
 
   const weekDays = useMemo(() => {
     // Admin timetable grid: Mon-Sat (6 days)
@@ -113,16 +206,18 @@ export function AdminTimetablePage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [streamRes, classRes, t, s] = await Promise.all([
+      const [streamRes, classRes, t, s, rr] = await Promise.all([
         apiGetStreams(token),
         apiListClasses(token),
         apiAdminListUsers(token, "teacher"),
         apiListSubjects(token),
+        apiListTimetableRooms(token).catch(() => ({ rooms: [] })),
       ]);
       setStreams(streamRes.streams || []);
       setAllClasses(classRes.classes || []);
       setTeachers(t.users);
       setSubjects(s.subjects || []);
+      setRooms(rr.rooms || []);
       
       if (classId) {
         const e = await apiListTimetableEntries(token, classId);
@@ -158,13 +253,13 @@ export function AdminTimetablePage() {
           setClassId(classes[0].id);
         }
       })
-      .catch((e) => setErr(String(e)))
+        .catch((e) => setErr(toUiError(e)))
       .finally(() => setLoading(false));
   }, [selectedStreamId, token]);
 
   useEffect(() => {
     if (!can) return;
-    reload().catch((e) => setErr(String(e)));
+    reload().catch((e) => setErr(toUiError(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can]);
 
@@ -178,7 +273,7 @@ export function AdminTimetablePage() {
     setLoading(true);
     apiListTimetableEntries(token, classId)
       .then((e) => setEntries(e.entries))
-      .catch((e) => setErr(String(e)))
+      .catch((e) => setErr(toUiError(e)))
       .finally(() => setLoading(false));
   }, [classId, can, token]);
 
@@ -192,10 +287,12 @@ export function AdminTimetablePage() {
     setModalDate(date);
     setModalSlot(slot);
     setEditEntry(null);
+    setErr(null);
     setFormSubjectId("");
     setFormSubject("");
     setFormRoom("");
-    setFormLessonType("lecture");
+    setFormLessonType("theoretical");
+    setFormClassIds(classId ? [classId] : []);
     setModalOpen(true);
   }
 
@@ -203,10 +300,16 @@ export function AdminTimetablePage() {
     setModalDate(date);
     setModalSlot(slot);
     setEditEntry(entry);
+    setErr(null);
     setFormSubjectId(entry.subject_id || "");
     setFormSubject(entry.subject);
     setFormRoom(entry.room || "");
-    setFormLessonType(entry.lesson_type || "lecture");
+    setFormLessonType((entry.lesson_type as any) || "theoretical");
+    const ids = (Array.isArray((entry as any).class_ids) && (entry as any).class_ids.length
+      ? ((entry as any).class_ids as string[])
+      : [entry.class_id]
+    ).filter(Boolean);
+    setFormClassIds(ids);
     setModalOpen(true);
   }
 
@@ -223,16 +326,26 @@ export function AdminTimetablePage() {
     try {
       const weekday = toDbWeekday(modalDate);
       const slotInfo = timeSlots[modalSlot - 1];
+
+      const effectiveClassIds = formLessonType === "theoretical" ? formClassIds : (classId ? [classId] : []);
+      if (formLessonType === "theoretical") {
+        if (effectiveClassIds.length === 0) throw new Error("Выберите хотя бы одну группу");
+        if (effectiveClassIds.length > 4) throw new Error("Нельзя больше 4 групп на одной паре");
+      }
       if (editEntry) {
         await apiUpdateTimetableEntry(token, editEntry.id, {
           subject: formSubject.trim(),
           subject_id: formSubjectId || null,
           room: formRoom.trim() ? formRoom.trim() : null,
           lesson_type: formLessonType,
+          stream_id: selectedStreamId || null,
+          class_ids: formLessonType === "theoretical" ? effectiveClassIds : null,
         });
       } else {
         await apiCreateTimetableEntry(token, {
           class_id: classId,
+          stream_id: selectedStreamId || undefined,
+          class_ids: formLessonType === "theoretical" ? effectiveClassIds : undefined,
           subject: formSubject.trim(),
           subject_id: formSubjectId || undefined,
           weekday,
@@ -246,7 +359,7 @@ export function AdminTimetablePage() {
       setEntries(e.entries);
       closeModal();
     } catch (e) {
-      setErr(String(e));
+      setErr(toUiError(e));
     }
   }
 
@@ -261,7 +374,7 @@ export function AdminTimetablePage() {
       setEntries(e.entries);
       closeModal();
     } catch (e) {
-      setErr(String(e));
+      setErr(toUiError(e));
     }
   }
 
@@ -310,7 +423,19 @@ export function AdminTimetablePage() {
           <h2>Расписание</h2>
         </div>
 
-        {err && <div className={styles.error}>{err}</div>}
+        {err && !modalOpen && (
+          <div className={styles.modalOverlay} onClick={() => setErr(null)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalTitle}>{err.title}</div>
+              {renderUiErrorBody(err)}
+              <div className={styles.modalActions}>
+                <button className="primary" onClick={() => setErr(null)}>
+                  ОК
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {loading && <Loader text="Загрузка..." />}
 
         <div className={styles.controls}>
@@ -420,6 +545,30 @@ export function AdminTimetablePage() {
                                 ЗАЧЁТ
                               </span>
                             )}
+                            {lesson.lesson_type === "theoretical" && (
+                              <span style={{ 
+                                marginLeft: 4, 
+                                fontSize: 10, 
+                                background: "#3b82f6", 
+                                color: "#fff", 
+                                padding: "1px 4px", 
+                                borderRadius: 3 
+                              }}>
+                                ТЕОРИЯ
+                              </span>
+                            )}
+                            {lesson.lesson_type === "practical" && (
+                              <span style={{ 
+                                marginLeft: 4, 
+                                fontSize: 10, 
+                                background: "#10b981", 
+                                color: "#fff", 
+                                padding: "1px 4px", 
+                                borderRadius: 3 
+                              }}>
+                                ПРАКТИКА
+                              </span>
+                            )}
                           </div>
                           <div className={styles.entryTeacher}>{getTeacherName(lesson.teacher_id)}</div>
                           {lesson.room && <div className={styles.entryRoom}>{lesson.room}</div>}
@@ -470,27 +619,67 @@ export function AdminTimetablePage() {
               </select>
             </div>
 
+            {err && (
+              <div style={{ marginTop: 6, color: "var(--color-error)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{err.title}</div>
+                <div style={{ color: "var(--color-text)" }}>{renderUiErrorBody(err)}</div>
+              </div>
+            )}
+
             <div className={styles.formGroup}>
               <label className={styles.label}>Тип занятия</label>
               <select
                 value={formLessonType}
-                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "credit")}
+                onChange={(e) => setFormLessonType(e.target.value as "theoretical" | "practical" | "credit")}
                 className={styles.select}
               >
-                <option value="lecture">Обычная пара</option>
+                <option value="theoretical">Теоретическое (лекция)</option>
+                <option value="practical">Практическое</option>
                 <option value="credit">Зачёт</option>
               </select>
             </div>
 
             <div className={styles.formGroup}>
               <label className={styles.label}>Аудитория</label>
-              <input
-                value={formRoom}
-                onChange={(e) => setFormRoom(e.target.value)}
-                className={styles.input}
-                placeholder="Например: 305"
-              />
+              <select value={formRoom} onChange={(e) => setFormRoom(e.target.value)} className={styles.select}>
+                <option value="">— Не выбрано —</option>
+                {rooms.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {formLessonType === "theoretical" && (
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Группы (до 4 на одной паре)</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  {streamClasses.map((c) => {
+                    const checked = formClassIds.includes(c.id);
+                    return (
+                      <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? Array.from(new Set([...formClassIds, c.id]))
+                              : formClassIds.filter((x) => x !== c.id);
+                            if (next.length > 4) {
+                              setErr(toUiError(new Error("Нельзя больше 4 групп на одной паре")));
+                              return;
+                            }
+                            setFormClassIds(next);
+                          }}
+                        />
+                        <span>{c.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className={styles.modalActions}>
               {editEntry && (

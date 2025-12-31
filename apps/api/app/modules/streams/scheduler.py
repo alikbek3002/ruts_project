@@ -567,7 +567,8 @@ async def generate_schedule(
         # Find teacher for this subject
         teacher_id = get_teacher_for_subject(sb, subject_req.subject_id)
         if not teacher_id:
-            warnings.append(f"Не найден преподаватель для предмета '{subject_req.subject_name}'. Назначьте преподавателя в настройках.")
+            warnings.append(f"Не найден преподаватель для предмета '{subject_req.subject_name}'. Предмет пропущен. Назначьте преподавателя в настройках.")
+            continue
         
         lessons_scheduled = 0
         
@@ -684,7 +685,10 @@ async def generate_schedule(
     if timetable_entries and user_id:
         try:
             start_date = datetime.fromisoformat(stream["start_date"]).date()
-            end_date = datetime.fromisoformat(stream["end_date"]).date()
+            # Force at least 3 months duration for journal generation as requested
+            min_end_date = start_date + timedelta(days=90)
+            stream_end_date = datetime.fromisoformat(stream["end_date"]).date()
+            end_date = max(stream_end_date, min_end_date)
             
             journal_entries_created = generate_journal_entries_for_stream(
                 sb=sb,

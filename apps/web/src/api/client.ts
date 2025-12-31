@@ -66,7 +66,7 @@ export async function trackedFetch(input: RequestInfo | URL, init?: RequestInit)
   }
 }
 
-type HttpError = Error & { status?: number; bodyText?: string };
+type HttpError = Error & { status?: number; bodyText?: string; detail?: any };
 
 async function readErrorText(res: Response): Promise<string> {
   try {
@@ -163,10 +163,18 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
   if (!res.ok) {
     const msg = await readErrorText(res);
     let cleanMsg = msg;
+    let detailObj: any = undefined;
     try {
       const json = JSON.parse(msg);
       if (json && typeof json === "object" && json.detail) {
-        cleanMsg = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+        detailObj = json.detail;
+        if (typeof json.detail === "string") {
+          cleanMsg = json.detail;
+        } else if (json.detail && typeof json.detail === "object") {
+          cleanMsg = String((json.detail as any).title ?? (json.detail as any).message ?? "").trim() || JSON.stringify(json.detail);
+        } else {
+          cleanMsg = JSON.stringify(json.detail);
+        }
       }
     } catch {
       // ignore
@@ -174,6 +182,7 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
     const err: HttpError = new Error(cleanMsg || `HTTP ${res.status}`) as HttpError;
     err.status = res.status;
     err.bodyText = msg;
+    if (detailObj !== undefined) err.detail = detailObj;
     throw err;
   }
   return (await res.json()) as T;
@@ -476,6 +485,8 @@ export async function apiEnrollStudent(token: string, body: { class_id: string; 
 export type TimetableEntry = {
   id: string;
   class_id: string;
+  stream_id?: string | null;
+  class_ids?: string[] | null;
   teacher_id: string | null;
   subject: string;
   subject_id?: string | null;
@@ -483,7 +494,7 @@ export type TimetableEntry = {
   start_time: string;
   end_time: string;
   room?: string;
-  lesson_type?: "lecture" | "credit";
+  lesson_type?: "theoretical" | "practical" | "credit";
 };
 
 export async function apiCreateTimetableEntry(
@@ -496,7 +507,15 @@ export async function apiCreateTimetableEntry(
 export async function apiUpdateTimetableEntry(
   token: string,
   entryId: string,
-  body: { teacher_id?: string | null; subject?: string; subject_id?: string | null; room?: string | null; lesson_type?: "lecture" | "credit" }
+  body: {
+    teacher_id?: string | null;
+    subject?: string;
+    subject_id?: string | null;
+    room?: string | null;
+    lesson_type?: "theoretical" | "practical" | "credit";
+    stream_id?: string | null;
+    class_ids?: string[] | null;
+  }
 ) {
   return http<{ entry: TimetableEntry }>(`/timetable/entries/${encodeURIComponent(entryId)}`, {
     method: 'PUT',
@@ -515,6 +534,10 @@ export async function apiDeleteTimetableEntry(token: string, entryId: string) {
 export async function apiListTimetableEntries(token: string, classId?: string) {
   const q = classId ? `?class_id=${encodeURIComponent(classId)}` : "";
   return apiGet<{ entries: TimetableEntry[] }>(`/timetable/entries${q}`, token);
+}
+
+export async function apiListTimetableRooms(token: string) {
+  return apiGet<{ rooms: string[] }>(`/timetable/rooms`, token);
 }
 
 export type WeekTimetableItem = {
@@ -1698,6 +1721,19 @@ export async function apiGetAllTeachersWorkload(token: string): Promise<{ teache
 
 export async function apiDownloadClassesWithStreams(token: string): Promise<Blob> {
   const response = await fetch(`${API_BASE}${withApiPrefix("/admin/exports/classes-with-streams.xlsx")}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.blob();
+}
+
+export async function apiDownloadTeachersWorkload(token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${withApiPrefix("/timetable/exports/teachers-workload.xlsx")}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Clock, Download, Search, TrendingUp, Users } from "lucide-react";
-import { apiGetAllTeachersWorkload, apiDownloadClassesWithStreams } from "../../../api/client";
+import { apiGetAllTeachersWorkload, apiDownloadTeachersWorkload } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
@@ -58,15 +58,15 @@ export function AdminWorkloadPage() {
     }
   }
 
-  function handleDownloadClasses() {
+  function handleDownloadWorkload() {
     if (!token) return;
     
-    apiDownloadClassesWithStreams(token)
+    apiDownloadTeachersWorkload(token)
       .then(blob => {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "classes_with_streams.xlsx";
+        link.download = "teachers_workload.xlsx";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -113,9 +113,9 @@ export function AdminWorkloadPage() {
               Статистика педагогической нагрузки по расписанию
             </p>
           </div>
-          <button className={styles.downloadButton} onClick={handleDownloadClasses}>
+          <button className={styles.downloadButton} onClick={handleDownloadWorkload}>
             <Download size={18} />
-            Скачать список групп с потоками
+            Скачать отчет по нагрузке
           </button>
         </div>
 
