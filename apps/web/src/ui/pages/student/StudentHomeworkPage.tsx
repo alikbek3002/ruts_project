@@ -38,6 +38,7 @@ export default function StudentHomeworkPage() {
         { to: "/app/student/grades", label: "Оценки" },
         { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
+        { to: "/app/student/courses", label: "Курсы" },
       ]}
     >
       <h2>Домашнее задание</h2>

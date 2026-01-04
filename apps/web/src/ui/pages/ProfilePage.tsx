@@ -107,7 +107,7 @@ export function ProfilePage() {
         .map((n) => n[0])
         .join("")
         .toUpperCase()
-        .slice(0, 2)
+        .slice(0, 3)
     : profile.username[0].toUpperCase();
 
   return (

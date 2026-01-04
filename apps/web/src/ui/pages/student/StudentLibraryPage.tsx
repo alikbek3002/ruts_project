@@ -41,6 +41,7 @@ export function StudentLibraryPage() {
         { to: "/app/student/grades", label: "Оценки" },
         { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
+        { to: "/app/student/courses", label: "Курсы" },
       ]}
     >
       {err && <div style={{ padding: "12px", background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 16 }}>{err}</div>}

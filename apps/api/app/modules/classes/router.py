@@ -32,6 +32,11 @@ def create_class(payload: CreateClassIn, _: dict = require_role("admin", "manage
         if payload.curator_id:
             data["curator_id"] = payload.curator_id
         resp = sb.table("classes").insert(data).execute()
+        
+        # Очищаем кеш после создания
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
         return {"class": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
     except Exception:
         raise HTTPException(
@@ -63,6 +68,11 @@ def update_class(class_id: str, payload: UpdateClassIn, _: dict = require_role("
         row = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
         if not row:
             raise HTTPException(status_code=404, detail="Class not found")
+        
+        # Очищаем кеш после обновления
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
         return {"class": row}
     except HTTPException:
         raise
@@ -100,6 +110,11 @@ def delete_class_with_password(
         if not existing:
             raise HTTPException(status_code=404, detail="Class not found")
         sb.table("classes").delete().eq("id", class_id).execute()
+        
+        # Очищаем кеш после удаления
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
         return {"ok": True}
     except HTTPException:
         raise
@@ -109,6 +124,14 @@ def delete_class_with_password(
 
 @router.get("")
 def list_classes(user: dict = Depends(get_current_user)):
+    from app.core.cache import cache
+    
+    # Cache list of classes for better performance
+    cache_key = f"classes_list:{user['role']}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
     sb = get_supabase()
     try:
         if user["role"] in ("admin", "manager"):
@@ -118,7 +141,7 @@ def list_classes(user: dict = Depends(get_current_user)):
             
             # Подсчитываем студентов для каждого класса
             for cls in classes:
-                count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
+                count_resp = sb.table("class_enrollments").select("id", count="exact").eq("class_id", cls["id"]).execute()
                 cls["student_count"] = count_resp.count or 0
                 # Flatten direction
                 if cls.get("directions"):
@@ -127,7 +150,9 @@ def list_classes(user: dict = Depends(get_current_user)):
                     cls["direction"] = None
                 cls.pop("directions", None)
             
-            return {"classes": classes}
+            result = {"classes": classes}
+            cache.set(cache_key, result, ttl=60)  # Cache for 1 minute
+            return result
 
         if user["role"] == "teacher":
             # teacher: list classes where teacher has timetable entries
@@ -141,24 +166,21 @@ def list_classes(user: dict = Depends(get_current_user)):
             )
             class_ids = list({r.get("class_id") for r in tt if r.get("class_id")})
             if not class_ids:
-                return {"classes": []}
+                result = {"classes": []}
+                cache.set(cache_key, result, ttl=60)
+                return result
             resp = sb.table("classes").select("id,name").in_("id", class_ids).order("name").execute()
-            return {"classes": resp.data or []}
+            result = {"classes": resp.data or []}
+            cache.set(cache_key, result, ttl=60)
+            return result
 
         if user["role"] == "student":
-            enr = (
-                sb.table("class_enrollments")
-                .select("class_id")
-                .eq("student_id", user["id"])
-                .execute()
-                .data
-                or []
-            )
-            class_ids = [r.get("class_id") for r in enr if r.get("class_id")]
-            if not class_ids:
-                return {"classes": []}
-            resp = sb.table("classes").select("id,name").in_("id", class_ids).order("name").execute()
-            return {"classes": resp.data or []}
+            # For shared student account: return ALL classes
+            # Students will filter in UI by selecting their class
+            resp = sb.table("classes").select("id,name").order("name").execute()
+            result = {"classes": resp.data or []}
+            cache.set(cache_key, result, ttl=60)
+            return result
 
         # fallback
         return {"classes": []}
@@ -190,7 +212,7 @@ def list_curated_classes(user: dict = require_role("teacher")):
         )
         classes = resp.data or []
         for cls in classes:
-            count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
+            count_resp = sb.table("class_enrollments").select("id", count="exact").eq("class_id", cls["id"]).execute()
             cls["student_count"] = count_resp.count or 0
             cls["direction"] = cls.get("directions") or None
             cls.pop("directions", None)
@@ -231,37 +253,30 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
                 return {"class": None, "students": []}
 
         if user["role"] == "student":
-            enr = (
-                sb.table("class_enrollments")
-                .select("class_id")
-                .eq("class_id", class_id)
-                .eq("student_id", user["id"])
-                .limit(1)
-                .execute()
-                .data
-            )
-            if not enr:
-                return {"class": None, "students": []}
+            # Students see all classes (shared account)
+            pass
 
         c = sb.table("classes").select("id,name,direction_id,curator_id").eq("id", class_id).single().execute().data
         enr_rows = (
             sb.table("class_enrollments")
-            .select("student_id,student_number")
+            .select("id,student_full_name,student_number,legacy_student_id")
             .eq("class_id", class_id)
             .execute()
             .data
             or []
         )
-        student_ids = [r.get("student_id") for r in enr_rows if r.get("student_id")]
-        if not student_ids:
-            return {"class": c, "students": []}
-
-        uresp = sb.table("users").select("id,username,full_name").in_("id", student_ids).execute()
-        students = uresp.data or []
-        num_by_id = {r.get("student_id"): r.get("student_number") for r in enr_rows if r.get("student_id")}
-        for s in students:
-            s["student_number"] = num_by_id.get(s.get("id"))
-        students.sort(key=lambda s: (s.get("student_number") is None, s.get("student_number") or 0, s.get("full_name") or "", s.get("username") or ""))
+        
+        # Students are now stored by name, not as users
+        students = []
+        for enr in enr_rows:
+            student = {
+                "id": enr.get("id"),
+                "full_name": enr.get("student_full_name"),
+                "student_number": enr.get("student_number"),
+            }
+            students.append(student)
+        
+        students.sort(key=lambda s: (s.get("student_number") is None, s.get("student_number") or 0, s.get("full_name") or ""))
         return {"class": c, "students": students}
     except Exception:
         raise HTTPException(
@@ -274,7 +289,8 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
 
 
 class EnrollIn(BaseModel):
-    student_id: str
+    student_full_name: str
+    student_number: int | None = None
 
 
 @router.post("/{class_id}/enroll")
@@ -282,48 +298,89 @@ def enroll_student(class_id: str, payload: EnrollIn, _: dict = require_role("adm
     sb = get_supabase()
     try:
         # Enforce max 35
-        count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", class_id).execute()
+        count_resp = sb.table("class_enrollments").select("id", count="exact").eq("class_id", class_id).execute()
         if (count_resp.count or 0) >= 35:
             raise HTTPException(status_code=400, detail="Class can have maximum 35 students")
 
-        # Already enrolled?
-        existing = (
-            sb.table("class_enrollments")
-            .select("student_id")
-            .eq("class_id", class_id)
-            .eq("student_id", payload.student_id)
-            .limit(1)
-            .execute()
-            .data
-        )
-        if existing:
-            return {"ok": True}
+        # Determine next student number if not provided
+        student_num = payload.student_number
+        if student_num is None:
+            max_row = (
+                sb.table("class_enrollments")
+                .select("student_number")
+                .eq("class_id", class_id)
+                .order("student_number", desc=True)
+                .limit(1)
+                .execute()
+                .data
+            )
+            student_num = 1
+            if max_row and max_row[0].get("student_number"):
+                student_num = int(max_row[0]["student_number"]) + 1
+        
+        if student_num > 35:
+            raise HTTPException(status_code=400, detail="Student number must be between 1 and 35")
 
-        # Determine next student number
-        max_row = (
-            sb.table("class_enrollments")
-            .select("student_number")
-            .eq("class_id", class_id)
-            .order("student_number", desc=True)
-            .limit(1)
-            .execute()
-            .data
-        )
-        next_num = 1
-        if max_row and max_row[0].get("student_number"):
-            next_num = int(max_row[0]["student_number"]) + 1
-        if next_num > 35:
-            raise HTTPException(status_code=400, detail="Class can have maximum 35 students")
-
-        sb.table("class_enrollments").insert({"class_id": class_id, "student_id": payload.student_id, "student_number": next_num}).execute()
+        sb.table("class_enrollments").insert({
+            "class_id": class_id, 
+            "student_full_name": payload.student_full_name, 
+            "student_number": student_num
+        }).execute()
+        
+        # Очищаем кеш после добавления студента
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
         return {"ok": True}
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Failed to enroll student. Ensure the base DB schema is applied "
-                "(see supabase/migrations/20251222_000001_mvp.sql) and restart the API."
-            ),
+            detail=f"Failed to enroll student: {str(e)}"
         )
+
+
+@router.delete("/{class_id}/students/{enrollment_id}")
+def remove_student(class_id: str, enrollment_id: str, _: dict = require_role("admin", "manager")):
+    """Удалить студента из группы"""
+    sb = get_supabase()
+    try:
+        sb.table("class_enrollments").delete().eq("id", enrollment_id).eq("class_id", class_id).execute()
+        
+        # Очищаем кеш после удаления студента
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to remove student: {str(e)}")
+
+
+@router.patch("/{class_id}/students/{enrollment_id}")
+def update_student(class_id: str, enrollment_id: str, payload: EnrollIn, _: dict = require_role("admin", "manager")):
+    """Обновить данные студента"""
+    sb = get_supabase()
+    try:
+        update_data = {}
+        if payload.student_full_name:
+            update_data["student_full_name"] = payload.student_full_name
+        if payload.student_number is not None:
+            if payload.student_number < 1 or payload.student_number > 35:
+                raise HTTPException(status_code=400, detail="Student number must be between 1 and 35")
+            update_data["student_number"] = payload.student_number
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        sb.table("class_enrollments").update(update_data).eq("id", enrollment_id).eq("class_id", class_id).execute()
+        
+        # Очищаем кеш после обновления студента
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update student: {str(e)}")

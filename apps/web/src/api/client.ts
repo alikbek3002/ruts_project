@@ -331,6 +331,67 @@ export async function apiSetTeacherSubjects(token: string, teacherId: string, su
   );
 }
 
+// Syllabus / Topic API
+export type SubjectTopic = {
+  id: string;
+  subject_id: string;
+  topic_number: number;
+  topic_name: string;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  exam_hours: number;
+  total_hours: number;
+  description?: string | null;
+};
+
+export type SubjectTopicInput = {
+  topic_number: number;
+  topic_name: string;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  exam_hours: number;
+  description?: string | null;
+};
+
+export async function apiGetSubjectTopics(token: string, subjectId: string) {
+  return apiGet<{ 
+    subject: { id: string; name: string }; 
+    topics: SubjectTopic[]; 
+    totals: {
+      lecture_hours: number;
+      seminar_hours: number;
+      practical_hours: number;
+      exam_hours: number;
+      total_hours: number;
+    }
+  }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics`, token);
+}
+
+export async function apiCreateSubjectTopic(token: string, subjectId: string, topic: SubjectTopicInput) {
+  return apiPost<{ topic: SubjectTopic }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics`, topic, token);
+}
+
+export async function apiUpdateSubjectTopic(token: string, subjectId: string, topicId: string, topic: SubjectTopicInput) {
+  return apiPut<{ topic: SubjectTopic }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/${encodeURIComponent(topicId)}`, topic, token);
+}
+
+export async function apiDeleteSubjectTopic(token: string, subjectId: string, topicId: string) {
+  return http<{ ok: boolean }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/${encodeURIComponent(topicId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiBulkUpdateSubjectTopics(token: string, subjectId: string, topics: SubjectTopicInput[]) {
+  return apiPost<{ ok: boolean; count: number }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/bulk-update`, topics, token);
+}
+
+export function getSubjectTopicsExportUrl(subjectId: string, token: string): string {
+  return withApiPrefix(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/export?token=${encodeURIComponent(token)}`);
+}
+
 export type AdminUserDetails = AdminUser & {
   first_name: string | null;
   last_name: string | null;
@@ -554,11 +615,12 @@ export type WeekTimetableItem = {
   zoom?: { join_url: string; starts_at: string } | null;
 };
 
-export async function apiTimetableWeek(token: string, weekStartISO: string) {
-  return apiGet<{ weekStart: string; entries: WeekTimetableItem[] }>(
-    `/timetable/week?weekStart=${encodeURIComponent(weekStartISO)}`,
-    token
-  );
+export async function apiTimetableWeek(token: string, weekStartISO: string, classId?: string) {
+  let url = `/timetable/week?weekStart=${encodeURIComponent(weekStartISO)}`;
+  if (classId) {
+    url += `&classId=${encodeURIComponent(classId)}`;
+  }
+  return apiGet<{ weekStart: string; entries: WeekTimetableItem[] }>(url, token);
 }
 
 export async function apiCreateZoomMeeting(token: string, timetableEntryId: string, startsAtLocalISO: string) {

@@ -66,14 +66,10 @@ def get_profile(user: dict = Depends(get_current_user)):
             # Старый формат - просто строка
             user_data["teacher_subject_name"] = str(teacher_subject)
     
-    # Если студент, получаем его класс
+    # Если студент (shared account), не пытаемся получить класс
+    # так как теперь студенты не являются пользователями
     if user_data["role"] == "student":
-        enrollment = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).limit(1).execute()
-        if enrollment.data:
-            class_id = enrollment.data[0]["class_id"]
-            class_resp = sb.table("classes").select("name").eq("id", class_id).limit(1).execute()
-            if class_resp.data:
-                user_data["class_name"] = class_resp.data[0]["name"]
+        user_data["class_name"] = "Shared Student Account"
 
     # Cache the assembled profile briefly
     cache.set(cache_key, user_data, ttl=5)

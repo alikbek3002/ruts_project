@@ -624,8 +624,9 @@ def list_entries(class_id: str | None = None, user: dict = require_role("admin",
 
 @router.get("/week")
 @timed("get_week")
-def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teacher", "student")):
+def get_week(weekStart: str, classId: str | None = None, user: dict = require_role("admin", "manager", "teacher", "student")):
     # weekStart is YYYY-MM-DD, Monday preferred.
+    # classId: optional filter for students to select specific class/platoon
     start = date.fromisoformat(weekStart)
     end = start + timedelta(days=7)
 
@@ -636,9 +637,13 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
         select_fields += ",room"
 
     if user["role"] == "student":
-        enr = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
-        class_ids = [r["class_id"] for r in (enr.data or [])]
+        # For students: if classId provided, filter by that class
+        # Otherwise, show all classes (shared student account can see all)
         tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
+        class_ids = []
+        if classId:
+            class_ids = [classId]
+        # If no classId, student sees everything (no filtering)
     elif user["role"] == "teacher":
         tt = (
             sb.table("timetable_entries")
@@ -660,12 +665,43 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
     )
 
     entries = tt.data or []
-    if user["role"] == "student":
+    
+    # Filter by stream dates: only show entries for classes in active streams within their date range
+    stream_classes_resp = sb.table("stream_classes").select("class_id,stream_id,streams(start_date,end_date)").execute()
+    stream_class_map = {}  # class_id -> {start_date, end_date}
+    for sc in (stream_classes_resp.data or []):
+        if sc.get("streams"):
+            stream_class_map[sc["class_id"]] = {
+                "start_date": date.fromisoformat(sc["streams"]["start_date"]) if sc["streams"].get("start_date") else None,
+                "end_date": date.fromisoformat(sc["streams"]["end_date"]) if sc["streams"].get("end_date") else None
+            }
+    
+    # Filter entries by stream dates
+    filtered_entries = []
+    for e in entries:
+        class_id = e.get("class_id")
+        if class_id and class_id in stream_class_map:
+            stream_info = stream_class_map[class_id]
+            start_date = stream_info.get("start_date")
+            end_date = stream_info.get("end_date")
+            # Only include if current week is within stream date range
+            if start_date and start > end_date if end_date else False:
+                continue  # Week is after stream ended
+            if start_date and end < start_date:
+                continue  # Week is before stream started
+            filtered_entries.append(e)
+        # Skip entries for classes not in any stream
+    
+    entries = filtered_entries
+    
+    if user["role"] == "student" and class_ids:
+        # Filter entries by selected class
         enrolled = {str(x) for x in class_ids}
         entries = [e for e in entries if str(e.get("class_id") or "") in enrolled or enrolled.intersection(_entry_class_ids(e))]
 
     # Use a short-lived cache to avoid repeated lookups for classes/teachers and zooms
-    cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}"
+    # Include classId in cache key for student filtering
+    cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}:{classId or 'all'}"
     from app.core.cache import cache
     cached = cache.get(cache_key)
     if cached is not None:
@@ -722,7 +758,7 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
     enriched.sort(key=lambda r: (r.get("weekday") or 0, r.get("start_time") or ""))
 
     result = {"weekStart": weekStart, "entries": enriched}
-    cache.set(cache_key, result, ttl=20)  # short TTL
+    cache.set(cache_key, result, ttl=120)  # 2 minutes cache for better performance
     return result
 
 
@@ -1016,8 +1052,8 @@ async def get_all_teachers_workload(
     """Get workload summary for all teachers"""
     sb = get_supabase()
     
-    # Get all teachers
-    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    # Get all active teachers only
+    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").eq("is_active", True).execute()
     
     if not teachers_result.data:
         return {"teachers": []}
@@ -1508,8 +1544,8 @@ def export_teachers_workload_excel(user: dict = require_role("admin", "manager")
     """Export teachers workload to Excel"""
     sb = get_supabase()
     
-    # Get all teachers
-    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    # Get all active teachers only
+    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").eq("is_active", True).execute()
     teachers = teachers_result.data or []
     
     today = date.today()

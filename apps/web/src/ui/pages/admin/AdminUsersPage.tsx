@@ -62,9 +62,10 @@ export function AdminUsersPage() {
   const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
-  const [tab, setTab] = useState<"teachers" | "students">("students");
+  const [tab, setTab] = useState<"teachers" | "students">("teachers"); // Changed default to teachers
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
 
@@ -110,7 +111,7 @@ export function AdminUsersPage() {
   const title = user?.role === "manager" ? "Менеджер → Пользователи" : "Админ → Пользователи";
 
   function resetForm() {
-    setRole("student");
+    setRole("teacher");  // Changed default from "student" to "teacher"
     setLastName("");
     setFirstName("");
     setMiddleName("");
@@ -146,9 +147,18 @@ export function AdminUsersPage() {
 
   async function reload() {
     if (!token) return;
-    const role = tab === "teachers" ? "teacher" : "student";
-    const resp = await apiAdminListUsers(token, role as any, search.trim() ? search : undefined);
-    setUsers(resp.users);
+    setLoading(true);
+    setErr(null);
+    setUsers([]); // Clear immediately to prevent flash of old data
+    try {
+      const role = tab === "teachers" ? "teacher" : "student";
+      const resp = await apiAdminListUsers(token, role as any, search.trim() ? search : undefined);
+      setUsers(resp.users);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function openUserCard(u: AdminUser) {
@@ -187,7 +197,7 @@ export function AdminUsersPage() {
         try {
           const ts = await apiGetTeacherSubjects(token, resp.user.id);
           const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
-          setViewTeacherSubjectIds(ids.slice(0, 2));
+          setViewTeacherSubjectIds(ids.slice(0, 3));
           // Load teacher workload
           try {
             const workloadData = await apiGetTeacherWorkload(token, resp.user.id);
@@ -226,7 +236,7 @@ export function AdminUsersPage() {
 
   useEffect(() => {
     if (!can) return;
-    reload().catch((e) => setErr(String(e)));
+    reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can, tab, search]);
 
@@ -305,14 +315,34 @@ export function AdminUsersPage() {
             />
           </div>
           
-          <button className="secondary" onClick={() => reload().catch((e) => setErr(String(e)))}>
+          <button className="secondary" onClick={() => reload()}>
             <RefreshCw size={16} />
           </button>
         </div>
 
         {err && <div className={styles.error}>{err}</div>}
 
-        <div className={styles.grid}>
+        {tab === "students" && (
+          <div style={{ 
+            padding: "12px 16px", 
+            background: "#e0f2fe", 
+            color: "#0c4a6e", 
+            borderRadius: "8px", 
+            marginBottom: "16px",
+            fontSize: "14px",
+            border: "1px solid #7dd3fc"
+          }}>
+            ℹ️ Все студенты используют общий аккаунт для входа:<br/>
+            <strong>Логин:</strong> student &nbsp;|&nbsp; <strong>Пароль:</strong> 123456
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "40px" }}>
+            <Loader />
+          </div>
+        ) : (
+          <div className={styles.grid}>
           {users.map((u) => (
             <div
               key={u.id}
@@ -360,6 +390,7 @@ export function AdminUsersPage() {
             </div>
           ))}
         </div>
+        )}
 
         {/* Create User Modal */}
         {modalOpen && (
@@ -409,10 +440,12 @@ export function AdminUsersPage() {
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Роль</label>
                     <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-                      <option value="student">{t("role.student")}</option>
                       <option value="teacher">{t("role.teacher")}</option>
                       {canCreateAdmin && <option value="admin">{t("role.admin")}</option>}
                     </select>
+                    <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
+                      Студенты используют общий аккаунт (логин: student, пароль: 123456)
+                    </div>
                   </div>
 
                   <div className={styles.formGroup}>
@@ -467,8 +500,8 @@ export function AdminUsersPage() {
 
                   {role === "teacher" && (
                     <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                      <label className={styles.label}>Предметы (до 2)</label>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
+                      <label className={styles.label}>Предметы (до 3)</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--spacing-md)" }}>
                         <select
                           value={teacherSubjectIds[0] || ""}
                           onChange={(e) => {
@@ -480,11 +513,11 @@ export function AdminUsersPage() {
                               } else {
                                 next[0] = v;
                               }
-                              return next.filter(Boolean).slice(0, 2);
+                              return next.filter(Boolean).slice(0, 3);
                             });
                           }}
                         >
-                          <option value="">(предмет 1)</option>
+                          <option value="">(предмет 1 — необязательно)</option>
                           {subjects.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.name}
@@ -498,14 +531,37 @@ export function AdminUsersPage() {
                             setTeacherSubjectIds((prev) => {
                               const first = prev[0] || "";
                               const second = v || "";
-                              const next = [first, second].filter(Boolean);
-                              return Array.from(new Set(next)).slice(0, 2);
+                              const third = prev[2] || "";
+                              const next = [first, second, third].filter(Boolean);
+                              return Array.from(new Set(next)).slice(0, 3);
                             });
                           }}
                         >
                           <option value="">(предмет 2 — необязательно)</option>
                           {subjects
                             .filter((s) => s.id !== (teacherSubjectIds[0] || ""))
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                        </select>
+                        <select
+                          value={teacherSubjectIds[2] || ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setTeacherSubjectIds((prev) => {
+                              const first = prev[0] || "";
+                              const second = prev[1] || "";
+                              const third = v || "";
+                              const next = [first, second, third].filter(Boolean);
+                              return Array.from(new Set(next)).slice(0, 3);
+                            });
+                          }}
+                        >
+                          <option value="">(предмет 3 — необязательно)</option>
+                          {subjects
+                            .filter((s) => s.id !== (teacherSubjectIds[0] || "") && s.id !== (teacherSubjectIds[1] || ""))
                             .map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.name}
@@ -588,10 +644,6 @@ export function AdminUsersPage() {
                     }
                     if (!generatedUsername || !generatedPassword) {
                       setErr("Нажмите “Сгенерировать” для логина и пароля");
-                      return;
-                    }
-                    if (role === "teacher" && teacherSubjectIds.length < 1) {
-                      setErr("Выберите хотя бы 1 предмет для преподавателя");
                       return;
                     }
 
@@ -841,16 +893,17 @@ export function AdminUsersPage() {
                         padding: "var(--spacing-md)",
                         background: "var(--color-bg-subtle)"
                       }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя (до 3)</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
                           <select
                             value={viewTeacherSubjectIds[0] || ""}
                             onChange={(e) => {
                               const v = e.target.value;
                               setViewTeacherSubjectIds((prev) => {
                                 const second = prev[1] || "";
-                                const next = [v || "", second].filter(Boolean);
-                                return Array.from(new Set(next)).slice(0, 2);
+                                const third = prev[2] || "";
+                                const next = [v || "", second, third].filter(Boolean);
+                                return Array.from(new Set(next)).slice(0, 3);
                               });
                             }}
                           >
@@ -868,14 +921,37 @@ export function AdminUsersPage() {
                               const v = e.target.value;
                               setViewTeacherSubjectIds((prev) => {
                                 const first = prev[0] || "";
-                                const next = [first, v || ""].filter(Boolean);
-                                return Array.from(new Set(next)).slice(0, 2);
+                                const third = prev[2] || "";
+                                const next = [first, v || "", third].filter(Boolean);
+                                return Array.from(new Set(next)).slice(0, 3);
                               });
                             }}
                           >
                             <option value="">(предмет 2 — необязательно)</option>
                             {subjects
                               .filter((s) => s.id !== (viewTeacherSubjectIds[0] || ""))
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                          </select>
+
+                          <select
+                            value={viewTeacherSubjectIds[2] || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setViewTeacherSubjectIds((prev) => {
+                                const first = prev[0] || "";
+                                const second = prev[1] || "";
+                                const next = [first, second, v || ""].filter(Boolean);
+                                return Array.from(new Set(next)).slice(0, 3);
+                              });
+                            }}
+                          >
+                            <option value="">(предмет 3 — необязательно)</option>
+                            {subjects
+                              .filter((s) => s.id !== (viewTeacherSubjectIds[0] || "") && s.id !== (viewTeacherSubjectIds[1] || ""))
                               .map((s) => (
                                 <option key={s.id} value={s.id}>
                                   {s.name}

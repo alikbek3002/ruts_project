@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { MapPin, User } from "lucide-react";
-import { apiTimetableWeek, type WeekTimetableItem } from "../../../api/client";
+import { apiTimetableWeek, apiListClasses, type WeekTimetableItem, type ClassItem } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
@@ -62,6 +62,8 @@ export function StudentTimetablePage() {
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [items, setItems] = useState<WeekTimetableItem[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
 
   const weekDays = useMemo(() => {
@@ -71,12 +73,27 @@ export function StudentTimetablePage() {
   const today = new Date();
   const isCurrentWeek = getMonday(today).getTime() === weekStart.getTime();
 
+  // Load classes list (only once on mount)
   useEffect(() => {
     if (!can || !token) return;
-    apiTimetableWeek(token, ymd(weekStart))
+    apiListClasses(token)
+      .then((r) => {
+        setClasses(r.classes);
+        // Auto-select first class if available
+        if (r.classes.length > 0 && !selectedClassId) {
+          setSelectedClassId(r.classes[0].id);
+        }
+      })
+      .catch((e) => console.error("Failed to load classes:", e));
+  }, [can, token]); // Removed selectedClassId dependency to load only once
+
+  // Load timetable
+  useEffect(() => {
+    if (!can || !token) return;
+    apiTimetableWeek(token, ymd(weekStart), selectedClassId || undefined)
       .then((r) => setItems(r.entries))
       .catch((e) => setErr(String(e)));
-  }, [can, token, weekStart]);
+  }, [can, token, weekStart, selectedClassId]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "student") return <Navigate to="/app" replace />;
@@ -90,10 +107,33 @@ export function StudentTimetablePage() {
         { to: "/app/student/grades", label: "Оценки" },
         { to: "/app/student/homework", label: "Домашнее задание" },
         { to: "/app/student/library", label: "Библиотека" },
+        { to: "/app/student/courses", label: "Курсы" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "16px" }}>
+            <label style={{ fontSize: 14, fontWeight: 500 }}>Взвод:</label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--color-border)",
+                fontSize: 14,
+                minWidth: "200px",
+              }}
+            >
+              <option value="">— Все взводы —</option>
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className={styles.weekNav}>
             <button className={styles.navButton} onClick={() => setWeekStart(addDays(weekStart, -7))}>
               ←

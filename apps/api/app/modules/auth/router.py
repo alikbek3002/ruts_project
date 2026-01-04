@@ -43,6 +43,10 @@ def login(payload: LoginIn, response: Response):
 
     access = create_access_token(subject=user["id"], role=user["role"])
 
+    # For students: allow multiple concurrent sessions (don't revoke old tokens)
+    # For other roles: keep standard single-session behavior
+    is_student = user.get("role") == "student"
+    
     refresh = create_refresh_token()
     refresh_hash = hash_refresh_token(refresh)
     expires_at = datetime.now(tz=timezone.utc) + timedelta(days=settings.app_jwt_refresh_days)

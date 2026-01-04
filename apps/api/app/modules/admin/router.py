@@ -74,6 +74,11 @@ class UpdateUserIn(BaseModel):
 @router.post("/users")
 def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin", "manager")):
     role = payload.role
+    
+    # Disable student creation - all students use shared account
+    if role == "student":
+        raise HTTPException(status_code=400, detail="Student creation disabled. All students use shared account (username: student, password: 123456)")
+    
     if role == "manager":
         raise HTTPException(status_code=400, detail="Cannot create manager users")
     if actor.get("role") == "admin" and role == "admin":
@@ -89,7 +94,7 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
         # New flow: subjects assigned at teacher creation
         subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
         if len(subject_ids) > 2:
-            raise HTTPException(status_code=400, detail="Teacher can have maximum 2 subjects")
+            raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
         if not subject_ids and not (payload.teacher_subject and payload.teacher_subject.strip()):
             raise HTTPException(status_code=400, detail="subject_ids required for teacher")
 
@@ -195,7 +200,7 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
     if role == "teacher":
         subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
         if subject_ids:
-            # Insert teacher_subjects links (max 2 already validated)
+            # Insert teacher_subjects links (max 3 already validated)
             for sid in subject_ids[:2]:
                 # ignore duplicates silently
                 existing = (
@@ -272,10 +277,13 @@ def admin_list_users(
 ):
     sb = get_supabase()
 
-    # Attempt to serve quick cached response when unfiltered (root page)
-    if not role and not q and not include_inactive and offset == 0:
-        from app.core.cache import cache
-        cached = cache.get("admin_users:root")
+    # Cache key includes role filter to prevent showing wrong data
+    cache_key = f"admin_users:{role or 'all'}:{q or ''}:{include_inactive}:{offset}"
+    from app.core.cache import cache
+    
+    # Attempt to serve quick cached response
+    if offset == 0 and not q:
+        cached = cache.get(cache_key)
         if cached is not None:
             return {"users": cached}
 
@@ -345,10 +353,11 @@ def admin_list_users(
         resp = query.order("created_at", desc=True).limit(limit).offset(offset).execute()
         users = resp.data or []
         users = _attach_student_class(users)
-        # Short cache when unfiltered to reduce DB load
-        from app.core.cache import cache
-        if not role and not q and not include_inactive and offset == 0:
-            cache.set("admin_users:root", users, ttl=10)
+        
+        # Cache response with proper key including role filter
+        if offset == 0 and not q:
+            cache.set(cache_key, users, ttl=30)
+        
         return {"users": users}
     except Exception:
         query = sb.table("users").select("id,role,username,full_name,is_active,must_change_password,created_at")
@@ -557,6 +566,12 @@ def admin_delete_user(user_id: str, actor: dict = require_role("admin", "manager
 
     # Soft-delete: disable login without breaking FK constraints (many tables use RESTRICT).
     sb.table("users").update({"is_active": False}).eq("id", user_id).execute()
+    
+    # Очищаем кеш после удаления пользователя
+    from app.core.cache import cache
+    cache.delete_pattern("admin_users:*")
+    cache.delete_pattern("timetable_week:*")
+    
     return {"ok": True}
 
 

@@ -27,6 +27,7 @@ from app.modules.profile.router import router as profile_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.streams.router import router as streams_router
 from app.modules.courses.router import router as courses_router
+from app.modules.syllabus.router import router as syllabus_router
 
 app = FastAPI(title="RUTS Journal API", version="0.1.0")
 
@@ -84,6 +85,7 @@ app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
 app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(streams_router, tags=["streams"])
 app.include_router(courses_router, prefix="/api/courses", tags=["courses"])
+app.include_router(syllabus_router, prefix="/api/syllabus", tags=["syllabus"])
 
 
 @app.get("/api/health")

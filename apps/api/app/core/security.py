@@ -12,7 +12,9 @@ from passlib.context import CryptContext
 
 from app.core.settings import settings
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Support both bcrypt and argon2 for password hashing
+# bcrypt for new passwords, argon2 for legacy compatibility
+pwd_context = CryptContext(schemes=["bcrypt", "argon2"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:

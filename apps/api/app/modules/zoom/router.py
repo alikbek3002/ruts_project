@@ -252,16 +252,9 @@ def list_meetings(user: dict = require_role("teacher", "admin", "student")):
             .execute()
         )
     elif user["role"] == "student":
-        # Get meetings for classes the student is enrolled in
-        # First get student's classes
-        enrollments = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
-        class_ids = [e["class_id"] for e in (enrollments.data or [])]
-        
-        if not class_ids:
-            return {"meetings": []}
-        
-        # Get timetable entries for those classes
-        timetable_resp = sb.table("timetable_entries").select("id").in_("class_id", class_ids).execute()
+        # Students see all meetings (shared account can view all classes)
+        # Get all timetable entries
+        timetable_resp = sb.table("timetable_entries").select("id").execute()
         timetable_ids = [t["id"] for t in (timetable_resp.data or [])]
         
         if not timetable_ids:

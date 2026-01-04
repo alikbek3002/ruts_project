@@ -4,13 +4,21 @@ import {
   apiListSubjectsWithTeachers,
   apiCreateSubject,
   apiDeleteSubject,
+  apiGetSubjectTopics,
+  apiCreateSubjectTopic,
+  apiUpdateSubjectTopic,
+  apiDeleteSubjectTopic,
+  apiBulkUpdateSubjectTopics,
+  getSubjectTopicsExportUrl,
   type SubjectWithTeachers,
+  type SubjectTopic,
+  type SubjectTopicInput,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminSubjects.module.css";
-import { BookOpen, Trash2, Plus, Image as ImageIcon, User } from "lucide-react";
+import { BookOpen, Trash2, Plus, Image as ImageIcon, User, FileDown, Save, X, Edit2 } from "lucide-react";
 
 export function AdminSubjectsPage() {
   const { state } = useAuth();
@@ -23,6 +31,23 @@ export function AdminSubjectsPage() {
   const [newSubjectPhotoUrl, setNewSubjectPhotoUrl] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Modal state
+  const [modalSubject, setModalSubject] = useState<SubjectWithTeachers | null>(null);
+  const [modalTopics, setModalTopics] = useState<SubjectTopic[]>([]);
+  const [modalTotals, setModalTotals] = useState({ lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
+  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
+  const [editingTopic, setEditingTopic] = useState<SubjectTopicInput | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newTopic, setNewTopic] = useState<SubjectTopicInput>({
+    topic_number: 1,
+    topic_name: "",
+    lecture_hours: 0,
+    seminar_hours: 0,
+    practical_hours: 0,
+    exam_hours: 0,
+    description: "",
+  });
 
   async function reloadAll() {
     if (!token) return;
@@ -82,6 +107,119 @@ export function AdminSubjectsPage() {
     }
   };
 
+  const openModal = async (subject: SubjectWithTeachers) => {
+    if (!token) return;
+    setModalSubject(subject);
+    setErr(null);
+    setLoading(true);
+    try {
+      const data = await apiGetSubjectTopics(token, subject.id);
+      setModalTopics(data.topics || []);
+      setModalTotals(data.totals || { lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalSubject(null);
+    setModalTopics([]);
+    setEditingTopicId(null);
+    setEditingTopic(null);
+    setIsAddingNew(false);
+    setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
+  };
+
+  const startEditTopic = (topic: SubjectTopic) => {
+    setEditingTopicId(topic.id);
+    setEditingTopic({
+      topic_number: topic.topic_number,
+      topic_name: topic.topic_name,
+      lecture_hours: topic.lecture_hours,
+      seminar_hours: topic.seminar_hours,
+      practical_hours: topic.practical_hours,
+      exam_hours: topic.exam_hours,
+      description: topic.description || "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingTopicId(null);
+    setEditingTopic(null);
+  };
+
+  const saveEditTopic = async () => {
+    if (!token || !modalSubject || !editingTopicId || !editingTopic) return;
+    setErr(null);
+    setLoading(true);
+    try {
+      await apiUpdateSubjectTopic(token, modalSubject.id, editingTopicId, editingTopic);
+      const data = await apiGetSubjectTopics(token, modalSubject.id);
+      setModalTopics(data.topics || []);
+      setModalTotals(data.totals || { lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
+      setEditingTopicId(null);
+      setEditingTopic(null);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startAddNew = () => {
+    const nextNumber = modalTopics.length > 0 ? Math.max(...modalTopics.map(t => t.topic_number)) + 1 : 1;
+    setNewTopic({ topic_number: nextNumber, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
+    setIsAddingNew(true);
+  };
+
+  const cancelAddNew = () => {
+    setIsAddingNew(false);
+    setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
+  };
+
+  const saveNewTopic = async () => {
+    if (!token || !modalSubject || !newTopic.topic_name.trim()) return;
+    setErr(null);
+    setLoading(true);
+    try {
+      await apiCreateSubjectTopic(token, modalSubject.id, newTopic);
+      const data = await apiGetSubjectTopics(token, modalSubject.id);
+      setModalTopics(data.topics || []);
+      setModalTotals(data.totals || { lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
+      setIsAddingNew(false);
+      setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteTopic = async (topicId: string) => {
+    if (!token || !modalSubject) return;
+    if (!window.confirm("Удалить тему?")) return;
+    setErr(null);
+    setLoading(true);
+    try {
+      await apiDeleteSubjectTopic(token, modalSubject.id, topicId);
+      const data = await apiGetSubjectTopics(token, modalSubject.id);
+      setModalTopics(data.topics || []);
+      setModalTotals(data.totals || { lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadExcel = () => {
+    if (!token || !modalSubject) return;
+    const url = getSubjectTopicsExportUrl(modalSubject.id, token);
+    window.open(url, "_blank");
+  };
+
 
   return (
     <AppShell
@@ -135,7 +273,7 @@ export function AdminSubjectsPage() {
 
         <div className={styles.cardsGrid}>
           {!loading && subjects.map((s) => (
-            <div key={s.id} className={styles.card}>
+            <div key={s.id} className={styles.card} onClick={() => openModal(s)} style={{ cursor: "pointer" }}>
               <div className={styles.cardTop}>
                 <img
                   className={styles.photo}
@@ -155,7 +293,12 @@ export function AdminSubjectsPage() {
                     {teacherLine(s)}
                   </div>
                 </div>
-                <button className={`secondary ${styles.deleteBtn}`} onClick={() => handleDeleteSubject(s.id)} title="Удалить" disabled={loading}>
+                <button 
+                  className={`secondary ${styles.deleteBtn}`} 
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }} 
+                  title="Удалить" 
+                  disabled={loading}
+                >
                   <Trash2 size={18} />
                 </button>
               </div>
@@ -172,6 +315,251 @@ export function AdminSubjectsPage() {
           </p>
         </div>
       </div>
-    </AppShell>
+      {modalSubject && (
+        <div className={styles.modalOverlay} onClick={closeModal}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2>{modalSubject.name}</h2>
+              <button className="secondary" onClick={closeModal} title="Закрыть">
+                <X size={20} />
+              </button>
+            </div>
+
+            {err && <div className={styles.error}>{err}</div>}
+
+            <div className={styles.modalBody}>
+              <div className={styles.syllabusActions}>
+                <button onClick={startAddNew} disabled={loading || isAddingNew} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Plus size={18} />
+                  Добавить тему
+                </button>
+                <button onClick={downloadExcel} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <FileDown size={18} />
+                  Скачать Excel
+                </button>
+              </div>
+
+              <div className={styles.syllabusTable}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>№</th>
+                      <th>Название темы</th>
+                      <th>Лекции (ч)</th>
+                      <th>Семинары (ч)</th>
+                      <th>Практика (ч)</th>
+                      <th>Экзамен (ч)</th>
+                      <th>Всего (ч)</th>
+                      <th>Описание</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalTopics.map((topic) => {
+                      const isEditing = editingTopicId === topic.id;
+                      const data = isEditing ? editingTopic! : topic;
+                      
+                      return (
+                        <tr key={topic.id}>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={data.topic_number} 
+                                onChange={(e) => setEditingTopic({ ...data, topic_number: parseInt(e.target.value) || 0 })}
+                                style={{ width: "60px" }}
+                              />
+                            ) : (
+                              topic.topic_number
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="text" 
+                                value={data.topic_name} 
+                                onChange={(e) => setEditingTopic({ ...data, topic_name: e.target.value })}
+                                style={{ width: "100%" }}
+                              />
+                            ) : (
+                              topic.topic_name
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={data.lecture_hours} 
+                                onChange={(e) => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 })}
+                                style={{ width: "80px" }}
+                              />
+                            ) : (
+                              topic.lecture_hours
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={data.seminar_hours} 
+                                onChange={(e) => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 })}
+                                style={{ width: "80px" }}
+                              />
+                            ) : (
+                              topic.seminar_hours
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={data.practical_hours} 
+                                onChange={(e) => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 })}
+                                style={{ width: "80px" }}
+                              />
+                            ) : (
+                              topic.practical_hours
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={data.exam_hours} 
+                                onChange={(e) => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 })}
+                                style={{ width: "80px" }}
+                              />
+                            ) : (
+                              topic.exam_hours
+                            )}
+                          </td>
+                          <td>{topic.total_hours}</td>
+                          <td>
+                            {isEditing ? (
+                              <input 
+                                type="text" 
+                                value={data.description || ""} 
+                                onChange={(e) => setEditingTopic({ ...data, description: e.target.value })}
+                                style={{ width: "100%" }}
+                              />
+                            ) : (
+                              topic.description || "—"
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              {isEditing ? (
+                                <>
+                                  <button className="secondary" onClick={saveEditTopic} disabled={loading} title="Сохранить">
+                                    <Save size={16} />
+                                  </button>
+                                  <button className="secondary" onClick={cancelEdit} disabled={loading} title="Отмена">
+                                    <X size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="secondary" onClick={() => startEditTopic(topic)} disabled={loading} title="Редактировать">
+                                    <Edit2 size={16} />
+                                  </button>
+                                  <button className="secondary" onClick={() => deleteTopic(topic.id)} disabled={loading} title="Удалить">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {isAddingNew && (
+                      <tr>
+                        <td>
+                          <input 
+                            type="number" 
+                            value={newTopic.topic_number} 
+                            onChange={(e) => setNewTopic({ ...newTopic, topic_number: parseInt(e.target.value) || 0 })}
+                            style={{ width: "60px" }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="text" 
+                            value={newTopic.topic_name} 
+                            onChange={(e) => setNewTopic({ ...newTopic, topic_name: e.target.value })}
+                            style={{ width: "100%" }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            value={newTopic.lecture_hours} 
+                            onChange={(e) => setNewTopic({ ...newTopic, lecture_hours: parseFloat(e.target.value) || 0 })}
+                            style={{ width: "80px" }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            value={newTopic.seminar_hours} 
+                            onChange={(e) => setNewTopic({ ...newTopic, seminar_hours: parseFloat(e.target.value) || 0 })}
+                            style={{ width: "80px" }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            value={newTopic.practical_hours} 
+                            onChange={(e) => setNewTopic({ ...newTopic, practical_hours: parseFloat(e.target.value) || 0 })}
+                            style={{ width: "80px" }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            value={newTopic.exam_hours} 
+                            onChange={(e) => setNewTopic({ ...newTopic, exam_hours: parseFloat(e.target.value) || 0 })}
+                            style={{ width: "80px" }}
+                          />
+                        </td>
+                        <td>—</td>
+                        <td>
+                          <input 
+                            type="text" 
+                            value={newTopic.description || ""} 
+                            onChange={(e) => setNewTopic({ ...newTopic, description: e.target.value })}
+                            style={{ width: "100%" }}
+                          />
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="secondary" onClick={saveNewTopic} disabled={loading || !newTopic.topic_name.trim()} title="Сохранить">
+                              <Save size={16} />
+                            </button>
+                            <button className="secondary" onClick={cancelAddNew} disabled={loading} title="Отмена">
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    <tr className={styles.totalsRow}>
+                      <td colSpan={2}><strong>ИТОГО</strong></td>
+                      <td><strong>{modalTotals.lecture_hours}</strong></td>
+                      <td><strong>{modalTotals.seminar_hours}</strong></td>
+                      <td><strong>{modalTotals.practical_hours}</strong></td>
+                      <td><strong>{modalTotals.exam_hours}</strong></td>
+                      <td><strong>{modalTotals.total_hours}</strong></td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}    </AppShell>
   );
 }

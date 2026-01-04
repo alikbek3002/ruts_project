@@ -157,8 +157,8 @@ def assign_subject_to_teacher(payload: AssignSubjectIn, user: dict = require_rol
     
     # Проверяем количество предметов у учителя
     count = sb.table("teacher_subjects").select("subject_id", count="exact").eq("teacher_id", payload.teacher_id).execute()
-    if count.count and count.count >= 2:
-        raise HTTPException(status_code=400, detail="Teacher can have maximum 2 subjects")
+    if count.count and count.count >= 3:
+        raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
     
     # Проверяем что связь не существует
     existing = (
@@ -205,8 +205,8 @@ def replace_teacher_subjects(teacher_id: str, payload: ReplaceTeacherSubjectsIn,
     subject_ids = list(dict.fromkeys(subject_ids))
     if len(subject_ids) < 1:
         raise HTTPException(status_code=400, detail="At least one subject is required")
-    if len(subject_ids) > 2:
-        raise HTTPException(status_code=400, detail="Teacher can have maximum 2 subjects")
+    if len(subject_ids) > 3:
+        raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
 
     # Validate subjects exist and collect names
     subj_rows = sb.table("subjects").select("id,name").in_("id", subject_ids).execute().data or []

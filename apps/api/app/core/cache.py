@@ -36,6 +36,17 @@ class SimpleTTLCache:
     def delete(self, key: str) -> None:
         with self._lock:
             self._data.pop(key, None)
+    
+    def delete_pattern(self, pattern: str) -> None:
+        """Delete all keys matching pattern (supports * wildcard)"""
+        with self._lock:
+            if '*' in pattern:
+                prefix = pattern.split('*')[0]
+                keys_to_delete = [k for k in self._data.keys() if k.startswith(prefix)]
+                for k in keys_to_delete:
+                    del self._data[k]
+            else:
+                self._data.pop(pattern, None)
 
     def clear(self) -> None:
         with self._lock:
