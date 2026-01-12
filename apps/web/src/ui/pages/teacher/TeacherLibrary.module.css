@@ -200,6 +200,46 @@
   line-height: 1.5;
 }
 
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .addButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .controls {
+    gap: 12px;
+  }
+
+  .searchWrapper,
+  .filterWrapper {
+    width: 100%;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+
+  .filterSelect {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 .fileList {
   margin-top: auto;
   display: flex;

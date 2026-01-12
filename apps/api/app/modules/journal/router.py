@@ -346,15 +346,15 @@ def get_lesson_details(
     # Получаем студентов класса с их номерами
     enrollments = (
         sb.table("class_enrollments")
-        .select("student_id,student_number")
+        .select("legacy_student_id,student_number")
         .eq("class_id", class_id)
         .execute()
         .data
         or []
     )
     
-    student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
-    student_numbers = {e.get("student_id"): e.get("student_number") for e in enrollments}
+    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
+    student_numbers = {e.get("legacy_student_id"): e.get("student_number") for e in enrollments}
     
     if not student_ids:
         return {
@@ -477,13 +477,13 @@ def get_class_journal(
     # Получаем всех учеников класса
     enrollments = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", class_id)
         .execute()
         .data
         or []
     )
-    student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
     
     if not student_ids:
         return {"students": [], "lessons": [], "grades": {}}
@@ -669,9 +669,9 @@ def add_grade(
     # Проверяем, что студент в этом классе
     enrollment = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", class_id)
-        .eq("student_id", payload.student_id)
+        .eq("legacy_student_id", payload.student_id)
         .limit(1)
         .execute()
         .data
@@ -894,7 +894,7 @@ def update_lesson_info(
         # Если нет записей, создаем их для всех студентов класса
         students_resp = (
             sb.table("class_enrollments")
-            .select("student_id")
+            .select("legacy_student_id")
             .eq("class_id", class_id)
             .execute()
         )
@@ -905,11 +905,12 @@ def update_lesson_info(
                 {
                     "timetable_entry_id": payload.timetable_entry_id,
                     "lesson_date": payload.lesson_date,
-                    "student_id": s["student_id"],
+                    "student_id": s["legacy_student_id"],
                     "created_by": user["id"],
                     **update_data
                 }
                 for s in students
+                if s.get("legacy_student_id")
             ]
             sb.table("lesson_journal").insert(insert_records).execute()
     

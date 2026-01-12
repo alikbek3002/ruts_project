@@ -55,7 +55,9 @@ export function StudentGradesPage() {
                   background: "var(--color-card)",
                   display: "flex",
                   justifyContent: "space-between",
-                  alignItems: "center"
+                  alignItems: "flex-start",
+                  gap: 12,
+                  flexWrap: "wrap"
                 }}
               >
                 <div>

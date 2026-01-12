@@ -226,7 +226,7 @@ async def list_streams(
                 if class_ids:
                     student_result = (
                         sb.table("class_enrollments")
-                        .select("student_id", count="exact")
+                        .select("legacy_student_id", count="exact")
                         .in_("class_id", class_ids)
                         .execute()
                     )
@@ -283,7 +283,7 @@ async def get_stream(
             for cls in classes_data.data or []:
                 enrollment_count = (
                     sb.table("class_enrollments")
-                    .select("student_id", count="exact")
+                    .select("legacy_student_id", count="exact")
                     .eq("class_id", cls["id"])
                     .execute()
                 )
@@ -380,7 +380,7 @@ async def update_stream(
         class_ids_result = sb.table("stream_classes").select("class_id").eq("stream_id", str(stream_id)).execute()
         class_ids = [c["class_id"] for c in class_ids_result.data]
         if class_ids:
-            student_result = sb.table("class_enrollments").select("student_id", count="exact").in_("class_id", class_ids).execute()
+            student_result = sb.table("class_enrollments").select("legacy_student_id", count="exact").in_("class_id", class_ids).execute()
             student_count = student_result.count or 0
     
     direction_name = None

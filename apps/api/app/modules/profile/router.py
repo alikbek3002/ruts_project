@@ -68,7 +68,7 @@ def get_profile(user: dict = Depends(get_current_user)):
     
     # Если студент, получаем его класс
     if user_data["role"] == "student":
-        enrollment = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).limit(1).execute()
+        enrollment = sb.table("class_enrollments").select("class_id").eq("legacy_student_id", user["id"]).limit(1).execute()
         if enrollment.data:
             class_id = enrollment.data[0]["class_id"]
             class_resp = sb.table("classes").select("name").eq("id", class_id).limit(1).execute()

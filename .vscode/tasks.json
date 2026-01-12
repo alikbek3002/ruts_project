@@ -20,15 +20,7 @@
 		{
 			"label": "web:dev (restart)",
 			"type": "shell",
-			"command": "pids=$(lsof -ti tcp:5173 2>/dev/null || true); if [[ -n \"$pids\" ]]; then kill -9 $pids; fi\ncd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
-			"isBackground": true,
-			"problemMatcher": [],
-			"group": "build"
-		},
-		{
-			"label": "web:dev (restart clean)",
-			"type": "shell",
-			"command": "cd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
+			"command": "pids=($(lsof -ti tcp:5173 2>/dev/null)); if (( ${#pids[@]} )); then kill -9 $pids; fi; cd /Users/chyngyz/Desktop/ruts_project/apps/web && npm run dev",
 			"isBackground": true,
 			"problemMatcher": [],
 			"group": "build"
@@ -44,7 +36,7 @@
 		{
 			"label": "api:dev (restart)",
 			"type": "shell",
-			"command": "pids=$(lsof -ti tcp:8000 2>/dev/null || true); if [[ -n \"$pids\" ]]; then kill -9 $pids; fi\ncd /Users/chyngyz/Desktop/ruts_project/apps/api && /Users/chyngyz/Desktop/ruts_project/.venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+			"command": "pids=($(lsof -ti tcp:8000 2>/dev/null)); if (( ${#pids[@]} )); then kill -9 $pids; fi; cd /Users/chyngyz/Desktop/ruts_project/apps/api && /Users/chyngyz/Desktop/ruts_project/.venv/bin/python -m uvicorn app.main:app --reload --port 8000",
 			"args": [],
 			"isBackground": true,
 			"group": "build"

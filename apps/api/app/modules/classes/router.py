@@ -118,7 +118,7 @@ def list_classes(user: dict = Depends(get_current_user)):
             
             # Подсчитываем студентов для каждого класса
             for cls in classes:
-                count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
+                count_resp = sb.table("class_enrollments").select("legacy_student_id", count="exact").eq("class_id", cls["id"]).execute()
                 cls["student_count"] = count_resp.count or 0
                 # Flatten direction
                 if cls.get("directions"):
@@ -149,7 +149,7 @@ def list_classes(user: dict = Depends(get_current_user)):
             enr = (
                 sb.table("class_enrollments")
                 .select("class_id")
-                .eq("student_id", user["id"])
+                .eq("legacy_student_id", user["id"])
                 .execute()
                 .data
                 or []
@@ -190,7 +190,7 @@ def list_curated_classes(user: dict = require_role("teacher")):
         )
         classes = resp.data or []
         for cls in classes:
-            count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", cls["id"]).execute()
+            count_resp = sb.table("class_enrollments").select("legacy_student_id", count="exact").eq("class_id", cls["id"]).execute()
             cls["student_count"] = count_resp.count or 0
             cls["direction"] = cls.get("directions") or None
             cls.pop("directions", None)
@@ -235,7 +235,7 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
                 sb.table("class_enrollments")
                 .select("class_id")
                 .eq("class_id", class_id)
-                .eq("student_id", user["id"])
+                .eq("legacy_student_id", user["id"])
                 .limit(1)
                 .execute()
                 .data
@@ -246,19 +246,19 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
         c = sb.table("classes").select("id,name,direction_id,curator_id").eq("id", class_id).single().execute().data
         enr_rows = (
             sb.table("class_enrollments")
-            .select("student_id,student_number")
+            .select("legacy_student_id,student_number")
             .eq("class_id", class_id)
             .execute()
             .data
             or []
         )
-        student_ids = [r.get("student_id") for r in enr_rows if r.get("student_id")]
+        student_ids = [r.get("legacy_student_id") for r in enr_rows if r.get("legacy_student_id")]
         if not student_ids:
             return {"class": c, "students": []}
 
         uresp = sb.table("users").select("id,username,full_name").in_("id", student_ids).execute()
         students = uresp.data or []
-        num_by_id = {r.get("student_id"): r.get("student_number") for r in enr_rows if r.get("student_id")}
+        num_by_id = {r.get("legacy_student_id"): r.get("student_number") for r in enr_rows if r.get("legacy_student_id")}
         for s in students:
             s["student_number"] = num_by_id.get(s.get("id"))
         students.sort(key=lambda s: (s.get("student_number") is None, s.get("student_number") or 0, s.get("full_name") or "", s.get("username") or ""))
@@ -282,16 +282,16 @@ def enroll_student(class_id: str, payload: EnrollIn, _: dict = require_role("adm
     sb = get_supabase()
     try:
         # Enforce max 35
-        count_resp = sb.table("class_enrollments").select("student_id", count="exact").eq("class_id", class_id).execute()
+        count_resp = sb.table("class_enrollments").select("legacy_student_id", count="exact").eq("class_id", class_id).execute()
         if (count_resp.count or 0) >= 35:
             raise HTTPException(status_code=400, detail="Class can have maximum 35 students")
 
         # Already enrolled?
         existing = (
             sb.table("class_enrollments")
-            .select("student_id")
+            .select("legacy_student_id")
             .eq("class_id", class_id)
-            .eq("student_id", payload.student_id)
+            .eq("legacy_student_id", payload.student_id)
             .limit(1)
             .execute()
             .data
@@ -315,7 +315,7 @@ def enroll_student(class_id: str, payload: EnrollIn, _: dict = require_role("adm
         if next_num > 35:
             raise HTTPException(status_code=400, detail="Class can have maximum 35 students")
 
-        sb.table("class_enrollments").insert({"class_id": class_id, "student_id": payload.student_id, "student_number": next_num}).execute()
+        sb.table("class_enrollments").insert({"class_id": class_id, "legacy_student_id": payload.student_id, "student_number": next_num}).execute()
         return {"ok": True}
     except HTTPException:
         raise

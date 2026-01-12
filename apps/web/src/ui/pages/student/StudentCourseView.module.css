@@ -188,3 +188,31 @@
   padding: 40px;
 }
 
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+  }
+
+  .courseHeader {
+    padding: 16px;
+  }
+
+  .courseHeader h1 {
+    font-size: 20px;
+  }
+
+  .topicCard {
+    padding: 16px;
+  }
+
+  .testCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .startButton {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

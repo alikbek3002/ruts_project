@@ -257,6 +257,53 @@
   gap: 12px;
 }
 
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+  }
+
+  .header {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .classesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .vzvodPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .datesChips {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .classSelector {
+    width: 100%;
+  }
+
+  .classSelector select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .studentTable {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .studentTable th,
+  .studentTable td {
+    white-space: nowrap;
+  }
+}
+
 /* Date Selector */
 .dateSelector {
   display: flex;

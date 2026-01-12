@@ -254,7 +254,7 @@ def list_meetings(user: dict = require_role("teacher", "admin", "student")):
     elif user["role"] == "student":
         # Get meetings for classes the student is enrolled in
         # First get student's classes
-        enrollments = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
+        enrollments = sb.table("class_enrollments").select("class_id").eq("legacy_student_id", user["id"]).execute()
         class_ids = [e["class_id"] for e in (enrollments.data or [])]
         
         if not class_ids:

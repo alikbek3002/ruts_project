@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 FIXED_ROOMS: list[str] = ["20", "22"] + [str(n) for n in range(30, 53)]
 
 
+def _is_missing_db_object_error(exc: Exception) -> bool:
+    code = getattr(exc, "code", None)
+    s = (str(exc) or "").lower()
+    # Postgres error codes:
+    # 42P01 undefined_table, 42883 undefined_function
+    if code in {"42P01", "42883"}:
+        return True
+    if "does not exist" in s and ("relation" in s or "function" in s):
+        return True
+    return False
+
+
+def _raise_autoscheduler_not_installed(*, missing: list[str], exc: Exception | None = None) -> None:
+    detail = {
+        "message": "В базе данных не установлена (или не применена) схема авто-расписания. Нужна миграция `supabase/migrations/20251230_000017_auto_schedule_system.sql`.",
+        "missing": missing,
+    }
+    if exc is not None:
+        detail["db_error"] = str(exc)
+    raise HTTPException(status_code=503, detail=detail)
+
+
 def _raise_db_http_exception(exc: Exception, *, fallback: str) -> None:
     msg = str(exc) or fallback
     code = getattr(exc, "code", None)
@@ -636,7 +658,7 @@ def get_week(weekStart: str, user: dict = require_role("admin", "manager", "teac
         select_fields += ",room"
 
     if user["role"] == "student":
-        enr = sb.table("class_enrollments").select("class_id").eq("student_id", user["id"]).execute()
+        enr = sb.table("class_enrollments").select("class_id").eq("legacy_student_id", user["id"]).execute()
         class_ids = [r["class_id"] for r in (enr.data or [])]
         tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
     elif user["role"] == "teacher":
@@ -1017,7 +1039,13 @@ async def get_all_teachers_workload(
     sb = get_supabase()
     
     # Get all teachers
-    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    teachers_result = (
+        sb.table("users")
+        .select("id, full_name, username")
+        .eq("role", "teacher")
+        .eq("is_active", True)
+        .execute()
+    )
     
     if not teachers_result.data:
         return {"teachers": []}
@@ -1315,6 +1343,17 @@ def create_subject_lesson_plan(
     This defines how many theory/practice lessons each subject should have.
     """
     sb = get_supabase()
+
+    # DB drift guard: auto-scheduler tables may not exist in live DB
+    try:
+        sb.table("subject_lesson_plans").select("id").limit(1).execute()
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.subject_lesson_plans"],
+                exc=e,
+            )
+        _raise_db_http_exception(e, fallback="Не удалось проверить таблицу subject_lesson_plans")
     
     # Validate stream exists
     stream = sb.table("streams").select("id").eq("id", stream_id).execute()
@@ -1357,8 +1396,16 @@ def create_subject_lesson_plan(
 def get_subject_lesson_plans(stream_id: str, _: dict = require_role("admin", "manager", "teacher")):
     """Get all subject lesson plans for a stream."""
     sb = get_supabase()
-    
-    plans = sb.table("subject_lesson_plans").select("*, subjects(name)").eq("stream_id", stream_id).execute()
+
+    try:
+        plans = sb.table("subject_lesson_plans").select("*, subjects(name)").eq("stream_id", stream_id).execute()
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.subject_lesson_plans"],
+                exc=e,
+            )
+        _raise_db_http_exception(e, fallback="Не удалось загрузить subject_lesson_plans")
     
     return {"plans": plans.data or []}
 
@@ -1373,7 +1420,15 @@ def validate_schedule(class_id: str, _: dict = require_role("admin", "manager"))
     sb = get_supabase()
     
     # Use SQL function for validation
-    result = sb.rpc("validate_schedule_constraints", {"p_class_id": class_id}).execute()
+    try:
+        result = sb.rpc("validate_schedule_constraints", {"p_class_id": class_id}).execute()
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.validate_schedule_constraints(uuid)"],
+                exc=e,
+            )
+        _raise_db_http_exception(e, fallback="Не удалось выполнить validate_schedule_constraints")
     
     violations = [r for r in result.data if r.get("violated")]
     
@@ -1392,8 +1447,16 @@ def get_generation_logs(
 ):
     """Get schedule generation history."""
     sb = get_supabase()
-    
-    query = sb.table("schedule_generation_logs").select("*").order("started_at", desc=True).limit(limit)
+
+    try:
+        query = sb.table("schedule_generation_logs").select("*").order("started_at", desc=True).limit(limit)
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.schedule_generation_logs"],
+                exc=e,
+            )
+        _raise_db_http_exception(e, fallback="Не удалось обратиться к schedule_generation_logs")
     
     if stream_id:
         query = query.eq("stream_id", stream_id)
@@ -1412,14 +1475,22 @@ def _load_or_create_constraints(sb, payload: AutoGenerateScheduleRequest) -> Sch
     
     # Try to load from DB first
     db_constraints = None
-    if payload.stream_id:
-        result = sb.table("schedule_constraints").select("*").eq("stream_id", payload.stream_id).execute()
-        if result.data:
-            db_constraints = result.data[0]
-    else:
-        result = sb.table("schedule_constraints").select("*").eq("class_id", payload.class_id).execute()
-        if result.data:
-            db_constraints = result.data[0]
+    try:
+        if payload.stream_id:
+            result = sb.table("schedule_constraints").select("*").eq("stream_id", payload.stream_id).execute()
+            if result.data:
+                db_constraints = result.data[0]
+        else:
+            result = sb.table("schedule_constraints").select("*").eq("class_id", payload.class_id).execute()
+            if result.data:
+                db_constraints = result.data[0]
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.schedule_constraints"],
+                exc=e,
+            )
+        raise
     
     # Build constraints object
     constraints = ScheduleConstraints()
@@ -1461,8 +1532,16 @@ def _load_or_create_constraints(sb, payload: AutoGenerateScheduleRequest) -> Sch
 
 def _load_lesson_plans_for_stream(sb, stream_id: str) -> list:
     """Load subject lesson plans for a stream."""
-    result = sb.table("subject_lesson_plans").select("*").eq("stream_id", stream_id).execute()
-    return result.data or []
+    try:
+        result = sb.table("subject_lesson_plans").select("*").eq("stream_id", stream_id).execute()
+        return result.data or []
+    except Exception as e:
+        if _is_missing_db_object_error(e):
+            _raise_autoscheduler_not_installed(
+                missing=["public.subject_lesson_plans"],
+                exc=e,
+            )
+        raise
 
 
 def _create_lessons_from_plans(sb, lesson_plans: list) -> List[Lesson]:
@@ -1509,7 +1588,13 @@ def export_teachers_workload_excel(user: dict = require_role("admin", "manager")
     sb = get_supabase()
     
     # Get all teachers
-    teachers_result = sb.table("users").select("id, full_name, username").eq("role", "teacher").execute()
+    teachers_result = (
+        sb.table("users")
+        .select("id, full_name, username")
+        .eq("role", "teacher")
+        .eq("is_active", True)
+        .execute()
+    )
     teachers = teachers_result.data or []
     
     today = date.today()
