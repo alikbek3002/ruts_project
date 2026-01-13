@@ -195,7 +195,7 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
 
     created = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
     if role == "student" and payload.class_id:
-        sb.table("class_enrollments").insert({"class_id": payload.class_id, "student_id": created["id"]}).execute()
+        sb.table("class_enrollments").insert({"class_id": payload.class_id, "legacy_student_id": created["id"]}).execute()
 
     if role == "teacher":
         subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
@@ -295,17 +295,17 @@ def admin_list_users(
 
             enr_rows = (
                 sb.table("class_enrollments")
-                .select("student_id,class_id")
-                .in_("student_id", student_ids)
+                .select("legacy_student_id,class_id")
+                .in_("legacy_student_id", student_ids)
                 .execute()
                 .data
                 or []
             )
 
             class_id_by_student: dict[str, str] = {
-                str(r.get("student_id")): str(r.get("class_id"))
+                str(r.get("legacy_student_id")): str(r.get("class_id"))
                 for r in enr_rows
-                if r.get("student_id") and r.get("class_id")
+                if r.get("legacy_student_id") and r.get("class_id")
             }
             class_ids = list({cid for cid in class_id_by_student.values() if cid})
             if not class_ids:
@@ -394,7 +394,7 @@ def admin_get_user(user_id: str, _: dict = require_role("admin", "manager")):
         enr = (
             sb.table("class_enrollments")
             .select("class_id")
-            .eq("student_id", user_id)
+            .eq("legacy_student_id", user_id)
             .limit(1)
             .execute()
             .data
@@ -487,9 +487,9 @@ def admin_update_user(user_id: str, payload: UpdateUserIn, _: dict = require_rol
     # Student class change
     extra: dict[str, object] = {"class": None}
     if current.get("role") == "student" and "class_id" in payload.model_fields_set:
-        sb.table("class_enrollments").delete().eq("student_id", user_id).execute()
+        sb.table("class_enrollments").delete().eq("legacy_student_id", user_id).execute()
         if payload.class_id:
-            sb.table("class_enrollments").insert({"class_id": payload.class_id, "student_id": user_id}).execute()
+            sb.table("class_enrollments").insert({"class_id": payload.class_id, "legacy_student_id": user_id}).execute()
 
     # Return refreshed user
     refreshed = (
@@ -512,7 +512,7 @@ def admin_update_user(user_id: str, payload: UpdateUserIn, _: dict = require_rol
         enr = (
             sb.table("class_enrollments")
             .select("class_id")
-            .eq("student_id", user_id)
+            .eq("legacy_student_id", user_id)
             .limit(1)
             .execute()
             .data
@@ -560,7 +560,7 @@ def admin_delete_user(user_id: str, actor: dict = require_role("admin", "manager
 
     # Detach from active relations to keep UI lists consistent.
     if target_role == "student":
-        sb.table("class_enrollments").delete().eq("student_id", user_id).execute()
+        sb.table("class_enrollments").delete().eq("legacy_student_id", user_id).execute()
     if target_role == "teacher":
         sb.table("teacher_subjects").delete().eq("teacher_id", user_id).execute()
 
@@ -684,13 +684,29 @@ def export_class_students(class_id: str, _: dict = require_role("admin", "manage
 
     enr = (
         sb.table("class_enrollments")
-        .select("student_id, users(id,username,full_name)")
+        .select("legacy_student_id,student_full_name,student_number")
         .eq("class_id", class_id)
         .execute()
         .data
         or []
     )
-    students = [r.get("users") for r in enr if r.get("users")]
+
+    legacy_ids = [str(r.get("legacy_student_id")) for r in enr if r.get("legacy_student_id")]
+    users_by_id: dict[str, dict] = {}
+    if legacy_ids:
+        u_rows = sb.table("users").select("id,username,full_name").in_("id", legacy_ids).execute().data or []
+        users_by_id = {str(u.get("id")): u for u in u_rows if u.get("id")}
+
+    students: list[dict] = []
+    for r in enr:
+        uid = str(r.get("legacy_student_id")) if r.get("legacy_student_id") else None
+        u = users_by_id.get(uid) if uid else None
+        if u:
+            students.append({"full_name": u.get("full_name"), "username": u.get("username")})
+        else:
+            # Fallback for legacy rows without user FK
+            students.append({"full_name": r.get("student_full_name"), "username": None})
+
     students.sort(key=lambda s: (s.get("full_name") or "", s.get("username") or ""))
 
     wb = Workbook()

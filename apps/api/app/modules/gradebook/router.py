@@ -188,13 +188,13 @@ def lesson_journal_get(
     # Load class roster
     enr = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", entry.get("class_id"))
         .execute()
         .data
         or []
     )
-    student_ids = [r.get("student_id") for r in enr if r.get("student_id")]
+    student_ids = [r.get("legacy_student_id") for r in enr if r.get("legacy_student_id")]
     if not student_ids:
         return {"lesson": entry, "students": []}
 
@@ -279,13 +279,13 @@ def lesson_journal_save(
     # Only allow writing for students in this class
     valid = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", entry.get("class_id"))
         .execute()
         .data
         or []
     )
-    valid_ids = {r.get("student_id") for r in valid if r.get("student_id")}
+    valid_ids = {r.get("legacy_student_id") for r in valid if r.get("legacy_student_id")}
 
     upserts = []
     for r in payload.rows:
@@ -352,13 +352,13 @@ def class_journal_by_dates(
     # Список учеников
     enrollments = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", class_id)
         .execute()
         .data
         or []
     )
-    student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
     if not student_ids:
         return {"students": [], "dates": [], "data": {}}
 
@@ -442,13 +442,13 @@ def class_journal_by_subject(
     # Список учеников
     enrollments = (
         sb.table("class_enrollments")
-        .select("student_id")
+        .select("legacy_student_id")
         .eq("class_id", class_id)
         .execute()
         .data
         or []
     )
-    student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
     if not student_ids:
         return {"students": [], "subjects": [], "data": {}}
 

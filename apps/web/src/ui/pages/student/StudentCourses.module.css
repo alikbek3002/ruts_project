@@ -95,3 +95,24 @@
   color: #6b7280;
 }
 
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .coursesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .courseFooter {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+

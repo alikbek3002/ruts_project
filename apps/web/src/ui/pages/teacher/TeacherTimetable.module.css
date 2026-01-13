@@ -3,8 +3,6 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  height: calc(100vh - 60px); /* Adjust based on header height */
-  overflow: hidden;
 }
 
 .header {
@@ -431,6 +429,33 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .weekNav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .weekLabel {
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .todayButton {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media print {

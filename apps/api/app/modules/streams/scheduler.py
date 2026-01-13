@@ -253,12 +253,13 @@ def generate_journal_entries_for_stream(
     if all_class_ids:
         enrollments = (
             sb.table("class_enrollments")
-            .select("class_id,student_id")
+            .select("class_id,legacy_student_id")
             .in_("class_id", list(all_class_ids))
             .execute()
         )
         for row in enrollments.data or []:
-            class_to_students[str(row["class_id"])].append(str(row["student_id"]))
+            if row.get("legacy_student_id"):
+                class_to_students[str(row["class_id"])].append(str(row["legacy_student_id"]))
 
     # IMPORTANT: do not overwrite existing marks/attendance. Insert only missing rows.
     inserted = 0

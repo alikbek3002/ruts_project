@@ -193,3 +193,43 @@
 .secondaryBtn:hover {
   background-color: #f9fafb;
 }
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .modalHeader {
+    padding: 16px;
+  }
+
+  .modalBody {
+    padding: 16px;
+  }
+
+  .studentTable {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .studentTable th,
+  .studentTable td {
+    white-space: nowrap;
+  }
+}
