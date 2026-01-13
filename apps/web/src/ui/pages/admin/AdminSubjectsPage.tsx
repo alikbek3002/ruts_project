@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import {
   apiListSubjectsWithTeachers,
   apiCreateSubject,
+  apiUpdateSubject,
   apiDeleteSubject,
   apiGetSubjectTopics,
   apiCreateSubjectTopic,
@@ -31,6 +32,11 @@ export function AdminSubjectsPage() {
   const [newSubjectPhotoUrl, setNewSubjectPhotoUrl] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Edit subject state
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editSubjectName, setEditSubjectName] = useState("");
+  const [editSubjectPhotoUrl, setEditSubjectPhotoUrl] = useState("");
 
   // Modal state
   const [modalSubject, setModalSubject] = useState<SubjectWithTeachers | null>(null);
@@ -84,6 +90,35 @@ export function AdminSubjectsPage() {
       await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null);
       setNewSubjectName("");
       setNewSubjectPhotoUrl("");
+      await reloadAll();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEditSubject = (subject: SubjectWithTeachers) => {
+    setEditingSubjectId(subject.id);
+    setEditSubjectName(subject.name);
+    setEditSubjectPhotoUrl(subject.photo_url || "");
+  };
+
+  const cancelEditSubject = () => {
+    setEditingSubjectId(null);
+    setEditSubjectName("");
+    setEditSubjectPhotoUrl("");
+  };
+
+  const saveEditSubject = async () => {
+    if (!token || !editingSubjectId || !editSubjectName.trim()) return;
+    setErr(null);
+    setLoading(true);
+    try {
+      await apiUpdateSubject(token, editingSubjectId, editSubjectName.trim(), editSubjectPhotoUrl.trim() || null);
+      setEditingSubjectId(null);
+      setEditSubjectName("");
+      setEditSubjectPhotoUrl("");
       await reloadAll();
     } catch (e) {
       setErr(String(e));
@@ -272,38 +307,98 @@ export function AdminSubjectsPage() {
         </div>
 
         <div className={styles.cardsGrid}>
-          {!loading && subjects.map((s) => (
-            <div key={s.id} className={styles.card} onClick={() => openModal(s)} style={{ cursor: "pointer" }}>
-              <div className={styles.cardTop}>
-                <img
-                  className={styles.photo}
-                  src={(s as any).photo_url || "/favicon.svg"}
-                  alt="Фото предмета"
-                  loading="lazy"
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    if (img.src.endsWith("/favicon.svg")) return;
-                    img.src = "/favicon.svg";
-                  }}
-                />
-                <div className={styles.cardInfo}>
-                  <div className={styles.title}>{s.name}</div>
-                  <div className={styles.meta}>
-                    <User size={14} />
-                    {teacherLine(s)}
+          {!loading && subjects.map((s) => {
+            const isEditing = editingSubjectId === s.id;
+            
+            return (
+              <div key={s.id} className={styles.card}>
+                {isEditing ? (
+                  <div className={styles.cardTop} style={{ flexDirection: "column", gap: 12 }}>
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <BookOpen size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)", zIndex: 1 }} />
+                      <input
+                        placeholder="Название предмета"
+                        value={editSubjectName}
+                        onChange={(e) => setEditSubjectName(e.target.value)}
+                        style={{ paddingLeft: 40, width: "100%" }}
+                        autoFocus
+                      />
+                    </div>
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <ImageIcon size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)", zIndex: 1 }} />
+                      <input
+                        placeholder="Ссылка на фото (необязательно)"
+                        value={editSubjectPhotoUrl}
+                        onChange={(e) => setEditSubjectPhotoUrl(e.target.value)}
+                        style={{ paddingLeft: 40, width: "100%" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, width: "100%" }}>
+                      <button 
+                        className="secondary" 
+                        onClick={saveEditSubject} 
+                        disabled={loading || !editSubjectName.trim()}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                      >
+                        <Save size={16} />
+                        Сохранить
+                      </button>
+                      <button 
+                        className="secondary" 
+                        onClick={cancelEditSubject} 
+                        disabled={loading}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                      >
+                        <X size={16} />
+                        Отмена
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <button 
-                  className={`secondary ${styles.deleteBtn}`} 
-                  onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }} 
-                  title="Удалить" 
-                  disabled={loading}
-                >
-                  <Trash2 size={18} />
-                </button>
+                ) : (
+                  <div className={styles.cardTop} onClick={() => openModal(s)} style={{ cursor: "pointer" }}>
+                    <img
+                      className={styles.photo}
+                      src={(s as any).photo_url || "/favicon.svg"}
+                      alt="Фото предмета"
+                      loading="lazy"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.src.endsWith("/favicon.svg")) return;
+                        img.src = "/favicon.svg";
+                      }}
+                    />
+                    <div className={styles.cardInfo}>
+                      <div className={styles.title}>{s.name}</div>
+                      <div className={styles.meta}>
+                        <User size={14} />
+                        {teacherLine(s)}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button 
+                        className="secondary" 
+                        onClick={(e) => { e.stopPropagation(); startEditSubject(s); }} 
+                        title="Редактировать" 
+                        disabled={loading}
+                        style={{ padding: 8 }}
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        className={`secondary ${styles.deleteBtn}`} 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }} 
+                        title="Удалить" 
+                        disabled={loading}
+                        style={{ padding: 8 }}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {subjects.length === 0 && <div className={styles.empty}>Предметы не созданы</div>}
         </div>

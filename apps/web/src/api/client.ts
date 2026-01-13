@@ -282,6 +282,14 @@ export async function apiCreateSubject(token: string, name: string, photoUrl?: s
   return apiPost<{ subject: Subject }>("/subjects/subjects", { name, photo_url: photoUrl ?? null }, token);
 }
 
+export async function apiUpdateSubject(token: string, subjectId: string, name: string, photoUrl?: string | null) {
+  return http<{ subject: Subject }>(`/subjects/subjects/${encodeURIComponent(subjectId)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name, photo_url: photoUrl ?? null }),
+  });
+}
+
 export async function apiDeleteSubject(token: string, subjectId: string) {
   return http<{ ok: boolean }>(`/subjects/subjects/${encodeURIComponent(subjectId)}`, {
     method: "DELETE",

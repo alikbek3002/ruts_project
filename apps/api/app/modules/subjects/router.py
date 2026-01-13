@@ -21,6 +21,11 @@ class CreateSubjectIn(BaseModel):
     photo_url: str | None = None
 
 
+class UpdateSubjectIn(BaseModel):
+    name: str
+    photo_url: str | None = None
+
+
 class AssignSubjectIn(BaseModel):
     teacher_id: str
     subject_id: str
@@ -109,6 +114,35 @@ def create_subject(payload: CreateSubjectIn, user: dict = require_role("admin", 
         insert_data["photo_url"] = photo_url
 
     resp = sb.table("subjects").insert(insert_data).execute()
+    return {"subject": resp.data[0] if resp.data else None}
+
+
+@router.put("/subjects/{subject_id}")
+def update_subject(subject_id: str, payload: UpdateSubjectIn, user: dict = require_role("admin", "manager")):
+    """Обновить предмет (только админ/менеджер)"""
+    sb = get_supabase()
+    
+    # Проверяем что предмет существует
+    existing = sb.table("subjects").select("id,name").eq("id", subject_id).limit(1).execute().data
+    if not existing:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    
+    name = payload.name.strip()
+    photo_url = payload.photo_url.strip() if isinstance(payload.photo_url, str) and payload.photo_url.strip() else None
+    
+    # Проверяем что другой предмет с таким именем не существует
+    if name != existing[0].get("name"):
+        name_check = sb.table("subjects").select("id").eq("name", name).limit(1).execute().data
+        if name_check:
+            raise HTTPException(status_code=400, detail="Subject with this name already exists")
+    
+    update_data = {"name": name}
+    if photo_url:
+        update_data["photo_url"] = photo_url
+    else:
+        update_data["photo_url"] = None
+
+    resp = sb.table("subjects").update(update_data).eq("id", subject_id).execute()
     return {"subject": resp.data[0] if resp.data else None}
 
 
