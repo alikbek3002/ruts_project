@@ -60,8 +60,8 @@ export function StudentCourseViewPage() {
     <AppShell
       title="Курс"
       nav={[
-        { to: "/app/student", label: "Главная" },
-        { to: "/app/student/courses", label: "Курсы" },
+        { to: "/app/student", labelKey: "nav.home" },
+        { to: "/app/student/courses", labelKey: "nav.courses" },
       ]}
     >
       <div className={styles.container}>

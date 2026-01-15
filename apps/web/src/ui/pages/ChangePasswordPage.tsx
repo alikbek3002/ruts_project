@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { apiChangePassword } from "../../api/client";
 import { useAuth } from "../auth/AuthProvider";
 import { Header } from "../layout/Header";
+import { useI18n } from "../i18n/I18nProvider";
 import styles from "../../styles/common.module.css";
 
 export function ChangePasswordPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { state, refreshMe } = useAuth();
   const [oldPassword, setOldPassword] = useState("");
@@ -34,49 +36,49 @@ export function ChangePasswordPage() {
           : '/app';
       setTimeout(() => navigate(panelLink, { replace: true }), 1500);
     } catch (err: any) {
-      setError(err.message || "Ошибка смены пароля");
+      setError(err.message || t("changePassword.error"));
     }
   }
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header title="Смена пароля" />
+      <Header title={t("changePassword.title")} />
       <div style={{ flex: 1, maxWidth: 600, width: "100%", margin: "0 auto", padding: "var(--spacing-lg)" }}>
         <div className={styles.page}>
           <div className={styles.card}>
             <form onSubmit={handleSubmit} className={styles.form}>
               {error && <div className={styles.errorMessage}>{error}</div>}
-              {success && <div className={styles.successMessage}>Пароль успешно изменен! Переход на главную...</div>}
+              {success && <div className={styles.successMessage}>{t("changePassword.success")}</div>}
               <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Текущий пароль</label>
+                <label className={styles.formLabel}>{t("changePassword.current")}</label>
                 <input
                   type="password"
                   className={styles.formInput}
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="Введите текущий пароль"
+                  placeholder={t("changePassword.currentPlaceholder")}
                   required
                   autoFocus
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Новый пароль</label>
+                <label className={styles.formLabel}>{t("changePassword.new")}</label>
                 <input
                   type="password"
                   className={styles.formInput}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Введите новый пароль"
+                  placeholder={t("changePassword.newPlaceholder")}
                   required
                   minLength={8}
                 />
               </div>
               <div className={styles.formActions}>
                 <button type="button" onClick={() => navigate(-1)} className={styles.buttonSecondary}>
-                  Отмена
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={!state.accessToken}>
-                  Сохранить
+                  {t("common.save")}
                 </button>
               </div>
             </form>

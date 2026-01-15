@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { dict, type I18nKey, type Lang } from "./i18n";
+import { dict, type I18nKey, type I18nParams, type Lang } from "./i18n";
 
 type I18nContextValue = {
   lang: Lang;
   setLang: (lang: Lang) => void;
-  t: (key: I18nKey) => string;
+  t: (key: I18nKey, params?: I18nParams) => string;
 };
 
 const STORAGE_KEY = "ruts.lang";
@@ -29,7 +29,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return {
       lang,
       setLang,
-      t: (key: I18nKey) => dict[lang][key] ?? dict.ru[key] ?? key,
+      t: (key: I18nKey, params?: I18nParams) => {
+        const template = dict[lang][key] ?? dict.ru[key] ?? String(key);
+        if (!params) return template;
+        return template.replace(/\{\{(\w+)\}\}/g, (_m, p1: string) => String(params[p1] ?? `{{${p1}}}`));
+      },
     };
   }, [lang]);
 

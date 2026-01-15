@@ -351,12 +351,12 @@ export function TeacherCourseEditPage() {
     <AppShell
       title="Редактирование курса"
       nav={[
-        { to: "/app/teacher", label: "Главная" },
-        { to: "/app/teacher/journal", label: "Журнал" },
-        { to: "/app/teacher/vzvody", label: "Мои взводы" },
-        { to: "/app/teacher/timetable", label: "Расписание" },
-        { to: "/app/teacher/workload", label: "Часы работы" },
-        { to: "/app/teacher/courses", label: "Курсы" },
+        { to: "/app/teacher", labelKey: "nav.home" },
+        { to: "/app/teacher/journal", labelKey: "nav.journal" },
+        { to: "/app/teacher/vzvody", labelKey: "nav.myVzvody" },
+        { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
+        { to: "/app/teacher/workload", labelKey: "nav.workload" },
+        { to: "/app/teacher/courses", labelKey: "nav.courses" },
       ]}
     >
       <div className={styles.container}>

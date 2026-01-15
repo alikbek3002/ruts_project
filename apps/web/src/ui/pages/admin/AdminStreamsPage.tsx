@@ -11,11 +11,13 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminStreams.module.css";
 import { Plus, RefreshCw, Layers } from "lucide-react";
 
 export function AdminStreamsPage() {
   const { state } = useAuth();
+  const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
@@ -41,12 +43,7 @@ export function AdminStreamsPage() {
       setStreams(nextStreams);
       setClasses(clsResp.classes || []);
 
-      const details = await Promise.all(
-        nextStreams.map(async (s) => {
-          const d = await apiGetStream(token, s.id);
-          return d.stream;
-        })
-      );
+      const details = await Promise.all(nextStreams.map((s) => apiGetStream(token, s.id).then((r) => r.stream)));
       const map = new Map<string, StreamDetail>();
       for (const d of details) map.set(d.id, d);
       setStreamDetails(map);
@@ -66,7 +63,7 @@ export function AdminStreamsPage() {
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
-  const title = user.role === "manager" ? "Менеджер → Потоки" : "Админ → Потоки";
+  const titleKey = user.role === "manager" ? "admin.streams.pageTitleManager" : "admin.streams.pageTitleAdmin";
 
   const assignedClassIds = useMemo(() => {
     const ids = new Set<string>();
@@ -92,11 +89,11 @@ export function AdminStreamsPage() {
   async function handleCreate() {
     if (!token) return;
     if (!createName.trim()) {
-      setErr("Введите название потока");
+      setErr(t("admin.streams.err.nameRequired"));
       return;
     }
     if (!createStart || !createEnd) {
-      setErr("Укажите даты начала и окончания");
+      setErr(t("admin.streams.err.datesRequired"));
       return;
     }
     setErr(null);
@@ -115,30 +112,30 @@ export function AdminStreamsPage() {
 
   return (
     <AppShell
-      title={title}
+      titleKey={titleKey}
       nav={[
-        { to: base, label: "Главная" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/streams`, label: "Потоки" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/workload`, label: "Часы работы" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
           <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Layers size={18} /> Потоки
+            <Layers size={18} /> {t("nav.streams")}
           </h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={reload} disabled={loading} className={styles.btn}>
-              <RefreshCw size={16} /> Обновить
+              <RefreshCw size={16} /> {t("common.refresh")}
             </button>
             <button onClick={openCreate} className={styles.btnPrimary}>
-              <Plus size={16} /> Создать поток
+              <Plus size={16} /> {t("admin.streams.create")}
             </button>
           </div>
         </div>
@@ -147,7 +144,7 @@ export function AdminStreamsPage() {
 
         <div className={styles.list}>
           {streams.length === 0 ? (
-            <div className={styles.empty}>Потоков пока нет</div>
+            <div className={styles.empty}>{t("admin.streams.empty")}</div>
           ) : (
             streams.map((s) => {
               const detail = streamDetails.get(s.id);
@@ -156,9 +153,9 @@ export function AdminStreamsPage() {
                 <Link key={s.id} to={`${base}/streams/${s.id}`} className={styles.card}>
                   <div className={styles.cardTitle}>{s.name}</div>
                   <div className={styles.cardMeta}>
-                    {s.start_date} → {s.end_date} • {s.status} • групп: {s.class_count} • учеников: {s.student_count}
+                    {s.start_date} → {s.end_date} • {s.status} • {t("admin.streams.meta.groups")}: {s.class_count} • {t("admin.streams.meta.students")}: {s.student_count}
                   </div>
-                  <div className={styles.cardSubTitle}>Взводы в потоке</div>
+                  <div className={styles.cardSubTitle}>{t("admin.streams.classesInStream")}</div>
                   {classNames.length === 0 ? (
                     <div className={styles.cardMeta}>—</div>
                   ) : (
@@ -177,9 +174,9 @@ export function AdminStreamsPage() {
         </div>
 
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>Группы без потока</div>
+          <div className={styles.sectionTitle}>{t("admin.streams.unassignedTitle")}</div>
           {unassignedClasses.length === 0 ? (
-            <div className={styles.empty}>Все группы распределены по потокам</div>
+            <div className={styles.empty}>{t("admin.streams.unassignedEmpty")}</div>
           ) : (
             <div className={styles.classChips}>
               {unassignedClasses.map((c) => (
@@ -194,25 +191,25 @@ export function AdminStreamsPage() {
         {createOpen && (
           <div className={styles.modalBackdrop} onClick={() => setCreateOpen(false)}>
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              <div className={styles.modalTitle}>Создать поток</div>
+              <div className={styles.modalTitle}>{t("admin.streams.create")}</div>
               <div className={styles.formRow}>
-                <label>Название</label>
+                <label>{t("admin.streams.field.name")}</label>
                 <input value={createName} onChange={(e) => setCreateName(e.target.value)} />
               </div>
               <div className={styles.formRow}>
-                <label>Дата начала</label>
+                <label>{t("admin.streams.field.startDate")}</label>
                 <input type="date" value={createStart} onChange={(e) => setCreateStart(e.target.value)} />
               </div>
               <div className={styles.formRow}>
-                <label>Дата окончания</label>
+                <label>{t("admin.streams.field.endDate")}</label>
                 <input type="date" value={createEnd} onChange={(e) => setCreateEnd(e.target.value)} />
               </div>
               <div className={styles.modalActions}>
                 <button className={styles.btn} onClick={() => setCreateOpen(false)}>
-                  Отмена
+                  {t("common.cancel")}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleCreate}>
-                  Создать
+                  {t("common.create")}
                 </button>
               </div>
             </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { useI18n } from "../../i18n/I18nProvider";
 import {
   apiGetNotifications,
   apiCreateNotification,
@@ -14,6 +15,7 @@ import { Bell, Plus, Trash2, Send, X, Info, AlertTriangle, CheckCircle, AlertCir
 
 export function AdminNotificationsPage() {
   const { state } = useAuth();
+  const { t, lang } = useI18n();
   const user = state.user;
   const token = state.accessToken;
 
@@ -44,7 +46,7 @@ export function AdminNotificationsPage() {
       const data = await apiGetNotifications(token);
       setNotifications(data.notifications);
     } catch (err: any) {
-      setError(err.message || "Ошибка загрузки");
+      setError(err.message || t("admin.notifications.loadError"));
     } finally {
       setLoading(false);
     }
@@ -71,7 +73,7 @@ export function AdminNotificationsPage() {
       setExpiresAt("");
       await loadNotifications();
     } catch (err: any) {
-      setError(err.message || "Ошибка создания");
+      setError(err.message || t("admin.notifications.createError"));
     } finally {
       setCreating(false);
     }
@@ -79,12 +81,12 @@ export function AdminNotificationsPage() {
 
   async function handleDelete(id: string) {
     if (!token) return;
-    if (!window.confirm("Удалить уведомление?")) return;
+    if (!window.confirm(t("admin.notifications.deleteConfirm"))) return;
     try {
       await apiDeleteNotification(token, id);
       await loadNotifications();
     } catch (err: any) {
-      setError(err.message || "Ошибка удаления");
+      setError(err.message || t("admin.notifications.deleteError"));
     }
   }
 
@@ -92,7 +94,7 @@ export function AdminNotificationsPage() {
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
-  const pageTitle = user.role === "manager" ? "Менеджер → Уведомления" : "Админ → Уведомления";
+  const pageTitleKey = user.role === "manager" ? "admin.notifications.pageTitleManager" : "admin.notifications.pageTitleAdmin";
 
   const getTypeIcon = (t: string) => {
     switch (t) {
@@ -104,38 +106,58 @@ export function AdminNotificationsPage() {
     }
   };
 
+  const getTypeLabel = (tt: string) => {
+    switch (tt) {
+      case "success":
+        return t("admin.notifications.type.success");
+      case "warning":
+        return t("admin.notifications.type.warning");
+      case "error":
+        return t("admin.notifications.type.error");
+      case "announcement":
+        return t("admin.notifications.type.announcement");
+      default:
+        return t("admin.notifications.type.info");
+    }
+  };
+
   const getRoleLabel = (r?: string) => {
     switch (r) {
-      case "teacher": return "Учителя";
-      case "student": return "Студенты";
-      case "admin": return "Админы";
-      case "manager": return "Менеджеры";
-      default: return "Все пользователи";
+      case "teacher":
+        return t("admin.notifications.target.teacher");
+      case "student":
+        return t("admin.notifications.target.student");
+      case "admin":
+        return t("admin.notifications.target.admin");
+      case "manager":
+        return t("admin.notifications.target.manager");
+      default:
+        return t("admin.notifications.target.all");
     }
   };
 
   return (
     <AppShell
-      title={pageTitle}
+      titleKey={pageTitleKey}
       nav={[
-        { to: base, label: "Главная" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/streams`, label: "Потоки" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/workload`, label: "Часы работы" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <h2>Уведомления</h2>
+          <h2>{t("notifications.title")}</h2>
           {!showForm && (
             <button className={styles.createBtn} onClick={() => setShowForm(true)}>
               <Plus size={18} />
-              Создать
+              {t("admin.notifications.create")}
             </button>
           )}
         </div>
@@ -145,61 +167,61 @@ export function AdminNotificationsPage() {
         {showForm && (
           <form className={styles.form} onSubmit={handleCreate}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Заголовок</label>
+              <label className={styles.label}>{t("admin.notifications.field.title")}</label>
               <input
                 className={styles.input}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                placeholder="Важное объявление"
+                placeholder={t("admin.notifications.field.titlePlaceholder")}
               />
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.label}>Сообщение</label>
+              <label className={styles.label}>{t("admin.notifications.field.message")}</label>
               <textarea
                 className={styles.textarea}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 required
-                placeholder="Текст уведомления..."
+                placeholder={t("admin.notifications.field.messagePlaceholder")}
               />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Тип</label>
+                <label className={styles.label}>{t("admin.notifications.field.type")}</label>
                 <select
                   className={styles.select}
                   value={type}
                   onChange={(e) => setType(e.target.value as any)}
                 >
-                  <option value="info">Информация</option>
-                  <option value="success">Успех</option>
-                  <option value="warning">Предупреждение</option>
-                  <option value="error">Ошибка</option>
-                  <option value="announcement">Объявление</option>
+                  <option value="info">{t("admin.notifications.type.info")}</option>
+                  <option value="success">{t("admin.notifications.type.success")}</option>
+                  <option value="warning">{t("admin.notifications.type.warning")}</option>
+                  <option value="error">{t("admin.notifications.type.error")}</option>
+                  <option value="announcement">{t("admin.notifications.type.announcement")}</option>
                 </select>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>Для кого</label>
+                <label className={styles.label}>{t("admin.notifications.field.target")}</label>
                 <select
                   className={styles.select}
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value as any)}
                 >
-                  <option value="all">Все</option>
-                  <option value="student">Студенты</option>
-                  <option value="teacher">Учителя</option>
-                  <option value="manager">Менеджеры</option>
-                  <option value="admin">Админы</option>
+                  <option value="all">{t("admin.notifications.target.all")}</option>
+                  <option value="student">{t("admin.notifications.target.student")}</option>
+                  <option value="teacher">{t("admin.notifications.target.teacher")}</option>
+                  <option value="manager">{t("admin.notifications.target.manager")}</option>
+                  <option value="admin">{t("admin.notifications.target.admin")}</option>
                 </select>
               </div>
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.label}>Истекает (необязательно)</label>
+              <label className={styles.label}>{t("admin.notifications.field.expiresAt")}</label>
               <input
                 type="datetime-local"
                 className={styles.input}
@@ -215,17 +237,17 @@ export function AdminNotificationsPage() {
                 onClick={() => setShowForm(false)}
                 disabled={creating}
               >
-                Отмена
+                {t("common.cancel")}
               </button>
               <button type="submit" className={styles.submitBtn} disabled={creating}>
                 <Send size={16} />
-                {creating ? "Отправка..." : "Отправить"}
+                {creating ? t("admin.notifications.sending") : t("admin.notifications.send")}
               </button>
             </div>
           </form>
         )}
 
-        {loading && <Loader text="Загрузка уведомлений..." />}
+        {loading && <Loader text={t("admin.notifications.loading")} />}
 
         <div className={styles.list}>
           {!loading && notifications.map((n) => (
@@ -235,23 +257,23 @@ export function AdminNotificationsPage() {
                   {getTypeIcon(n.type)}
                   {n.title}
                   <span className={`${styles.badge} ${styles[`badge-${n.type}`]}`}>
-                    {n.type}
+                    {getTypeLabel(n.type)}
                   </span>
                 </div>
                 <button
                   className={styles.deleteBtn}
                   onClick={() => handleDelete(n.id)}
-                  title="Удалить"
+                  title={t("common.delete")}
                 >
                   <Trash2 size={18} />
                 </button>
               </div>
               
               <div className={styles.cardMeta}>
-                <span>Для: {getRoleLabel(n.target_role || undefined)}</span>
-                <span>Создано: {new Date(n.created_at).toLocaleDateString()}</span>
+                <span>{t("admin.notifications.meta.for")}: {getRoleLabel(n.target_role || undefined)}</span>
+                <span>{t("admin.notifications.meta.created")}: {new Date(n.created_at).toLocaleDateString(lang === "ky" ? "ky-KG" : "ru-RU")}</span>
                 {n.expires_at && (
-                  <span>Истекает: {new Date(n.expires_at).toLocaleDateString()}</span>
+                  <span>{t("admin.notifications.meta.expires")}: {new Date(n.expires_at).toLocaleDateString(lang === "ky" ? "ky-KG" : "ru-RU")}</span>
                 )}
               </div>
 
@@ -261,7 +283,7 @@ export function AdminNotificationsPage() {
 
           {!loading && notifications.length === 0 && (
             <div className={styles.empty}>
-              Нет активных уведомлений
+              {t("notifications.empty")}
             </div>
           )}
         </div>

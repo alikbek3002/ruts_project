@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, User, Globe } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { NotificationBell } from "../components/NotificationBell";
@@ -42,7 +42,7 @@ export function Header({ title, showLogo = true }: HeaderProps) {
         {showLogo && (
           <Link to="/app" className={styles.logoLink}>
             <div className={styles.logo}>
-              <img src="/assets/rob-logo.png" alt="РОБ" className={styles.logoImage} />
+              <img src="/assets/rob-logo.png" alt={t("app.logoAlt")} className={styles.logoImage} />
             </div>
           </Link>
         )}
@@ -52,16 +52,17 @@ export function Header({ title, showLogo = true }: HeaderProps) {
           <button
             className={styles.langBtn}
             onClick={toggleLang}
-            aria-label="Switch language"
-            title={lang === "ru" ? "Кыргызча" : "Русский"}
+            aria-label={t("header.switchLanguage")}
+            title={lang === "ru" ? t("lang.ky") : t("lang.ru")}
           >
             <span className={styles.langFlag}>{FLAGS[lang]}</span>
-            <span className={styles.langCode}>{lang.toUpperCase()}</span>
+            <span className={styles.langCode}>{lang === "ru" ? t("lang.ru") : t("lang.ky")}</span>
           </button>
           <button
             className={styles.profileBtn}
             onClick={handleProfile}
-            title="Профиль"
+            aria-label={t("header.profile")}
+            title={t("header.profile")}
           >
             <User size={18} />
             <span className={styles.username}>{user?.username}</span>
@@ -69,6 +70,7 @@ export function Header({ title, showLogo = true }: HeaderProps) {
           <button
             className={styles.logoutBtn}
             onClick={handleLogout}
+            aria-label={t("nav.logout")}
             title={t("nav.logout")}
           >
             <LogOut size={18} />

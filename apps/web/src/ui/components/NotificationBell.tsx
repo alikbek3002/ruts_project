@@ -6,6 +6,7 @@ import {
   apiMarkNotificationRead,
   type Notification,
 } from "../../api/client";
+import { useI18n } from "../i18n/I18nProvider";
 import styles from "./NotificationBell.module.css";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function NotificationBell({ token }: Props) {
+  const { t, lang } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -100,7 +102,7 @@ export function NotificationBell({ token }: Props) {
 
   return (
     <div className={styles.container}>
-      <button className={styles.bell} onClick={handleToggle}>
+      <button className={styles.bell} onClick={handleToggle} aria-label={t("notifications.open")}>
         <Bell size={24} />
         {unreadCount > 0 && <span className={styles.badge}>{unreadCount}</span>}
       </button>
@@ -110,16 +112,16 @@ export function NotificationBell({ token }: Props) {
           <div className={styles.backdrop} onClick={() => setIsOpen(false)} />
           <div className={styles.dropdown}>
             <div className={styles.header}>
-              <h3>Уведомления</h3>
-              <button className={styles.closeBtn} onClick={() => setIsOpen(false)}>
+              <h3>{t("notifications.title")}</h3>
+              <button className={styles.closeBtn} onClick={() => setIsOpen(false)} aria-label={t("common.close")}>
                 <X size={18} />
               </button>
             </div>
 
-            {loading && <div className={styles.loading}>Загрузка...</div>}
+            {loading && <div className={styles.loading}>{t("notifications.loading")}</div>}
 
             {!loading && notifications.length === 0 && (
-              <div className={styles.empty}>Нет уведомлений</div>
+              <div className={styles.empty}>{t("notifications.empty")}</div>
             )}
 
             {!loading && notifications.length > 0 && (
@@ -140,7 +142,7 @@ export function NotificationBell({ token }: Props) {
                       <div className={styles.title}>{notif.title}</div>
                       <div className={styles.message}>{notif.message}</div>
                       <div className={styles.time}>
-                        {new Date(notif.created_at).toLocaleString("ru-RU")}
+                        {new Date(notif.created_at).toLocaleString(lang === "ky" ? "ky-KG" : "ru-RU")}
                       </div>
                     </div>
                     {!notif.is_read && <div className={styles.unreadDot} />}

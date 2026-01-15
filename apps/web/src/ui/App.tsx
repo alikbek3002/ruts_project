@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../ui/auth/AuthProvider';
 import { Loader } from './components/Loader';
+import { I18nProvider } from './i18n/I18nProvider';
 
 // Lazy load pages
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -36,9 +37,6 @@ const TeacherWorkloadPage = React.lazy(() => import('./pages/teacher/TeacherWork
 // Student Pages
 const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage').then(m => ({ default: m.StudentHomePage })));
 const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTimetablePage').then(m => ({ default: m.StudentTimetablePage })));
-const StudentGradesPage = React.lazy(() => import('./pages/student/StudentGradesPage').then(m => ({ default: m.StudentGradesPage })));
-const StudentLibraryPage = React.lazy(() => import('./pages/student/StudentLibraryPage').then(m => ({ default: m.StudentLibraryPage })));
-const StudentHomeworkPage = React.lazy(() => import('./pages/student/StudentHomeworkPage')); // Default export
 const StudentCoursesPage = React.lazy(() => import('./pages/student/StudentCoursesPage').then(m => ({ default: m.StudentCoursesPage })));
 const StudentCourseViewPage = React.lazy(() => import('./pages/student/StudentCourseViewPage').then(m => ({ default: m.StudentCourseViewPage })));
 const StudentTestPage = React.lazy(() => import('./pages/student/StudentTestPage').then(m => ({ default: m.StudentTestPage })));
@@ -52,20 +50,21 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
 export function App() {
   return (
-    <AuthProvider>
-      <Suspense fallback={<Loader fullScreen text="Загрузка..." />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/change-password" element={<ChangePasswordPage />} />
-          <Route
-            path="/app"
-            element={
-              <RequireAuth>
-                <DashboardPage />
-              </RequireAuth>
-            }
-          />
-          <Route path="/" element={<Navigate to="/app" replace />} />
+    <I18nProvider>
+      <AuthProvider>
+        <Suspense fallback={<Loader fullScreen />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/change-password" element={<ChangePasswordPage />} />
+            <Route
+              path="/app"
+              element={
+                <RequireAuth>
+                  <DashboardPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="/" element={<Navigate to="/app" replace />} />
 
           <Route
             path="/app/admin"
@@ -338,7 +337,7 @@ export function App() {
           path="/app/student/grades"
           element={
             <RequireAuth>
-              <StudentGradesPage />
+              <Navigate to="/app/student" replace />
             </RequireAuth>
           }
         />
@@ -346,7 +345,7 @@ export function App() {
           path="/app/student/library"
           element={
             <RequireAuth>
-              <StudentLibraryPage />
+              <Navigate to="/app/student" replace />
             </RequireAuth>
           }
         />
@@ -354,7 +353,7 @@ export function App() {
           path="/app/student/homework"
           element={
             <RequireAuth>
-              <StudentHomeworkPage />
+              <Navigate to="/app/student" replace />
             </RequireAuth>
           }
         />
@@ -394,8 +393,9 @@ export function App() {
         />
 
         <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
-      </Suspense>
-    </AuthProvider>
+          </Routes>
+        </Suspense>
+      </AuthProvider>
+    </I18nProvider>
   );
 }

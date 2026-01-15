@@ -10,6 +10,7 @@ import {
   type UserProfile,
   type TeacherWorkload,
 } from "../../api/client";
+import type { I18nKey } from "../i18n/i18n";
 import styles from "./ProfilePage.module.css";
 
 export function ProfilePage() {
@@ -56,30 +57,28 @@ export function ProfilePage() {
     const role = authUser?.role;
     if (role === "teacher") {
       return [
-        { to: "/app/teacher", label: "Главная" },
-        { to: "/app/teacher/journal", label: "Журнал" },
-        { to: "/app/teacher/vzvody", label: "Мои взводы" },
-        { to: "/app/teacher/timetable", label: "Расписание" },
-        { to: "/app/teacher/library", label: "Библиотека" },
-      ];
+        { to: "/app/teacher", labelKey: "nav.home" },
+        { to: "/app/teacher/journal", labelKey: "nav.journal" },
+        { to: "/app/teacher/vzvody", labelKey: "nav.myVzvody" },
+        { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
+        { to: "/app/teacher/library", labelKey: "nav.library" },
+      ] satisfies { to: string; labelKey: I18nKey }[];
     }
     if (role === "student") {
       return [
-        { to: "/app/student", label: "Главная" },
-        { to: "/app/student/timetable", label: "Расписание" },
-        { to: "/app/student/grades", label: "Оценки" },
-        { to: "/app/student/homework", label: "Домашнее задание" },
-        { to: "/app/student/library", label: "Библиотека" },
-      ];
+        { to: "/app/student", labelKey: "nav.home" },
+        { to: "/app/student/timetable", labelKey: "nav.timetable" },
+        { to: "/app/student/courses", labelKey: "nav.courses" },
+      ] satisfies { to: string; labelKey: I18nKey }[];
     }
     if (role === "admin" || role === "manager") {
       const prefix = role === "manager" ? "/app/manager" : "/app/admin";
       return [
-        { to: prefix, label: "Главная" },
-        { to: `${prefix}/users`, label: "Пользователи" },
-        { to: `${prefix}/classes`, label: "Классы" },
-        { to: `${prefix}/timetable`, label: "Расписание" },
-      ];
+        { to: prefix, labelKey: "nav.home" },
+        { to: `${prefix}/users`, labelKey: "nav.users" },
+        { to: `${prefix}/classes`, labelKey: "nav.groups" },
+        { to: `${prefix}/timetable`, labelKey: "nav.timetable" },
+      ] satisfies { to: string; labelKey: I18nKey }[];
     }
     return [];
   };

@@ -36,12 +36,12 @@ export function StudentLibraryPage() {
     <AppShell
       title="Ученик → Библиотека"
       nav={[
-        { to: "/app/student", label: "Главная" },
-        { to: "/app/student/timetable", label: "Расписание" },
-        { to: "/app/student/grades", label: "Оценки" },
-        { to: "/app/student/homework", label: "Домашнее задание" },
-        { to: "/app/student/library", label: "Библиотека" },
-        { to: "/app/student/courses", label: "Курсы" },
+        { to: "/app/student", labelKey: "nav.home" },
+        { to: "/app/student/timetable", labelKey: "nav.timetable" },
+        { to: "/app/student/grades", labelKey: "nav.grades" },
+        { to: "/app/student/homework", labelKey: "nav.homework" },
+        { to: "/app/student/library", labelKey: "nav.library" },
+        { to: "/app/student/courses", labelKey: "nav.courses" },
       ]}
     >
       {err && <div style={{ padding: "12px", background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 16 }}>{err}</div>}

@@ -7,11 +7,13 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
+import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminDirections.module.css";
 import { Map, Hash } from "lucide-react";
 
 export function AdminDirectionsPage() {
   const { state } = useAuth();
+  const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
@@ -39,30 +41,30 @@ export function AdminDirectionsPage() {
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
-  const title = user.role === "manager" ? "Менеджер → Направления" : "Админ → Направления";
+  const titleKey = user.role === "manager" ? "admin.directions.pageTitleManager" : "admin.directions.pageTitleAdmin";
 
   return (
     <AppShell
-      title={title}
+      titleKey={titleKey}
       nav={[
-        { to: base, label: "Главная" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/streams`, label: "Потоки" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/workload`, label: "Часы работы" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <h2>Направления</h2>
+          <h2>{t("nav.directions")}</h2>
         </div>
 
         {err && <div className={styles.error}>{err}</div>}
-        {loading && <Loader text="Загрузка..." />}
+        {loading && <Loader text={t("common.loading")} />}
 
         <div className={styles.cardsGrid}>
           {!loading && directions.map((d) => (
@@ -80,17 +82,14 @@ export function AdminDirectionsPage() {
 
           {directions.length === 0 && !loading && (
             <div className={styles.empty}>
-              Направления не найдены. Примените миграцию базы данных.
+              {t("admin.directions.empty")}
             </div>
           )}
         </div>
 
         <div className={styles.infoBox}>
-          <h3>🏢 О направлениях</h3>
-          <p>
-            Направления (факультеты/специальности) создаются администратором базы данных.
-            Они используются при создании групп.
-          </p>
+          <h3>{t("admin.directions.aboutTitle")}</h3>
+          <p>{t("admin.directions.aboutText")}</p>
         </div>
       </div>
     </AppShell>

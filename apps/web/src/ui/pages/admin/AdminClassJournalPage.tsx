@@ -181,15 +181,15 @@ export function AdminClassJournalPage() {
     <AppShell
       title={title}
       nav={[
-        { to: base, label: "Главная" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/streams`, label: "Потоки" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/workload`, label: "Часы работы" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>

@@ -41,12 +41,9 @@ export function StudentCoursesPage() {
     <AppShell
       title="Курсы"
       nav={[
-        { to: "/app/student", label: "Главная" },
-        { to: "/app/student/timetable", label: "Расписание" },
-        { to: "/app/student/grades", label: "Оценки" },
-        { to: "/app/student/homework", label: "Домашнее задание" },
-        { to: "/app/student/library", label: "Библиотека" },
-        { to: "/app/student/courses", label: "Курсы" },
+        { to: "/app/student", labelKey: "nav.home" },
+        { to: "/app/student/timetable", labelKey: "nav.timetable" },
+        { to: "/app/student/courses", labelKey: "nav.courses" },
       ]}
     >
       <div className={styles.container}>

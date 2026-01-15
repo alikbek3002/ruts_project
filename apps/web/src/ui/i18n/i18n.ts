@@ -1,74 +1,15 @@
 export type Lang = "ru" | "ky";
 
-export type I18nKey =
-  | "lang.ru"
-  | "lang.ky"
-  | "common.select"
-  | "common.delete"
-  | "common.deleteConfirm"
-  | "common.save"
-  | "common.cancel"
-  | "common.loading"
-  | "common.refresh"
-  | "common.download"
-  | "common.export"
-  | "common.search"
-  | "common.add"
-  | "common.edit"
-  | "common.yes"
-  | "common.no"
-  | "common.error"
-  | "common.success"
-  | "nav.home"
-  | "nav.journal"
-  | "nav.timetable"
-  | "nav.library"
-  | "nav.grades"
-  | "nav.users"
-  | "nav.classes"
-  | "nav.logout"
-  | "admin.timetable.title"
-  | "admin.nav.home"
-  | "admin.nav.users"
-  | "admin.nav.classes"
-  | "admin.nav.timetable"
-  | "timetable.group"
-  | "timetable.groupShort"
-  | "timetable.selectGroup"
-  | "timetable.prevWeek"
-  | "timetable.nextWeek"
-  | "timetable.addLesson"
-  | "timetable.editLesson"
-  | "timetable.teacher"
-  | "timetable.subject"
-  | "timetable.room"
-  | "timetable.cancel"
-  | "timetable.save"
-  | "timetable.subjectPlaceholder"
-  | "timetable.roomPlaceholder"
-  | "timetable.lunch"
-  | "journal.title"
-  | "journal.selectClass"
-  | "journal.student"
-  | "journal.average"
-  | "journal.addGrade"
-  | "journal.downloadExcel"
-  | "teacher.title"
-  | "teacher.journal"
-  | "student.title"
-  | "student.myGrades"
-  | "role.student"
-  | "role.teacher"
-  | "role.admin"
-  | "login.title"
-  | "login.username"
-  | "login.password"
-  | "login.submit"
-  | "login.error";
+export type I18nParams = Record<string, string | number>;
 
-const ru: Record<I18nKey, string> = {
+export const ru = {
+  "app.logoAlt": "РОБ",
   "lang.ru": "Русский",
   "lang.ky": "Кыргызча",
+
+  "header.switchLanguage": "Сменить язык",
+  "header.profile": "Профиль",
+
   "common.select": "(выберите)",
   "common.delete": "Удалить",
   "common.deleteConfirm": "Удалить?",
@@ -81,18 +22,142 @@ const ru: Record<I18nKey, string> = {
   "common.search": "Поиск",
   "common.add": "Добавить",
   "common.edit": "Редактировать",
+  "common.back": "Назад",
+  "common.create": "Создать",
   "common.yes": "Да",
   "common.no": "Нет",
   "common.error": "Ошибка",
   "common.success": "Успешно",
+  "common.photo": "Фото",
+  "common.cabShort": "Каб.",
+  "common.close": "Закрыть",
+  "common.default": "по умолчанию",
+
   "nav.home": "Главная",
   "nav.journal": "Журнал",
   "nav.timetable": "Расписание",
   "nav.library": "Библиотека",
   "nav.grades": "Оценки",
+  "nav.homework": "Домашнее задание",
+  "nav.courses": "Курсы",
+  "nav.myVzvody": "Мои взводы",
+  "nav.workload": "Часы работы",
+  "nav.notifications": "Уведомления",
+  "nav.subjects": "Предметы",
+  "nav.directions": "Направления",
+  "nav.streams": "Потоки",
   "nav.users": "Пользователи",
   "nav.classes": "Классы",
+  "nav.groups": "Группы",
   "nav.logout": "Выйти",
+
+  "notifications.title": "Уведомления",
+  "notifications.open": "Открыть уведомления",
+  "notifications.loading": "Загрузка...",
+  "notifications.empty": "Нет уведомлений",
+
+  "home.welcome": "Добро пожаловать, {{name}}!",
+  "home.today": "Сегодня {{date}}",
+  "home.todayWithRole": "Сегодня {{date}} • {{role}}",
+
+  "admin.panelTitle": "Админ панель",
+  "manager.panelTitle": "Панель менеджера",
+  "admin.quickAccess": "Быстрый доступ",
+  "admin.profileSection": "Профиль",
+  "admin.menu.usersDesc": "Управление учителями и учениками",
+  "admin.menu.groupsDesc": "Создание групп и назначение кураторов",
+  "admin.menu.streamsDesc": "Потоки на 3 месяца и автогенерация",
+  "admin.menu.subjectsDesc": "Список предметов и учителей",
+  "admin.menu.directionsDesc": "Факультеты и специальности",
+  "admin.menu.timetableDesc": "Редактирование расписания занятий",
+  "admin.menu.workloadDesc": "Статистика часов учителей",
+  "admin.menu.notificationsDesc": "Рассылка объявлений",
+
+  "admin.directions.pageTitleAdmin": "Админ → Направления",
+  "admin.directions.pageTitleManager": "Менеджер → Направления",
+  "admin.directions.empty": "Направления не найдены. Примените миграцию базы данных.",
+  "admin.directions.aboutTitle": "🏢 О направлениях",
+  "admin.directions.aboutText": "Направления (факультеты/специальности) создаются администратором базы данных. Они используются при создании групп.",
+
+  "admin.streams.pageTitleAdmin": "Админ → Потоки",
+  "admin.streams.pageTitleManager": "Менеджер → Потоки",
+  "admin.streams.create": "Создать поток",
+  "admin.streams.empty": "Потоков пока нет",
+  "admin.streams.classesInStream": "Взводы в потоке",
+  "admin.streams.unassignedTitle": "Группы без потока",
+  "admin.streams.unassignedEmpty": "Все группы распределены по потокам",
+  "admin.streams.field.name": "Название",
+  "admin.streams.field.startDate": "Дата начала",
+  "admin.streams.field.endDate": "Дата окончания",
+  "admin.streams.err.nameRequired": "Введите название потока",
+  "admin.streams.err.datesRequired": "Укажите даты начала и окончания",
+  "admin.streams.meta.groups": "групп",
+  "admin.streams.meta.students": "учеников",
+
+  "admin.streamDetail.pageTitleAdmin": "Админ → Поток",
+  "admin.streamDetail.pageTitleManager": "Менеджер → Поток",
+  "admin.streamDetail.fallbackName": "Поток",
+  "admin.streamDetail.params": "Параметры",
+  "admin.streamDetail.period": "Период",
+  "admin.streamDetail.status": "Статус",
+  "admin.streamDetail.classCount": "Групп в потоке",
+  "admin.streamDetail.addClasses": "Добавить группы",
+  "admin.streamDetail.add": "Добавить",
+  "admin.streamDetail.multiHint": "Выделяйте несколько групп с помощью Cmd (macOS) / Ctrl (Windows).",
+  "admin.streamDetail.classesInStream": "Группы в потоке",
+  "admin.streamDetail.noClasses": "Пока групп нет",
+  "admin.streamDetail.students": "Учеников",
+  "admin.streamDetail.removeClassConfirm": "Убрать группу из потока?",
+  "admin.streamDetail.gen.title": "Генерация расписания",
+  "admin.streamDetail.gen.selectTemplate": "— Выберите шаблон —",
+  "admin.streamDetail.gen.templateRequired": "Выберите учебный шаблон",
+  "admin.streamDetail.gen.generate": "Сгенерировать",
+  "admin.streamDetail.gen.forceLabel": "Перегенерировать (force)",
+  "admin.streamDetail.gen.forceHint": "⚠️ Старое расписание будет удалено и создано заново. Журнал будет обновлен.",
+  "admin.streamDetail.gen.safeHint": "Генерация создаст расписание (если его нет) и автозаполнит журнал на даты потока.",
+  "admin.streamDetail.gen.done": "Готово: создано записей расписания: {{entries}}, записей журнала: {{journals}}.",
+  "admin.streamDetail.gen.warningsTitle": "Предупреждения:",
+  "admin.streamDetail.gen.tipExisting": "💡 Расписание уже существует. Если хотите пересоздать, включите \"{{forceLabel}}\".",
+
+  "admin.notifications.pageTitleAdmin": "Админ → Уведомления",
+  "admin.notifications.pageTitleManager": "Менеджер → Уведомления",
+  "admin.notifications.loadError": "Ошибка загрузки",
+  "admin.notifications.createError": "Ошибка создания",
+  "admin.notifications.deleteError": "Ошибка удаления",
+  "admin.notifications.deleteConfirm": "Удалить уведомление?",
+  "admin.notifications.create": "Создать",
+  "admin.notifications.field.title": "Заголовок",
+  "admin.notifications.field.titlePlaceholder": "Важное объявление",
+  "admin.notifications.field.message": "Сообщение",
+  "admin.notifications.field.messagePlaceholder": "Текст уведомления...",
+  "admin.notifications.field.type": "Тип",
+  "admin.notifications.type.info": "Информация",
+  "admin.notifications.type.success": "Успех",
+  "admin.notifications.type.warning": "Предупреждение",
+  "admin.notifications.type.error": "Ошибка",
+  "admin.notifications.type.announcement": "Объявление",
+  "admin.notifications.field.target": "Для кого",
+  "admin.notifications.target.all": "Все пользователи",
+  "admin.notifications.target.student": "Ученики",
+  "admin.notifications.target.teacher": "Преподаватели",
+  "admin.notifications.target.manager": "Менеджеры",
+  "admin.notifications.target.admin": "Администраторы",
+  "admin.notifications.field.expiresAt": "Истекает (необязательно)",
+  "admin.notifications.send": "Отправить",
+  "admin.notifications.sending": "Отправка...",
+  "admin.notifications.meta.for": "Для",
+  "admin.notifications.meta.created": "Создано",
+  "admin.notifications.meta.expires": "Истекает",
+  "admin.notifications.loading": "Загрузка уведомлений...",
+
+  "teacher.panelTitle": "Панель преподавателя",
+  "teacher.scheduleToday": "Расписание на сегодня",
+  "teacher.goToJournal": "Перейти к журналу",
+  "teacher.noLessonsToday": "На сегодня занятий нет",
+  "teacher.zoom": "Zoom",
+
+  "student.panelTitle": "Панель ученика",
+  "student.homeIntro": "Здесь вы найдете расписание и курсы.",
 
   "admin.timetable.title": "Админ → Расписание",
   "admin.nav.home": "Админ",
@@ -128,20 +193,44 @@ const ru: Record<I18nKey, string> = {
 
   "student.title": "Ученик",
   "student.myGrades": "Мои оценки",
+
   "role.student": "Ученик",
   "role.teacher": "Преподаватель",
   "role.admin": "Администратор",
+  "role.manager": "Менеджер",
 
   "login.title": "Вход в систему",
+  "login.appTitle": "Электронный журнал",
+  "login.appSubtitle": "Учебный центр МВД КР",
   "login.username": "Логин",
+  "login.usernamePlaceholder": "Введите логин",
   "login.password": "Пароль",
+  "login.passwordPlaceholder": "Введите пароль",
+  "login.rememberMe": "Запомнить меня",
   "login.submit": "Войти",
+  "login.loading": "Вход...",
   "login.error": "Неверный логин или пароль",
-};
+  "login.authError": "Ошибка авторизации",
 
-const ky: Record<I18nKey, string> = {
+  "changePassword.title": "Смена пароля",
+  "changePassword.current": "Текущий пароль",
+  "changePassword.currentPlaceholder": "Введите текущий пароль",
+  "changePassword.new": "Новый пароль",
+  "changePassword.newPlaceholder": "Введите новый пароль",
+  "changePassword.success": "Пароль успешно изменен! Переход на главную...",
+  "changePassword.error": "Ошибка смены пароля",
+} as const;
+
+export type I18nKey = keyof typeof ru;
+
+export const ky: Record<I18nKey, string> = {
+  "app.logoAlt": "РОБ",
   "lang.ru": "Русский",
   "lang.ky": "Кыргызча",
+
+  "header.switchLanguage": "Тилди алмаштыруу",
+  "header.profile": "Профиль",
+
   "common.select": "(тандаңыз)",
   "common.delete": "Өчүрүү",
   "common.deleteConfirm": "Өчүрөсүзбү?",
@@ -154,18 +243,142 @@ const ky: Record<I18nKey, string> = {
   "common.search": "Издөө",
   "common.add": "Кошуу",
   "common.edit": "Өзгөртүү",
+  "common.back": "Артка",
+  "common.create": "Түзүү",
   "common.yes": "Ооба",
   "common.no": "Жок",
   "common.error": "Ката",
   "common.success": "Ийгиликтүү",
+  "common.photo": "Сүрөт",
+  "common.cabShort": "Каб.",
+  "common.close": "Жабуу",
+  "common.default": "демейки",
+
   "nav.home": "Башкы бет",
   "nav.journal": "Журнал",
   "nav.timetable": "Сабак жадвалы",
   "nav.library": "Китепкана",
   "nav.grades": "Баалар",
+  "nav.homework": "Үй тапшырмасы",
+  "nav.courses": "Курстар",
+  "nav.myVzvody": "Менин взводдорум",
+  "nav.workload": "Иш сааттары",
+  "nav.notifications": "Кабарламалар",
+  "nav.subjects": "Предметтер",
+  "nav.directions": "Багыттар",
+  "nav.streams": "Агымдар",
   "nav.users": "Колдонуучулар",
   "nav.classes": "Класстар",
+  "nav.groups": "Топтор",
   "nav.logout": "Чыгуу",
+
+  "notifications.title": "Кабарламалар",
+  "notifications.open": "Кабарламаларды ачуу",
+  "notifications.loading": "Жүктөлүүдө...",
+  "notifications.empty": "Кабарлама жок",
+
+  "home.welcome": "Кош келиңиз, {{name}}!",
+  "home.today": "Бүгүн {{date}}",
+  "home.todayWithRole": "Бүгүн {{date}} • {{role}}",
+
+  "admin.panelTitle": "Админ панели",
+  "manager.panelTitle": "Менеджер панели",
+  "admin.quickAccess": "Тез жетүү",
+  "admin.profileSection": "Профиль",
+  "admin.menu.usersDesc": "Мугалимдерди жана окуучуларды башкаруу",
+  "admin.menu.groupsDesc": "Топторду түзүү жана кураторлорду дайындоо",
+  "admin.menu.streamsDesc": "3 айлык агымдар жана авто-генерация",
+  "admin.menu.subjectsDesc": "Предметтер жана мугалимдер тизмеси",
+  "admin.menu.directionsDesc": "Факультеттер жана адистиктер",
+  "admin.menu.timetableDesc": "Сабак жадвалын оңдоо",
+  "admin.menu.workloadDesc": "Мугалим сааттарынын статистикасы",
+  "admin.menu.notificationsDesc": "Жарыяларды таратуу",
+
+  "admin.directions.pageTitleAdmin": "Админ → Багыттар",
+  "admin.directions.pageTitleManager": "Менеджер → Багыттар",
+  "admin.directions.empty": "Багыттар табылган жок. Базанын миграциясын колдонуңуз.",
+  "admin.directions.aboutTitle": "🏢 Багыттар жөнүндө",
+  "admin.directions.aboutText": "Багыттар (факультет/адистик) базанын администратору тарабынан түзүлөт. Алар топ түзүүдө колдонулат.",
+
+  "admin.streams.pageTitleAdmin": "Админ → Агымдар",
+  "admin.streams.pageTitleManager": "Менеджер → Агымдар",
+  "admin.streams.create": "Агым түзүү",
+  "admin.streams.empty": "Азырынча агым жок",
+  "admin.streams.classesInStream": "Агымдагы взводдор",
+  "admin.streams.unassignedTitle": "Агымсыз топтор",
+  "admin.streams.unassignedEmpty": "Бардык топтор агымдарга бөлүштүрүлгөн",
+  "admin.streams.field.name": "Аталышы",
+  "admin.streams.field.startDate": "Башталуу датасы",
+  "admin.streams.field.endDate": "Аяктоо датасы",
+  "admin.streams.err.nameRequired": "Агымдын аталышын жазыңыз",
+  "admin.streams.err.datesRequired": "Башталуу жана аяктоо даталарын көрсөтүңүз",
+  "admin.streams.meta.groups": "топ",
+  "admin.streams.meta.students": "окуучу",
+
+  "admin.streamDetail.pageTitleAdmin": "Админ → Агым",
+  "admin.streamDetail.pageTitleManager": "Менеджер → Агым",
+  "admin.streamDetail.fallbackName": "Агым",
+  "admin.streamDetail.params": "Параметрлер",
+  "admin.streamDetail.period": "Мөөнөт",
+  "admin.streamDetail.status": "Абалы",
+  "admin.streamDetail.classCount": "Агымдагы топтор",
+  "admin.streamDetail.addClasses": "Топторду кошуу",
+  "admin.streamDetail.add": "Кошуу",
+  "admin.streamDetail.multiHint": "Бир нече топту тандоо үчүн Cmd (macOS) / Ctrl (Windows) колдонуңуз.",
+  "admin.streamDetail.classesInStream": "Агымдагы топтор",
+  "admin.streamDetail.noClasses": "Азырынча топ жок",
+  "admin.streamDetail.students": "Окуучулар",
+  "admin.streamDetail.removeClassConfirm": "Топту агымдан алып саласызбы?",
+  "admin.streamDetail.gen.title": "Жадвалды генерациялоо",
+  "admin.streamDetail.gen.selectTemplate": "— Шаблонду тандаңыз —",
+  "admin.streamDetail.gen.templateRequired": "Окуу шаблонун тандаңыз",
+  "admin.streamDetail.gen.generate": "Генерациялоо",
+  "admin.streamDetail.gen.forceLabel": "Кайра генерациялоо (force)",
+  "admin.streamDetail.gen.forceHint": "⚠️ Эски жадвал өчүрүлүп, кайрадан түзүлөт. Журнал жаңыланат.",
+  "admin.streamDetail.gen.safeHint": "Генерация жадвалды (эгер жок болсо) түзөт жана агым даталарына журналды авто-толтурат.",
+  "admin.streamDetail.gen.done": "Даяр: жадвал жазуулары түзүлдү: {{entries}}, журнал жазуулары: {{journals}}.",
+  "admin.streamDetail.gen.warningsTitle": "Эскертүүлөр:",
+  "admin.streamDetail.gen.tipExisting": "💡 Жадвал мурунтан бар. Кайра түзүү үчүн \"{{forceLabel}}\" күйгүзүңүз.",
+
+  "admin.notifications.pageTitleAdmin": "Админ → Кабарламалар",
+  "admin.notifications.pageTitleManager": "Менеджер → Кабарламалар",
+  "admin.notifications.loadError": "Жүктөөдө ката",
+  "admin.notifications.createError": "Түзүүдө ката",
+  "admin.notifications.deleteError": "Өчүрүүдө ката",
+  "admin.notifications.deleteConfirm": "Кабарламаны өчүрөсүзбү?",
+  "admin.notifications.create": "Түзүү",
+  "admin.notifications.field.title": "Тема",
+  "admin.notifications.field.titlePlaceholder": "Маанилүү жарыя",
+  "admin.notifications.field.message": "Текст",
+  "admin.notifications.field.messagePlaceholder": "Кабарлама тексти...",
+  "admin.notifications.field.type": "Түрү",
+  "admin.notifications.type.info": "Маалымат",
+  "admin.notifications.type.success": "Ийгилик",
+  "admin.notifications.type.warning": "Эскертүү",
+  "admin.notifications.type.error": "Ката",
+  "admin.notifications.type.announcement": "Жарыя",
+  "admin.notifications.field.target": "Кимге",
+  "admin.notifications.target.all": "Бардык колдонуучулар",
+  "admin.notifications.target.student": "Окуучулар",
+  "admin.notifications.target.teacher": "Мугалимдер",
+  "admin.notifications.target.manager": "Менеджерлер",
+  "admin.notifications.target.admin": "Админдер",
+  "admin.notifications.field.expiresAt": "Мөөнөтү (милдеттүү эмес)",
+  "admin.notifications.send": "Жөнөтүү",
+  "admin.notifications.sending": "Жөнөтүлүүдө...",
+  "admin.notifications.meta.for": "Кимге",
+  "admin.notifications.meta.created": "Түзүлгөн",
+  "admin.notifications.meta.expires": "Мөөнөтү",
+  "admin.notifications.loading": "Кабарламалар жүктөлүүдө...",
+
+  "teacher.panelTitle": "Мугалим панели",
+  "teacher.scheduleToday": "Бүгүнкү жадвал",
+  "teacher.goToJournal": "Журналга өтүү",
+  "teacher.noLessonsToday": "Бүгүн сабак жок",
+  "teacher.zoom": "Zoom",
+
+  "student.panelTitle": "Окуучу панели",
+  "student.homeIntro": "Бул жерден жадвал жана курстарды табасыз.",
 
   "admin.timetable.title": "Админ → Сабактардын жадвали",
   "admin.nav.home": "Админ",
@@ -201,15 +414,32 @@ const ky: Record<I18nKey, string> = {
 
   "student.title": "Талапкер",
   "student.myGrades": "Менин бааларым",
+
   "role.student": "Талапкер",
   "role.teacher": "Мугалим",
   "role.admin": "Админ",
+  "role.manager": "Менеджер",
 
   "login.title": "Системага кирүү",
+  "login.appTitle": "Электрондук журнал",
+  "login.appSubtitle": "КР ИИМдин окуу борбору",
   "login.username": "Логин",
+  "login.usernamePlaceholder": "Логинди жазыңыз",
   "login.password": "Сыр сөз",
+  "login.passwordPlaceholder": "Сыр сөздү жазыңыз",
+  "login.rememberMe": "Мени эстеп кал",
   "login.submit": "Кирүү",
+  "login.loading": "Кирүү...",
   "login.error": "Туура эмес логин же сыр сөз",
+  "login.authError": "Кирүүдө ката",
+
+  "changePassword.title": "Сыр сөздү алмаштыруу",
+  "changePassword.current": "Учурдагы сыр сөз",
+  "changePassword.currentPlaceholder": "Учурдагы сыр сөздү жазыңыз",
+  "changePassword.new": "Жаңы сыр сөз",
+  "changePassword.newPlaceholder": "Жаңы сыр сөздү жазыңыз",
+  "changePassword.success": "Сыр сөз ийгиликтүү өзгөртүлдү! Башкы бетке өтүү...",
+  "changePassword.error": "Сыр сөздү алмаштырууда ката",
 };
 
 export const dict: Record<Lang, Record<I18nKey, string>> = { ru, ky };

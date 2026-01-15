@@ -13,11 +13,13 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminStreamDetail.module.css";
 import { Layers, RefreshCw, Trash2, Wand2 } from "lucide-react";
 
 export function AdminStreamDetailPage() {
   const { state } = useAuth();
+  const { t } = useI18n();
   const user = state.user;
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
@@ -38,7 +40,7 @@ export function AdminStreamDetailPage() {
   const [genResult, setGenResult] = useState<string | null>(null);
 
   const base = user?.role === "manager" ? "/app/manager" : "/app/admin";
-  const title = user?.role === "manager" ? "Менеджер → Поток" : "Админ → Поток";
+  const titleKey = user?.role === "manager" ? "admin.streamDetail.pageTitleManager" : "admin.streamDetail.pageTitleAdmin";
 
   async function reload() {
     if (!token || !streamId) return;
@@ -89,7 +91,7 @@ export function AdminStreamDetailPage() {
 
   async function handleRemoveClass(classId: string) {
     if (!token || !streamId) return;
-    const ok = window.confirm("Убрать группу из потока?");
+    const ok = window.confirm(t("admin.streamDetail.removeClassConfirm"));
     if (!ok) return;
     setErr(null);
     try {
@@ -103,23 +105,28 @@ export function AdminStreamDetailPage() {
   async function handleGenerate() {
     if (!token || !streamId) return;
     if (!templateId) {
-      setErr("Выберите учебный шаблон");
+      setErr(t("admin.streamDetail.gen.templateRequired"));
       return;
     }
     setErr(null);
     setGenResult(null);
     try {
       const res = await apiGenerateStreamSchedule(token, streamId, templateId, force);
-      const warnings = (res.warnings || []).length ? `\n\nПредупреждения:\n- ${(res.warnings || []).join("\n- ")}` : "";
-      
-      let message = `Готово: создано записей расписания: ${res.entries_created}, записей журнала: ${res.journal_entries_created}.`;
-      
-      // Если не создано ни одной записи расписания, показать подсказку
+      const warningsText =
+        (res.warnings || []).length
+          ? `\n\n${t("admin.streamDetail.gen.warningsTitle")}\n- ${(res.warnings || []).join("\n- ")}`
+          : "";
+
+      let message = t("admin.streamDetail.gen.done", {
+        entries: res.entries_created,
+        journals: res.journal_entries_created,
+      });
+
       if (res.entries_created === 0 && res.journal_entries_created > 0) {
-        message += `\n\n💡 Расписание уже существует. Если хотите пересоздать, включите "Перегенерировать (force)".`;
+        message += `\n\n${t("admin.streamDetail.gen.tipExisting", { forceLabel: t("admin.streamDetail.gen.forceLabel") })}`;
       }
-      
-      setGenResult(message + warnings);
+
+      setGenResult(message + warningsText);
     } catch (e) {
       setErr(String(e));
     }
@@ -127,26 +134,26 @@ export function AdminStreamDetailPage() {
 
   return (
     <AppShell
-      title={title}
+      titleKey={titleKey}
       nav={[
-        { to: base, label: "Главная" },
-        { to: `${base}/users`, label: "Пользователи" },
-        { to: `${base}/classes`, label: "Группы" },
-        { to: `${base}/streams`, label: "Потоки" },
-        { to: `${base}/subjects`, label: "Предметы" },
-        { to: `${base}/directions`, label: "Направления" },
-        { to: `${base}/timetable`, label: "Расписание" },
-        { to: `${base}/workload`, label: "Часы работы" },
-        { to: `${base}/notifications`, label: "Уведомления" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
           <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Layers size={18} /> {stream?.name || "Поток"}
+            <Layers size={18} /> {stream?.name || t("admin.streamDetail.fallbackName")}
           </h2>
           <button onClick={reload} disabled={loading} className={styles.btn}>
-            <RefreshCw size={16} /> Обновить
+            <RefreshCw size={16} /> {t("common.refresh")}
           </button>
         </div>
 
@@ -156,14 +163,14 @@ export function AdminStreamDetailPage() {
         {stream && (
           <div className={styles.grid}>
             <div className={styles.card}>
-              <div className={styles.cardTitle}>Параметры</div>
-              <div className={styles.meta}>Период: {stream.start_date} → {stream.end_date}</div>
-              <div className={styles.meta}>Статус: {stream.status}</div>
-              <div className={styles.meta}>Групп в потоке: {stream.classes.length}</div>
+              <div className={styles.cardTitle}>{t("admin.streamDetail.params")}</div>
+              <div className={styles.meta}>{t("admin.streamDetail.period")}: {stream.start_date} → {stream.end_date}</div>
+              <div className={styles.meta}>{t("admin.streamDetail.status")}: {stream.status}</div>
+              <div className={styles.meta}>{t("admin.streamDetail.classCount")}: {stream.classes.length}</div>
             </div>
 
             <div className={styles.card}>
-              <div className={styles.cardTitle}>Добавить группы</div>
+              <div className={styles.cardTitle}>{t("admin.streamDetail.addClasses")}</div>
               <div className={styles.row}>
                 <select
                   multiple
@@ -181,23 +188,23 @@ export function AdminStreamDetailPage() {
                   ))}
                 </select>
                 <button className={styles.btnPrimary} onClick={handleAddClasses}>
-                  Добавить
+                  {t("admin.streamDetail.add")}
                 </button>
               </div>
-              <div className={styles.hint}>Выделяйте несколько групп с помощью Cmd (macOS) / Ctrl (Windows).</div>
+              <div className={styles.hint}>{t("admin.streamDetail.multiHint")}</div>
             </div>
 
             <div className={styles.card}>
-              <div className={styles.cardTitle}>Группы в потоке</div>
+              <div className={styles.cardTitle}>{t("admin.streamDetail.classesInStream")}</div>
               {stream.classes.length === 0 ? (
-                <div className={styles.hint}>Пока групп нет</div>
+                <div className={styles.hint}>{t("admin.streamDetail.noClasses")}</div>
               ) : (
                 <div className={styles.classList}>
                   {stream.classes.map((c) => (
                     <div key={c.id} className={styles.classRow}>
                       <div>
                         <div className={styles.className}>{c.name}</div>
-                        <div className={styles.hint}>Учеников: {c.student_count}</div>
+                        <div className={styles.hint}>{t("admin.streamDetail.students")}: {c.student_count}</div>
                       </div>
                       <button className={styles.btnDanger} onClick={() => handleRemoveClass(c.id)}>
                         <Trash2 size={16} />
@@ -209,29 +216,26 @@ export function AdminStreamDetailPage() {
             </div>
 
             <div className={styles.card}>
-              <div className={styles.cardTitle}>Генерация расписания</div>
+              <div className={styles.cardTitle}>{t("admin.streamDetail.gen.title")}</div>
               <div className={styles.row}>
                 <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className={styles.select}>
-                  <option value="">— Выберите шаблон —</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}{t.is_default ? " (по умолчанию)" : ""}
+                  <option value="">{t("admin.streamDetail.gen.selectTemplate")}</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}{template.is_default ? ` (${t("common.default")})` : ""}
                     </option>
                   ))}
                 </select>
                 <button className={styles.btnPrimary} onClick={handleGenerate}>
-                  <Wand2 size={16} /> Сгенерировать
+                  <Wand2 size={16} /> {t("admin.streamDetail.gen.generate")}
                 </button>
               </div>
               <label className={styles.checkbox}>
                 <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
-                <span>Перегенерировать (force)</span>
+                <span>{t("admin.streamDetail.gen.forceLabel")}</span>
               </label>
               <div className={styles.hint}>
-                {force 
-                  ? "⚠️ Старое расписание будет удалено и создано заново. Журнал будет обновлен."
-                  : "Генерация создаст расписание (если его нет) и автозаполнит журнал на даты потока."
-                }
+                {force ? t("admin.streamDetail.gen.forceHint") : t("admin.streamDetail.gen.safeHint")}
               </div>
             </div>
           </div>

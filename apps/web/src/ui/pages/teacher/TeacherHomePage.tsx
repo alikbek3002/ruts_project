@@ -14,6 +14,7 @@ import { AppShell } from "../../layout/AppShell";
 import { ZoomMeetingsWidget } from "../../components/ZoomMeetingsWidget";
 import { trackedFetch } from "../../../api/client";
 import { Loader } from "../../components/Loader";
+import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./TeacherHome.module.css";
 
 type Lesson = {
@@ -30,6 +31,7 @@ type Lesson = {
 
 export function TeacherHomePage() {
   const { state } = useAuth();
+  const { t, lang } = useI18n();
   const user = state.user;
   const token = state.accessToken;
 
@@ -66,7 +68,7 @@ export function TeacherHomePage() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "teacher") return <Navigate to="/app" replace />;
 
-  const today = new Date().toLocaleDateString("ru-RU", {
+  const today = new Date().toLocaleDateString(lang === "ky" ? "ky-KG" : "ru-RU", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -78,15 +80,15 @@ export function TeacherHomePage() {
 
   return (
     <AppShell
-      title="Панель преподавателя"
+      titleKey="teacher.panelTitle"
       nav={[
-        { to: "/app/teacher", label: "Главная" },
-        { to: "/app/teacher/journal", label: "Журнал" },
-        { to: "/app/teacher/vzvody", label: "Мои взводы" },
-        { to: "/app/teacher/timetable", label: "Расписание" },
-        { to: "/app/teacher/workload", label: "Часы работы" },
-        { to: "/app/teacher/library", label: "Библиотека" },
-        { to: "/app/teacher/courses", label: "Курсы" },
+        { to: "/app/teacher", labelKey: "nav.home" },
+        { to: "/app/teacher/journal", labelKey: "nav.journal" },
+        { to: "/app/teacher/vzvody", labelKey: "nav.myVzvody" },
+        { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
+        { to: "/app/teacher/workload", labelKey: "nav.workload" },
+        { to: "/app/teacher/library", labelKey: "nav.library" },
+        { to: "/app/teacher/courses", labelKey: "nav.courses" },
       ]}
     >
       <div className={styles.container}>
@@ -94,10 +96,10 @@ export function TeacherHomePage() {
         <div className={styles.welcomeSection}>
           <div className={styles.welcomeContent}>
             <h1 className={styles.welcomeTitle}>
-              Добро пожаловать, {user.name || user.username}!
+              {t("home.welcome", { name: user.name || user.username })}
             </h1>
             <p className={styles.welcomeSubtitle}>
-              Сегодня {formattedDate}
+              {t("home.today", { date: formattedDate })}
             </p>
           </div>
         </div>
@@ -107,7 +109,7 @@ export function TeacherHomePage() {
           <div>
             <h2 className={styles.sectionTitle}>
               <Calendar size={20} />
-              Расписание на сегодня
+              {t("teacher.scheduleToday")}
             </h2>
             
             <div className={styles.scheduleCard}>
@@ -134,7 +136,7 @@ export function TeacherHomePage() {
                           {lesson.room && (
                             <span>
                               <MapPin size={14} />
-                              Каб. {lesson.room}
+                              {t("common.cabShort")} {lesson.room}
                             </span>
                           )}
                         </div>
@@ -142,7 +144,7 @@ export function TeacherHomePage() {
                       <Link 
                         to={`/app/teacher/journal`} 
                         className="btn-icon"
-                        title="Перейти к журналу"
+                        title={t("teacher.goToJournal")}
                       >
                         <ArrowRight size={18} color="#9ca3af" />
                       </Link>
@@ -152,7 +154,7 @@ export function TeacherHomePage() {
               ) : (
                 <div className={styles.emptySchedule}>
                   <Calendar size={48} strokeWidth={1} />
-                  <p>На сегодня занятий нет</p>
+                  <p>{t("teacher.noLessonsToday")}</p>
                 </div>
               )}
             </div>
@@ -162,7 +164,7 @@ export function TeacherHomePage() {
           <div>
             <h2 className={styles.sectionTitle}>
               <Clock size={20} />
-              Быстрый доступ
+              {t("admin.quickAccess")}
             </h2>
             
             <div className={styles.quickLinksGrid}>
@@ -170,33 +172,33 @@ export function TeacherHomePage() {
                 <div className={`${styles.iconBox} ${styles.blue}`}>
                   <BookOpen size={24} />
                 </div>
-                <span className={styles.linkTitle}>Журнал</span>
+                <span className={styles.linkTitle}>{t("nav.journal")}</span>
               </Link>
               
               <Link to="/app/teacher/timetable" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.green}`}>
                   <Calendar size={24} />
                 </div>
-                <span className={styles.linkTitle}>Расписание</span>
+                <span className={styles.linkTitle}>{t("nav.timetable")}</span>
               </Link>
               
               <Link to="/app/teacher/vzvody" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.purple}`}>
                   <Users size={24} />
                 </div>
-                <span className={styles.linkTitle}>Мои взводы</span>
+                <span className={styles.linkTitle}>{t("nav.myVzvody")}</span>
               </Link>
               
               <Link to="/app/teacher/library" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.orange}`}>
                   <Library size={24} />
                 </div>
-                <span className={styles.linkTitle}>Библиотека</span>
+                <span className={styles.linkTitle}>{t("nav.library")}</span>
               </Link>
             </div>
 
             <h2 className={styles.sectionTitle} style={{ marginTop: 32 }}>
-              Zoom
+              {t("teacher.zoom")}
             </h2>
             <div className={styles.zoomWrapper}>
               {token && <ZoomMeetingsWidget token={token} userRole={user.role} />}
