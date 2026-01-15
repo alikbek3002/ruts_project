@@ -1737,12 +1737,29 @@ export async function apiDeleteOption(token: string, optionId: string): Promise<
   });
 }
 
-export async function apiStartTestAttempt(token: string, testId: string): Promise<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }> {
-  return apiPost<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }>(`/courses/tests/${encodeURIComponent(testId)}/start`, {}, token);
+export async function apiStartTestAttempt(
+  token: string,
+  testId: string,
+  opts?: { student_id?: string; class_id?: string }
+): Promise<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }> {
+  return apiPost<{ attempt: TestAttempt; questions?: TestQuestion[]; time_limit_seconds?: number; test?: CourseTest }>(
+    `/courses/tests/${encodeURIComponent(testId)}/start`,
+    { ...(opts || {}) },
+    token
+  );
 }
 
-export async function apiSubmitTestAttempt(token: string, attemptId: string, answers: Array<{ question_id: string; selected_option_id: string | null }>): Promise<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }> {
-  return apiPost<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }>(`/courses/attempts/${encodeURIComponent(attemptId)}/submit`, { answers }, token);
+export async function apiSubmitTestAttempt(
+  token: string,
+  attemptId: string,
+  answers: Array<{ question_id: string; selected_option_id: string | null }>,
+  opts?: { student_id?: string; class_id?: string }
+): Promise<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }> {
+  return apiPost<{ attempt: TestAttempt; score: number; total_questions: number; percentage_score: number }>(
+    `/courses/attempts/${encodeURIComponent(attemptId)}/submit`,
+    { answers, ...(opts || {}) },
+    token
+  );
 }
 
 export async function apiGetTestAttempt(token: string, attemptId: string): Promise<{ attempt: TestAttempt; answers: Array<{ question_id: string; selected_option_id: string | null; is_correct: boolean }> }> {

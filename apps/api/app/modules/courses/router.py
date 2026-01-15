@@ -1411,20 +1411,165 @@ def delete_option(option_id: str, user: dict = require_role("teacher")):
 # TEST ATTEMPTS (Student taking tests)
 # ============================================================================
 
+SHARED_STUDENT_USER_ID = "aaaaaaaa-bbbb-cccc-dddd-000000000001"
+
+
+def _is_shared_student_account(user: dict) -> bool:
+    return str(user.get("id")) == SHARED_STUDENT_USER_ID or (user.get("role") == "student" and (user.get("username") or "").strip().lower() == "student")
+
+
+def _resolve_effective_student_id(user: dict, requested_student_id: str | None) -> str:
+    if _is_shared_student_account(user):
+        if not requested_student_id:
+            raise HTTPException(status_code=400, detail="Требуется выбрать ученика")
+        return requested_student_id
+    return str(user.get("id"))
+
+
+def _ensure_student_in_class(sb, class_id: str, student_id: str):
+    if not class_id:
+        raise HTTPException(status_code=400, detail="Требуется выбрать группу")
+    enr = (
+        sb.table("class_enrollments")
+        .select("id")
+        .eq("class_id", class_id)
+        .eq("legacy_student_id", student_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not enr:
+        raise HTTPException(status_code=400, detail="Выбранный ученик не найден в этой группе")
+
 class StartTestAttemptIn(BaseModel):
-    test_id: str
+    student_id: str | None = None
+    class_id: str | None = None
 
 
 class SubmitTestAttemptIn(BaseModel):
-    attempt_id: str
     answers: list[dict]  # [{"question_id": "...", "selected_option_id": "..."}]
+    student_id: str | None = None
+    class_id: str | None = None
+
+
+def _percent_to_five_scale(pct: float) -> int:
+    # Typical 5-point mapping: 90-100 => 5, 75-89 => 4, 60-74 => 3, else => 2
+    if pct >= 90:
+        return 5
+    if pct >= 75:
+        return 4
+    if pct >= 60:
+        return 3
+    return 2
+
+
+def _write_test_grade_to_lesson_journal(
+    sb,
+    *,
+    class_id: str,
+    student_id: str,
+    test_id: str,
+    submitted_at: datetime,
+    percentage_score: float,
+    created_by: str,
+    score: int,
+    total_questions: int,
+):
+    # Resolve course + teacher
+    test_row = (
+        sb.table("course_tests")
+        .select("id,title,topic_id")
+        .eq("id", test_id)
+        .single()
+        .execute()
+        .data
+    )
+    if not test_row:
+        return
+    topic = (
+        sb.table("course_topics")
+        .select("course_id")
+        .eq("id", test_row.get("topic_id"))
+        .single()
+        .execute()
+        .data
+    )
+    if not topic:
+        return
+    course = (
+        sb.table("courses")
+        .select("id,title,teacher_id")
+        .eq("id", topic.get("course_id"))
+        .single()
+        .execute()
+        .data
+    )
+    if not course:
+        return
+
+    course_title = (course.get("title") or "").strip()
+    teacher_id = course.get("teacher_id")
+
+    # Find timetable entry to attach grade to (so it shows in existing journal UIs)
+    entry_rows = (
+        sb.table("timetable_entries")
+        .select("id")
+        .eq("class_id", class_id)
+        .eq("teacher_id", teacher_id)
+        .ilike("subject", f"%{course_title}%" if course_title else "%")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    entry_id = (entry_rows[0].get("id") if entry_rows else None)
+    if not entry_id:
+        # Fallback: any lesson of this teacher in this class
+        entry_rows = (
+            sb.table("timetable_entries")
+            .select("id")
+            .eq("class_id", class_id)
+            .eq("teacher_id", teacher_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        entry_id = (entry_rows[0].get("id") if entry_rows else None)
+    if not entry_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Не найден урок в расписании для этой группы и преподавателя курса — невозможно записать оценку в журнал",
+        )
+
+    grade = _percent_to_five_scale(float(percentage_score or 0))
+    comment = f"Тест: {test_row.get('title') or ''} — {score}/{total_questions} ({round(float(percentage_score or 0), 2)}%)"
+    lesson_date = submitted_at.date().isoformat()
+
+    sb.table("lesson_journal").upsert(
+        {
+            "timetable_entry_id": entry_id,
+            "lesson_date": lesson_date,
+            "student_id": student_id,
+            "present": None,
+            "grade": grade,
+            "comment": comment,
+            "created_by": created_by,
+            "updated_at": datetime.utcnow().isoformat(),
+        },
+        on_conflict="timetable_entry_id,lesson_date,student_id",
+    ).execute()
 
 
 @router.post("/tests/{test_id}/start")
-def start_test_attempt(test_id: str, user: dict = require_role("student")):
+def start_test_attempt(test_id: str, payload: StartTestAttemptIn, user: dict = require_role("student")):
     """Начать прохождение теста (только ученик)"""
     sb = get_supabase()
     try:
+        effective_student_id = _resolve_effective_student_id(user, payload.student_id)
+        if _is_shared_student_account(user):
+            _ensure_student_in_class(sb, str(payload.class_id or ""), effective_student_id)
+
         # Get test
         test_resp = (
             sb.table("course_tests")
@@ -1444,7 +1589,7 @@ def start_test_attempt(test_id: str, user: dict = require_role("student")):
             sb.table("test_attempts")
             .select("id")
             .eq("test_id", test_id)
-            .eq("student_id", user["id"])
+            .eq("student_id", effective_student_id)
             .is_("submitted_at", "null")
             .limit(1)
             .execute()
@@ -1464,7 +1609,7 @@ def start_test_attempt(test_id: str, user: dict = require_role("student")):
             sb.table("test_attempts")
             .insert({
                 "test_id": test_id,
-                "student_id": user["id"],
+                "student_id": effective_student_id,
                 "time_limit_seconds": time_limit_seconds,
             })
             .execute()
@@ -1543,8 +1688,12 @@ def submit_test_attempt(attempt_id: str, payload: SubmitTestAttemptIn, user: dic
             raise HTTPException(status_code=404, detail="Attempt not found")
         
         attempt = attempt_resp.data
-        if attempt.get("student_id") != user["id"]:
+        effective_student_id = _resolve_effective_student_id(user, payload.student_id)
+        if str(attempt.get("student_id")) != str(effective_student_id):
             raise HTTPException(status_code=403, detail="This is not your attempt")
+
+        if _is_shared_student_account(user):
+            _ensure_student_in_class(sb, str(payload.class_id or ""), str(effective_student_id))
         
         if attempt.get("submitted_at"):
             raise HTTPException(status_code=400, detail="This attempt has already been submitted")
@@ -1637,6 +1786,19 @@ def submit_test_attempt(attempt_id: str, payload: SubmitTestAttemptIn, user: dic
             .execute()
         )
         updated_attempt = attempt_resp.data[0] if isinstance(attempt_resp.data, list) and attempt_resp.data else attempt_resp.data
+
+        # Write grade to journal immediately (best-effort; raises if no timetable entry found)
+        _write_test_grade_to_lesson_journal(
+            sb,
+            class_id=str(payload.class_id or ""),
+            student_id=str(effective_student_id),
+            test_id=str(test_id),
+            submitted_at=now,
+            percentage_score=float(percentage_score),
+            created_by=str(user.get("id")),
+            score=int(score),
+            total_questions=int(total_questions),
+        )
         
         return {
             "attempt": updated_attempt,
@@ -1672,7 +1834,7 @@ def get_test_attempt(attempt_id: str, user: dict = require_role("admin", "teache
         attempt = attempt_resp.data
         
         # Check permissions
-        if user.get("role") == "student" and attempt.get("student_id") != user["id"]:
+        if user.get("role") == "student" and (not _is_shared_student_account(user)) and attempt.get("student_id") != user["id"]:
             raise HTTPException(status_code=403, detail="You can only view your own attempts")
         
         # Get answers if submitted
@@ -1724,7 +1886,8 @@ def list_test_attempts(test_id: str, user: dict = require_role("admin", "teacher
         
         # Students can only see their own attempts
         if user.get("role") == "student":
-            query = query.eq("student_id", user["id"])
+            if not _is_shared_student_account(user):
+                query = query.eq("student_id", user["id"])
         
         attempts_resp = query.order("started_at", desc=True).execute()
         attempts = attempts_resp.data or []

@@ -8,9 +8,13 @@ import {
   apiStartTestAttempt,
   apiSubmitTestAttempt,
   apiGetTestAttempt,
+  apiListClasses,
+  apiGetClass,
   type TestAttempt,
   type TestQuestion,
   type CourseTest,
+  type ClassItem,
+  type ClassStudent,
 } from "../../../api/client";
 import styles from "./StudentTest.module.css";
 
@@ -32,19 +36,51 @@ export function StudentTestPage() {
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isSharedStudent = user?.role === "student" && (user.username || "").toLowerCase() === "student";
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [classId, setClassId] = useState<string>("");
+  const [students, setStudents] = useState<ClassStudent[]>([]);
+  const [studentId, setStudentId] = useState<string>("");
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (token && testId) {
+    if (!token) return;
+
+    // Shared student must pick class + student before starting
+    if (isSharedStudent) {
+      setLoading(true);
+      apiListClasses(token)
+        .then((r) => setClasses(r.classes || []))
+        .catch((e) => setError(String(e)))
+        .finally(() => setLoading(false));
+      return;
+    }
+
+    if (testId) {
       startTest();
     }
+
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, testId]);
+
+  useEffect(() => {
+    if (!token || !isSharedStudent) return;
+    if (!classId) {
+      setStudents([]);
+      setStudentId("");
+      return;
+    }
+    apiGetClass(token, classId)
+      .then((r) => setStudents(r.students || []))
+      .catch((e) => setError(String(e)));
+  }, [token, isSharedStudent, classId]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !submitted) {
@@ -76,7 +112,7 @@ export function StudentTestPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiStartTestAttempt(token, testId);
+      const res = await apiStartTestAttempt(token, testId, isSharedStudent ? { class_id: classId, student_id: studentId } : undefined);
       setAttempt(res.attempt);
       if (res.test) setTest(res.test);
       if (res.questions) {
@@ -113,7 +149,12 @@ export function StudentTestPage() {
         selected_option_id: optionId || null,
       }));
 
-      const res = await apiSubmitTestAttempt(token, attempt.id, answerArray);
+      const res = await apiSubmitTestAttempt(
+        token,
+        attempt.id,
+        answerArray,
+        isSharedStudent ? { class_id: classId, student_id: studentId } : undefined
+      );
       setSubmitted(true);
       setResults(res);
       
@@ -145,6 +186,67 @@ export function StudentTestPage() {
     return (
       <AppShell title="Тест" nav={[]}>
         <Loader text="Загрузка теста..." />
+      </AppShell>
+    );
+  }
+
+  if (isSharedStudent && !attempt) {
+    const canStart = !!classId && !!studentId;
+    return (
+      <AppShell title="Тест" nav={[]}>
+        <div className={styles.container}>
+          <div className={styles.testHeader}>
+            <h1>Перед тестом выберите группу и себя</h1>
+            <p className={styles.testDescription}>Это нужно, чтобы оценка сразу попала в журнал.</p>
+          </div>
+
+          {error && <div className={styles.error}>{error}</div>}
+
+          <div className={styles.documentSection}>
+            <label style={{ display: "block", marginBottom: 8 }}>Группа</label>
+            <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ width: "100%", padding: 10 }}>
+              <option value="">— выберите группу —</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ height: 16 }} />
+
+            <label style={{ display: "block", marginBottom: 8 }}>Ученик</label>
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              disabled={!classId}
+              style={{ width: "100%", padding: 10 }}
+            >
+              <option value="">— выберите себя —</option>
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.full_name || s.username}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ height: 16 }} />
+
+            <button
+              onClick={() => startTest()}
+              className={styles.backButton}
+              disabled={!canStart}
+              style={{ opacity: canStart ? 1 : 0.6 }}
+            >
+              Начать тест
+            </button>
+          </div>
+
+          <button onClick={() => navigate(`/app/student/courses/${courseId}`)} className={styles.backButton}>
+            <ArrowLeft size={16} />
+            Назад к курсу
+          </button>
+        </div>
       </AppShell>
     );
   }
