@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Literal
@@ -14,6 +15,8 @@ from app.core.deps import CurrentUser, require_role
 from app.core.security import decrypt_text, encrypt_text
 from app.core.settings import settings
 from app.db.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -263,6 +266,7 @@ def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("t
 @router.get("/meetings")
 def list_meetings(user: dict = require_role("teacher", "admin", "student", "manager")):
     """List all upcoming Zoom meetings for the user"""
+    logger.info(f"List meetings request for user {user.get('id')} ({user.get('role')})")
     sb = get_supabase()
     
     # Get current time in UTC
