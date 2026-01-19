@@ -90,13 +90,7 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
     if not phone.startswith("+996"):
         raise HTTPException(status_code=400, detail="Phone must start with +996")
 
-    if role == "teacher":
-        # New flow: subjects assigned at teacher creation
-        subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
-        if len(subject_ids) > 2:
-            raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
-        if not subject_ids and not (payload.teacher_subject and payload.teacher_subject.strip()):
-            raise HTTPException(status_code=400, detail="subject_ids required for teacher")
+    # teacher_subject/subject_ids are optional for teachers
 
     sb = get_supabase()
     _require_users_schema(sb)
@@ -200,8 +194,8 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
     if role == "teacher":
         subject_ids = [s for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
         if subject_ids:
-            # Insert teacher_subjects links (max 3 already validated)
-            for sid in subject_ids[:2]:
+            # Insert teacher_subjects links
+            for sid in list(dict.fromkeys(subject_ids)):
                 # ignore duplicates silently
                 existing = (
                     sb.table("teacher_subjects")

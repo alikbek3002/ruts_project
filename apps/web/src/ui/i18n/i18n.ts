@@ -51,6 +51,8 @@ export const ru = {
   "nav.groups": "Группы",
   "nav.logout": "Выйти",
 
+  "nav.meetings": "Конференции",
+
   "notifications.title": "Уведомления",
   "notifications.open": "Открыть уведомления",
   "notifications.loading": "Загрузка...",
@@ -72,6 +74,8 @@ export const ru = {
   "admin.menu.timetableDesc": "Редактирование расписания занятий",
   "admin.menu.workloadDesc": "Статистика часов учителей",
   "admin.menu.notificationsDesc": "Рассылка объявлений",
+  "admin.menu.coursesDesc": "Список курсов",
+  "admin.menu.meetingsDesc": "Все Zoom конференции",
 
   "admin.directions.pageTitleAdmin": "Админ → Направления",
   "admin.directions.pageTitleManager": "Менеджер → Направления",
@@ -272,6 +276,8 @@ export const ky: Record<I18nKey, string> = {
   "nav.groups": "Топтор",
   "nav.logout": "Чыгуу",
 
+  "nav.meetings": "Конференциялар",
+
   "notifications.title": "Кабарламалар",
   "notifications.open": "Кабарламаларды ачуу",
   "notifications.loading": "Жүктөлүүдө...",
@@ -293,6 +299,8 @@ export const ky: Record<I18nKey, string> = {
   "admin.menu.timetableDesc": "Сабак жадвалын оңдоо",
   "admin.menu.workloadDesc": "Мугалим сааттарынын статистикасы",
   "admin.menu.notificationsDesc": "Жарыяларды таратуу",
+  "admin.menu.coursesDesc": "Курстардын тизмеси",
+  "admin.menu.meetingsDesc": "Бардык Zoom конференциялар",
 
   "admin.directions.pageTitleAdmin": "Админ → Багыттар",
   "admin.directions.pageTitleManager": "Менеджер → Багыттар",

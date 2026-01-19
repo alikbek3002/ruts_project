@@ -7,22 +7,25 @@ import {
   apiListClasses,
   apiListTimetableEntries,
   apiListTimetableRooms,
+  apiTimetableWeek,
   apiUpdateTimetableEntry,
   apiListSubjects,
   apiGetStreams,
   apiGetStream,
+  apiCreateZoomMeetingNew,
   type AdminUser,
   type ClassItem,
   type TimetableEntry,
   type Subject,
   type Stream,
+  type WeekTimetableItem,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar, Video, ExternalLink } from "lucide-react";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -70,6 +73,13 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function ymd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function normalizeUiError(e: unknown): string {
@@ -184,6 +194,15 @@ export function AdminTimetablePage() {
 
   const [weekStart, setWeekStart] = useState<Date>(getMonday(new Date()));
 
+  const [zoomByCell, setZoomByCell] = useState<Record<string, { join_url: string; starts_at: string }>>({});
+  const [zoomModalOpen, setZoomModalOpen] = useState(false);
+  const [zoomEntryId, setZoomEntryId] = useState<string | null>(null);
+  const [zoomDay, setZoomDay] = useState<Date | null>(null);
+  const [zoomTime, setZoomTime] = useState<string>("");
+  const [zoomCreating, setZoomCreating] = useState(false);
+  const [zoomErr, setZoomErr] = useState<string | null>(null);
+  const [zoomSuccess, setZoomSuccess] = useState<string | null>(null);
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<TimetableEntry | null>(null);
@@ -230,6 +249,30 @@ export function AdminTimetablePage() {
     }
   }
 
+  function buildZoomMap(weekEntries: WeekTimetableItem[]): Record<string, { join_url: string; starts_at: string }> {
+    const m: Record<string, { join_url: string; starts_at: string }> = {};
+    for (const e of weekEntries) {
+      const z = e.zoom;
+      if (!z?.join_url) continue;
+      const key = `${e.weekday}|${String(e.start_time).slice(0, 5)}`;
+      m[key] = { join_url: z.join_url, starts_at: z.starts_at };
+    }
+    return m;
+  }
+
+  async function reloadZoomWeek() {
+    if (!token || !classId) {
+      setZoomByCell({});
+      return;
+    }
+    try {
+      const w = await apiTimetableWeek(token, ymd(weekStart), classId);
+      setZoomByCell(buildZoomMap(w.entries || []));
+    } catch {
+      setZoomByCell({});
+    }
+  }
+
   // Load classes when stream is selected
   useEffect(() => {
     if (!token || !selectedStreamId) {
@@ -268,6 +311,7 @@ export function AdminTimetablePage() {
     if (!token) return;
     if (!classId) {
       setEntries([]);
+      setZoomByCell({});
       return;
     }
     setLoading(true);
@@ -277,11 +321,45 @@ export function AdminTimetablePage() {
       .finally(() => setLoading(false));
   }, [classId, can, token]);
 
+  useEffect(() => {
+    if (!can) return;
+    reloadZoomWeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [can, token, classId, weekStart]);
+
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
   const title = user.role === "manager" ? "Менеджер → Расписание" : "Админ → Расписание";
+
+  function openZoomModal(e: React.MouseEvent, entryId: string, day: Date, time: string) {
+    e.stopPropagation();
+    setZoomEntryId(entryId);
+    setZoomDay(day);
+    setZoomTime(time);
+    setZoomErr(null);
+    setZoomSuccess(null);
+    setZoomModalOpen(true);
+  }
+
+  async function createZoomMeeting() {
+    if (!token || !zoomEntryId || !zoomDay || !zoomTime) return;
+    setZoomCreating(true);
+    setZoomErr(null);
+    setZoomSuccess(null);
+    try {
+      const startsAtISO = `${ymd(zoomDay)}T${zoomTime}:00`;
+      await apiCreateZoomMeetingNew(token, zoomEntryId, startsAtISO);
+      setZoomSuccess("Zoom конференция создана");
+      await reloadZoomWeek();
+      setTimeout(() => setZoomModalOpen(false), 900);
+    } catch (e) {
+      setZoomErr(String(e));
+    } finally {
+      setZoomCreating(false);
+    }
+  }
 
   function openAddModal(date: Date, slot: number) {
     setModalDate(date);
@@ -412,6 +490,8 @@ export function AdminTimetablePage() {
         { to: `${base}/classes`, labelKey: "nav.groups" },
         { to: `${base}/streams`, labelKey: "nav.streams" },
         { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/courses`, labelKey: "nav.courses" },
+        { to: `${base}/meetings`, labelKey: "nav.meetings" },
         { to: `${base}/directions`, labelKey: "nav.directions" },
         { to: `${base}/timetable`, labelKey: "nav.timetable" },
         { to: `${base}/workload`, labelKey: "nav.workload" },
@@ -527,6 +607,7 @@ export function AdminTimetablePage() {
 
                 {weekDays.map((day) => {
                   const lesson = getLessonForCell(day, ts.slot);
+                  const z = zoomByCell[`${toDbWeekday(day)}|${ts.start}`];
                   return (
                     <div key={day.toISOString()} className={styles.cell}>
                       {lesson ? (
@@ -572,6 +653,31 @@ export function AdminTimetablePage() {
                           </div>
                           <div className={styles.entryTeacher}>{getTeacherName(lesson.teacher_id)}</div>
                           {lesson.room && <div className={styles.entryRoom}>{lesson.room}</div>}
+
+                          <div className={styles.zoomRow}>
+                            {z?.join_url ? (
+                              <a
+                                className={styles.zoomLink}
+                                href={z.join_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Подключиться к конференции"
+                              >
+                                <ExternalLink size={14} />
+                                Zoom
+                              </a>
+                            ) : (
+                              <button
+                                className={styles.zoomBtn}
+                                onClick={(e) => openZoomModal(e, lesson.id, day, ts.start)}
+                                title="Создать Zoom конференцию"
+                              >
+                                <Video size={14} />
+                                Zoom
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <button className={styles.addBtn} onClick={() => openAddModal(day, ts.slot)}>
@@ -694,6 +800,50 @@ export function AdminTimetablePage() {
               <button onClick={handleSave} disabled={!formSubjectId}>
                 <Save size={18} style={{ marginRight: 8 }} />
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {zoomModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setZoomModalOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalTitle}>Создать Zoom конференцию</div>
+
+            <div style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>
+              Неделя: {formatDate(weekDays[0])} - {formatDate(weekDays[weekDays.length - 1])}
+            </div>
+
+            {zoomErr && <div style={{ color: "var(--color-error)", marginBottom: 10 }}>{zoomErr}</div>}
+            {zoomSuccess && <div style={{ color: "var(--color-success)", marginBottom: 10 }}>{zoomSuccess}</div>}
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Дата</label>
+              <input
+                type="date"
+                value={zoomDay ? ymd(zoomDay) : ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  const [yy, mm, dd] = v.split("-").map((x) => Number(x));
+                  const d = new Date(yy, mm - 1, dd);
+                  setZoomDay(d);
+                }}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Время начала</label>
+              <input type="time" value={zoomTime} onChange={(e) => setZoomTime(e.target.value)} />
+            </div>
+
+            <div className={styles.modalActions}>
+              <button onClick={() => setZoomModalOpen(false)} disabled={zoomCreating}>
+                Отмена
+              </button>
+              <button onClick={createZoomMeeting} disabled={zoomCreating || !zoomEntryId || !zoomDay || !zoomTime}>
+                {zoomCreating ? "Создание..." : "Создать"}
               </button>
             </div>
           </div>

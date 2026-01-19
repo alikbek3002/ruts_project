@@ -22,6 +22,9 @@ const AdminNotificationsPage = React.lazy(() => import('./pages/admin/AdminNotif
 const AdminStreamsPage = React.lazy(() => import('./pages/admin/AdminStreamsPage').then(m => ({ default: m.AdminStreamsPage })));
 const AdminStreamDetailPage = React.lazy(() => import('./pages/admin/AdminStreamDetailPage').then(m => ({ default: m.AdminStreamDetailPage })));
 const AdminWorkloadPage = React.lazy(() => import('./pages/admin/AdminWorkloadPage').then(m => ({ default: m.AdminWorkloadPage })));
+const AdminCoursesPage = React.lazy(() => import('./pages/admin/AdminCoursesPage').then(m => ({ default: m.AdminCoursesPage })));
+const AdminCourseViewPage = React.lazy(() => import('./pages/admin/AdminCourseViewPage').then(m => ({ default: m.AdminCourseViewPage })));
+const AdminMeetingsPage = React.lazy(() => import('./pages/admin/AdminMeetingsPage').then(m => ({ default: m.AdminMeetingsPage })));
 
 // Teacher Pages
 const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
@@ -40,6 +43,8 @@ const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTim
 const StudentCoursesPage = React.lazy(() => import('./pages/student/StudentCoursesPage').then(m => ({ default: m.StudentCoursesPage })));
 const StudentCourseViewPage = React.lazy(() => import('./pages/student/StudentCourseViewPage').then(m => ({ default: m.StudentCourseViewPage })));
 const StudentTestPage = React.lazy(() => import('./pages/student/StudentTestPage').then(m => ({ default: m.StudentTestPage })));
+const StudentSubjectsPage = React.lazy(() => import('./pages/student/StudentSubjectsPage').then(m => ({ default: m.StudentSubjectsPage })));
+const StudentSubjectViewPage = React.lazy(() => import('./pages/student/StudentSubjectViewPage').then(m => ({ default: m.StudentSubjectViewPage })));
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { state } = useAuth();
@@ -176,6 +181,56 @@ export function App() {
           element={
             <RequireAuth>
               <AdminSubjectsPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/app/admin/courses"
+          element={
+            <RequireAuth>
+              <AdminCoursesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/manager/courses"
+          element={
+            <RequireAuth>
+              <AdminCoursesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/admin/courses/:courseId"
+          element={
+            <RequireAuth>
+              <AdminCourseViewPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/manager/courses/:courseId"
+          element={
+            <RequireAuth>
+              <AdminCourseViewPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/app/admin/meetings"
+          element={
+            <RequireAuth>
+              <AdminMeetingsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/manager/meetings"
+          element={
+            <RequireAuth>
+              <AdminMeetingsPage />
             </RequireAuth>
           }
         />
@@ -378,6 +433,23 @@ export function App() {
           element={
             <RequireAuth>
               <StudentTestPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/app/student/subjects"
+          element={
+            <RequireAuth>
+              <StudentSubjectsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/subjects/:subjectId"
+          element={
+            <RequireAuth>
+              <StudentSubjectViewPage />
             </RequireAuth>
           }
         />

@@ -1,24 +1,23 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
 import { BookOpen } from "lucide-react";
+import { apiListCourses, type Course } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiListCourses, type Course } from "../../../api/client";
-import styles from "./StudentCourses.module.css";
+import styles from "../student/StudentCourses.module.css";
 
-export function StudentCoursesPage() {
+export function AdminCoursesPage() {
   const { state } = useAuth();
   const user = state.user;
   const token = state.accessToken;
+  const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (token) loadCourses();
-  }, [token]);
+  const base = user?.role === "manager" ? "/app/manager" : "/app/admin";
 
   async function loadCourses() {
     if (!token) return;
@@ -34,22 +33,34 @@ export function StudentCoursesPage() {
     }
   }
 
+  useEffect(() => {
+    if (can) loadCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [can]);
+
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "student") return <Navigate to="/app" replace />;
+  if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
 
   return (
     <AppShell
-      title="Курсы"
+      title={user.role === "manager" ? "Менеджер → Курсы" : "Админ → Курсы"}
       nav={[
-        { to: "/app/student", labelKey: "nav.home" },
-        { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/courses", labelKey: "nav.courses" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/users`, labelKey: "nav.users" },
+        { to: `${base}/classes`, labelKey: "nav.groups" },
+        { to: `${base}/streams`, labelKey: "nav.streams" },
+        { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/courses`, labelKey: "nav.courses" },
+        { to: `${base}/meetings`, labelKey: "nav.meetings" },
+        { to: `${base}/directions`, labelKey: "nav.directions" },
+        { to: `${base}/timetable`, labelKey: "nav.timetable" },
+        { to: `${base}/workload`, labelKey: "nav.workload" },
+        { to: `${base}/notifications`, labelKey: "nav.notifications" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <h2>Доступные курсы</h2>
+          <h2>Курсы</h2>
         </div>
 
         {error && <div className={styles.error}>{error}</div>}
@@ -59,20 +70,23 @@ export function StudentCoursesPage() {
         ) : courses.length === 0 ? (
           <div className={styles.empty}>
             <BookOpen size={48} />
-            <p>Пока нет доступных курсов</p>
+            <p>Пока нет курсов</p>
           </div>
         ) : (
           <div className={styles.coursesGrid}>
             {courses.map((course) => (
-              <Link key={course.id} to={`/app/student/courses/${course.id}`} className={styles.courseCard} title="Открыть курс">
+              <Link
+                key={course.id}
+                to={`${base}/courses/${course.id}`}
+                className={styles.courseCard}
+                title="Открыть курс"
+              >
                 <div className={styles.courseHeader}>
                   <h3>{course.title}</h3>
                 </div>
                 {course.description && <p className={styles.courseDescription}>{course.description}</p>}
                 <div className={styles.courseFooter}>
-                  <span className={styles.courseMeta}>
-                    Автор: {course.teacher?.full_name || "Неизвестно"}
-                  </span>
+                  <span className={styles.courseMeta}>Автор: {course.teacher?.full_name || "Неизвестно"}</span>
                   <span className={styles.courseMeta}>
                     {course.topics?.length || 0} {course.topics?.length === 1 ? "тема" : "тем"}
                   </span>
@@ -85,4 +99,3 @@ export function StudentCoursesPage() {
     </AppShell>
   );
 }
-

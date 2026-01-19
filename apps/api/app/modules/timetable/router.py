@@ -699,6 +699,15 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
         enrolled = {str(x) for x in class_ids}
         entries = [e for e in entries if str(e.get("class_id") or "") in enrolled or enrolled.intersection(_entry_class_ids(e))]
 
+    # Optional class filter for admin/manager/teacher
+    if classId and user["role"] in ("admin", "manager", "teacher"):
+        cid = str(classId)
+        entries = [
+            e
+            for e in entries
+            if str(e.get("class_id") or "") == cid or cid in _entry_class_ids(e)
+        ]
+
     # Use a short-lived cache to avoid repeated lookups for classes/teachers and zooms
     # Include classId in cache key for student filtering
     cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}:{classId or 'all'}"

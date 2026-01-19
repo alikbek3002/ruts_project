@@ -168,6 +168,7 @@ async def create_topic_with_file(
     title: str = Form(...),
     description: str | None = Form(None),
     class_id: str | None = Form(None),
+    subject_id: str | None = Form(None),
     user: dict = require_role("teacher", "admin"),
 ):
     """Create a topic (theme). If file is provided, upload it as the first file in the topic."""
@@ -178,12 +179,10 @@ async def create_topic_with_file(
         "description": description,
         "created_by": user["id"],
     }
-    
-    # For teachers: auto-assign their subject_id
-    if user["role"] == "teacher":
-        teacher_subjects = sb.table("teacher_subjects").select("subject_id").eq("teacher_id", user["id"]).limit(1).execute()
-        if teacher_subjects.data:
-            topic_data["subject_id"] = teacher_subjects.data[0].get("subject_id")
+
+    sid = subject_id.strip() if isinstance(subject_id, str) and subject_id.strip() else None
+    if sid:
+        topic_data["subject_id"] = sid
     
     # Don't assign class_id - topics are for all classes
 

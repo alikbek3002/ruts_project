@@ -257,6 +257,147 @@ export type Subject = {
   photo_url?: string | null;
 };
 
+export type SubjectContentMaterial = {
+  id: string;
+  topic_id: string;
+  kind: "file" | "link";
+  title: string;
+  url?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  original_filename?: string | null;
+  signed_url?: string | null;
+  created_at?: string;
+};
+
+export type SubjectContentTest = {
+  id: string;
+  topic_id: string;
+  title: string;
+  description?: string | null;
+  test_type: "quiz" | "document";
+  time_limit_minutes?: number | null;
+  created_at?: string;
+  best_percentage?: number | null;
+  passed?: boolean;
+  can_start?: boolean;
+  locked_reason?: string | null;
+};
+
+export type SubjectContentTopic = {
+  id: string;
+  subject_id: string;
+  topic_number: number;
+  topic_name: string;
+  description?: string | null;
+  is_read?: boolean;
+  materials: SubjectContentMaterial[];
+  tests: SubjectContentTest[];
+};
+
+export type SubjectContentSubject = {
+  id: string;
+  name: string;
+  photo_url?: string | null;
+};
+
+export type SubjectTestAttempt = {
+  id: string;
+  test_id: string;
+  student_id: string;
+  started_at?: string;
+  submitted_at?: string | null;
+  time_limit_seconds?: number | null;
+  score?: number | null;
+  total_questions?: number | null;
+  percentage_score?: number | null;
+};
+
+export type SubjectTestQuestionOption = {
+  id: string;
+  option_text: string;
+  order_index?: number;
+  is_correct?: boolean;
+};
+
+export type SubjectTestQuestion = {
+  id: string;
+  question_text: string;
+  order_index?: number;
+  options?: SubjectTestQuestionOption[];
+};
+
+export type SubjectTestAttemptAnswer = {
+  id: string;
+  question_id: string;
+  selected_option_id?: string | null;
+  is_correct?: boolean | null;
+};
+
+export async function apiSubjectContentListSubjects(accessToken: string) {
+  return await apiGet<{ subjects: SubjectContentSubject[] }>(`/api/subject-content/subjects`, accessToken);
+}
+
+export async function apiSubjectContentGetSubject(
+  accessToken: string,
+  subjectId: string,
+  params?: { student_id?: string; class_id?: string }
+) {
+  const qs = new URLSearchParams();
+  if (params?.student_id) qs.set("student_id", params.student_id);
+  if (params?.class_id) qs.set("class_id", params.class_id);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return await apiGet<{ subject: SubjectContentSubject; topics: SubjectContentTopic[] }>(
+    `/api/subject-content/subjects/${subjectId}${suffix}`,
+    accessToken
+  );
+}
+
+export async function apiSubjectContentMarkRead(
+  accessToken: string,
+  topicId: string,
+  payload?: { student_id?: string; class_id?: string }
+) {
+  return await apiPost<{ ok: boolean }>(`/api/subject-content/topics/${topicId}/read`, payload ?? {}, accessToken);
+}
+
+export async function apiSubjectStartAttempt(
+  accessToken: string,
+  testId: string,
+  payload?: { student_id?: string; class_id?: string }
+) {
+  return await apiPost<{
+    attempt: SubjectTestAttempt;
+    questions?: SubjectTestQuestion[];
+    time_limit_seconds?: number | null;
+    test?: any;
+  }>(`/api/subject-content/tests/${testId}/start`, payload ?? {}, accessToken);
+}
+
+export async function apiSubjectSubmitAttempt(
+  accessToken: string,
+  attemptId: string,
+  answers: Array<{ question_id: string; selected_option_id: string | null }>,
+  payload?: { student_id?: string; class_id?: string }
+) {
+  return await apiPost<any>(
+    `/api/subject-content/attempts/${attemptId}/submit`,
+    { answers, ...(payload ?? {}) },
+    accessToken
+  );
+}
+
+export async function apiSubjectGetAttempt(accessToken: string, attemptId: string) {
+  return await apiGet<{ attempt: SubjectTestAttempt; answers: SubjectTestAttemptAnswer[] }>(
+    `/api/subject-content/attempts/${attemptId}`,
+    accessToken
+  );
+}
+
+export async function apiSubjectListQuestions(accessToken: string, testId: string) {
+  return await apiGet<{ questions: SubjectTestQuestion[] }>(`/api/subject-content/tests/${testId}/questions`, accessToken);
+}
+
 export type SubjectTeacher = {
   id: string;
   name: string;

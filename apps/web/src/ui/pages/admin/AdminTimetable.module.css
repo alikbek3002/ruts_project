@@ -227,6 +227,36 @@
   font-weight: 600;
 }
 
+.zoomRow {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.zoomBtn,
+.zoomLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.zoomBtn {
+  cursor: pointer;
+}
+
+.zoomBtn:hover,
+.zoomLink:hover {
+  background: var(--color-bg-secondary);
+}
+
 .modalOverlay {
   position: fixed;
   top: 0;

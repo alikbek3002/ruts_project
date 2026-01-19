@@ -175,11 +175,39 @@ def load_existing_constraints(sb, stream_id: Optional[str] = None) -> ScheduleCo
 
 
 def get_teacher_for_subject(sb, subject_id: str) -> Optional[str]:
-    """Find a teacher who teaches this subject"""
-    result = sb.table("teacher_subjects").select("teacher_id").eq("subject_id", subject_id).limit(1).execute()
-    
-    if result.data:
-        return result.data[0]["teacher_id"]
+    """Find a teacher for a subject.
+
+    Legacy: try teacher_subjects mapping first.
+    New behavior: if no mapping exists, fall back to any active teacher.
+    """
+    try:
+        result = (
+            sb.table("teacher_subjects")
+            .select("teacher_id")
+            .eq("subject_id", subject_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]["teacher_id"]
+    except Exception:
+        pass
+
+    # Fallback: any active teacher
+    try:
+        t = (
+            sb.table("users")
+            .select("id")
+            .eq("role", "teacher")
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        t = sb.table("users").select("id").eq("role", "teacher").limit(1).execute()
+
+    if t.data:
+        return t.data[0]["id"]
     return None
 
 
@@ -568,7 +596,10 @@ async def generate_schedule(
         # Find teacher for this subject
         teacher_id = get_teacher_for_subject(sb, subject_req.subject_id)
         if not teacher_id:
-            warnings.append(f"Не найден преподаватель для предмета '{subject_req.subject_name}'. Предмет пропущен. Назначьте преподавателя в настройках.")
+            warnings.append(
+                f"Не найден преподаватель для предмета '{subject_req.subject_name}'. "
+                "Предмет пропущен. Добавьте хотя бы одного активного учителя."
+            )
             continue
         
         lessons_scheduled = 0

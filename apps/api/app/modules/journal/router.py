@@ -13,55 +13,15 @@ from app.core.monitor import timed
 router = APIRouter()
 
 
-def _teacher_subject_ids(sb, teacher_id: str) -> set[str]:
-    rows = (
-        sb.table("teacher_subjects")
-        .select("subject_id")
-        .eq("teacher_id", teacher_id)
-        .execute()
-        .data
-        or []
-    )
-    return {str(r.get("subject_id")) for r in rows if r.get("subject_id")}
-
-
 def _timetable_entries_for_teacher(sb, teacher_id: str, select_fields: str, weekday: int | None = None) -> list[dict]:
     q1 = sb.table("timetable_entries").select(select_fields).eq("active", True).eq("teacher_id", teacher_id)
     if weekday is not None:
         q1 = q1.eq("weekday", weekday)
-    rows = q1.execute().data or []
-
-    subject_ids = sorted(_teacher_subject_ids(sb, teacher_id))
-    if subject_ids:
-        q2 = (
-            sb.table("timetable_entries")
-            .select(select_fields)
-            .eq("active", True)
-            .is_("teacher_id", "null")
-            .in_("subject_id", subject_ids)
-        )
-        if weekday is not None:
-            q2 = q2.eq("weekday", weekday)
-        rows2 = q2.execute().data or []
-    else:
-        rows2 = []
-
-    merged: dict[str, dict] = {}
-    for r in (rows + rows2):
-        rid = r.get("id")
-        if rid:
-            merged[str(rid)] = r
-    return list(merged.values())
+    return q1.execute().data or []
 
 
 def _teacher_can_access_entry(sb, teacher_id: str, entry_data: dict) -> bool:
-    if entry_data.get("teacher_id") == teacher_id:
-        return True
-    if entry_data.get("teacher_id") is None:
-        subject_id = entry_data.get("subject_id")
-        if subject_id and str(subject_id) in _teacher_subject_ids(sb, teacher_id):
-            return True
-    return False
+    return entry_data.get("teacher_id") == teacher_id
 
 
 class GradeEntry(BaseModel):
@@ -98,8 +58,6 @@ def get_teacher_classes(user: dict = require_role("teacher")):
         return {"classes": cached}
     
     # Получаем уникальные классы из расписания учителя.
-    # Важно: teacher_id может быть NULL (см. migration timetable_teacher_optional),
-    # поэтому дополнительно учитываем записи по предметам учителя (teacher_subjects).
     timetable = _timetable_entries_for_teacher(sb, user["id"], "id,class_id,subject,subject_id")
     
     class_ids = list({e.get("class_id") for e in timetable if e.get("class_id")})

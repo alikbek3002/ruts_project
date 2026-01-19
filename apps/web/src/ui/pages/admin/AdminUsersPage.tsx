@@ -197,7 +197,7 @@ export function AdminUsersPage() {
         try {
           const ts = await apiGetTeacherSubjects(token, resp.user.id);
           const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
-          setViewTeacherSubjectIds(ids.slice(0, 3));
+          setViewTeacherSubjectIds(ids);
           // Load teacher workload
           try {
             const workloadData = await apiGetTeacherWorkload(token, resp.user.id);
@@ -500,74 +500,24 @@ export function AdminUsersPage() {
 
                   {role === "teacher" && (
                     <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                      <label className={styles.label}>Предметы (до 3)</label>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--spacing-md)" }}>
-                        <select
-                          value={teacherSubjectIds[0] || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setTeacherSubjectIds((prev) => {
-                              const next = [...prev];
-                              if (!v) {
-                                next[0] = "";
-                              } else {
-                                next[0] = v;
-                              }
-                              return next.filter(Boolean).slice(0, 3);
-                            });
-                          }}
-                        >
-                          <option value="">(предмет 1 — необязательно)</option>
-                          {subjects.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={teacherSubjectIds[1] || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setTeacherSubjectIds((prev) => {
-                              const first = prev[0] || "";
-                              const second = v || "";
-                              const third = prev[2] || "";
-                              const next = [first, second, third].filter(Boolean);
-                              return Array.from(new Set(next)).slice(0, 3);
-                            });
-                          }}
-                        >
-                          <option value="">(предмет 2 — необязательно)</option>
-                          {subjects
-                            .filter((s) => s.id !== (teacherSubjectIds[0] || ""))
-                            .map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                        </select>
-                        <select
-                          value={teacherSubjectIds[2] || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setTeacherSubjectIds((prev) => {
-                              const first = prev[0] || "";
-                              const second = prev[1] || "";
-                              const third = v || "";
-                              const next = [first, second, third].filter(Boolean);
-                              return Array.from(new Set(next)).slice(0, 3);
-                            });
-                          }}
-                        >
-                          <option value="">(предмет 3 — необязательно)</option>
-                          {subjects
-                            .filter((s) => s.id !== (teacherSubjectIds[0] || "") && s.id !== (teacherSubjectIds[1] || ""))
-                            .map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                        </select>
+                      <label className={styles.label}>Предметы (необязательно)</label>
+                      <select
+                        multiple
+                        value={teacherSubjectIds}
+                        onChange={(e) => {
+                          const ids = Array.from(e.target.selectedOptions).map((o) => o.value).filter(Boolean);
+                          setTeacherSubjectIds(Array.from(new Set(ids)));
+                        }}
+                        style={{ minHeight: 140 }}
+                      >
+                        {subjects.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 6 }}>
+                        Можно выбрать несколько: ⌘/Ctrl + клик
                       </div>
                     </div>
                   )}
@@ -662,7 +612,7 @@ export function AdminUsersPage() {
                         birth_date: birthDate,
                         photo_data_url: photoDataUrl,
                         class_id: (role === "student" && classId) ? classId : null,
-                        teacher_subject: role === "teacher" ? teacherSubjectNames.join(", ") : null,
+                        teacher_subject: role === "teacher" && teacherSubjectNames.length ? teacherSubjectNames.join(", ") : null,
                         subject_ids: role === "teacher" ? teacherSubjectIds : null,
                         username: generatedUsername,
                         temp_password: generatedPassword,
@@ -893,21 +843,17 @@ export function AdminUsersPage() {
                         padding: "var(--spacing-md)",
                         background: "var(--color-bg-subtle)"
                       }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя (до 3)</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя (необязательно)</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
                           <select
-                            value={viewTeacherSubjectIds[0] || ""}
+                            multiple
+                            value={viewTeacherSubjectIds}
                             onChange={(e) => {
-                              const v = e.target.value;
-                              setViewTeacherSubjectIds((prev) => {
-                                const second = prev[1] || "";
-                                const third = prev[2] || "";
-                                const next = [v || "", second, third].filter(Boolean);
-                                return Array.from(new Set(next)).slice(0, 3);
-                              });
+                              const ids = Array.from(e.target.selectedOptions).map((o) => o.value).filter(Boolean);
+                              setViewTeacherSubjectIds(Array.from(new Set(ids)));
                             }}
+                            style={{ minHeight: 140 }}
                           >
-                            <option value="">(предмет 1)</option>
                             {subjects.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.name}
@@ -915,52 +861,8 @@ export function AdminUsersPage() {
                             ))}
                           </select>
 
-                          <select
-                            value={viewTeacherSubjectIds[1] || ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setViewTeacherSubjectIds((prev) => {
-                                const first = prev[0] || "";
-                                const third = prev[2] || "";
-                                const next = [first, v || "", third].filter(Boolean);
-                                return Array.from(new Set(next)).slice(0, 3);
-                              });
-                            }}
-                          >
-                            <option value="">(предмет 2 — необязательно)</option>
-                            {subjects
-                              .filter((s) => s.id !== (viewTeacherSubjectIds[0] || ""))
-                              .map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                          </select>
-
-                          <select
-                            value={viewTeacherSubjectIds[2] || ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setViewTeacherSubjectIds((prev) => {
-                                const first = prev[0] || "";
-                                const second = prev[1] || "";
-                                const next = [first, second, v || ""].filter(Boolean);
-                                return Array.from(new Set(next)).slice(0, 3);
-                              });
-                            }}
-                          >
-                            <option value="">(предмет 3 — необязательно)</option>
-                            {subjects
-                              .filter((s) => s.id !== (viewTeacherSubjectIds[0] || "") && s.id !== (viewTeacherSubjectIds[1] || ""))
-                              .map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                          </select>
-
                           <button
-                            disabled={viewTeacherSaving || viewTeacherSubjectIds.length < 1}
+                            disabled={viewTeacherSaving}
                             onClick={async () => {
                               if (!token || !viewUser) return;
                               setViewErr(null);
@@ -978,6 +880,9 @@ export function AdminUsersPage() {
                           >
                             {viewTeacherSaving ? "..." : <Save size={16} />}
                           </button>
+                        </div>
+                        <div style={{ marginTop: 6, fontSize: 12, color: "var(--color-text-light)" }}>
+                          Можно выбрать несколько: ⌘/Ctrl + клик
                         </div>
                         <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
                           Сейчас: {viewUser.teacher_subject || "—"}

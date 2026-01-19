@@ -1,0 +1,264 @@
+.container {
+  padding: 16px;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.9;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 0, 0, 0.08);
+  margin-bottom: 12px;
+}
+
+.card {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+
+.select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.primaryButton {
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.secondaryButton {
+  padding: 10px 12px;
+  border-radius: 12px;
+  opacity: 0.9;
+}
+
+.topics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topicCard {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.topicHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.topicTitle {
+  font-weight: 700;
+}
+
+.topicDesc {
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.readBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(0, 255, 0, 0.08);
+}
+
+.section {
+  margin-top: 10px;
+}
+
+.sectionTitle {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.muted {
+  opacity: 0.75;
+}
+
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.materialLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tests {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.testRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.testTitle {
+  font-weight: 600;
+}
+
+.testMeta {
+  opacity: 0.8;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.lockedReason {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 900px;
+  max-height: 85vh;
+  overflow: auto;
+  border-radius: 16px;
+  background: rgba(20, 20, 20, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
+.questions {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.questionCard {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.questionTitle {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.questionText {
+  opacity: 0.9;
+  margin-bottom: 8px;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.modalFooter {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.results {
+  padding: 12px 14px;
+}
+
+.resultsTop {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.optionReview {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.correct {
+  background: rgba(0, 255, 0, 0.08);
+}
+
+.incorrect {
+  background: rgba(255, 0, 0, 0.08);
+}
+
+.badge {
+  opacity: 0.85;
+  font-size: 12px;
+}

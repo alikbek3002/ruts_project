@@ -1,26 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { Navigate, useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, FileText, Clock, Play } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Navigate, useParams, Link } from "react-router-dom";
+import { ArrowLeft, FileText, Clock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiGetCourse, type Course, type CourseTopic, type CourseTest } from "../../../api/client";
-import styles from "./StudentCourseView.module.css";
+import { apiGetCourse, type Course } from "../../../api/client";
+import styles from "../student/StudentCourseView.module.css";
 
-export function StudentCourseViewPage() {
+export function AdminCourseViewPage() {
   const { state } = useAuth();
   const user = state.user;
   const token = state.accessToken;
   const { courseId } = useParams<{ courseId: string }>();
-  const navigate = useNavigate();
+  const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (token && courseId) loadCourse();
-  }, [token, courseId]);
+  const base = user?.role === "manager" ? "/app/manager" : "/app/admin";
 
   async function loadCourse() {
     if (!token || !courseId) return;
@@ -36,9 +34,14 @@ export function StudentCourseViewPage() {
     }
   }
 
+  useEffect(() => {
+    if (can && courseId) loadCourse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [can, courseId]);
+
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "student") return <Navigate to="/app" replace />;
-  if (!courseId) return <Navigate to="/app/student/courses" replace />;
+  if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
+  if (!courseId) return <Navigate to={`${base}/courses`} replace />;
 
   if (loading) {
     return (
@@ -58,15 +61,14 @@ export function StudentCourseViewPage() {
 
   return (
     <AppShell
-      title="Курс"
+      title={user.role === "manager" ? "Менеджер → Курс" : "Админ → Курс"}
       nav={[
-        { to: "/app/student", labelKey: "nav.home" },
-        { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/courses", labelKey: "nav.courses" },
+        { to: base, labelKey: "nav.home" },
+        { to: `${base}/courses`, labelKey: "nav.courses" },
       ]}
     >
       <div className={styles.container}>
-        <Link to="/app/student/courses" className={styles.backLink}>
+        <Link to={`${base}/courses`} className={styles.backLink}>
           <ArrowLeft size={20} />
           Назад к курсам
         </Link>
@@ -122,13 +124,6 @@ export function StudentCourseViewPage() {
                               </h5>
                               {test.description && <p className={styles.testDescription}>{test.description}</p>}
                             </div>
-                            <button
-                              onClick={() => navigate(`/app/student/courses/${courseId}/test/${test.id}`)}
-                              className={styles.startButton}
-                            >
-                              <Play size={16} />
-                              {test.test_type === "quiz" ? "Начать тест" : "Открыть"}
-                            </button>
                           </div>
                         ))}
                       </div>
@@ -145,4 +140,3 @@ export function StudentCourseViewPage() {
     </AppShell>
   );
 }
-

@@ -176,7 +176,7 @@ def get_teacher_subjects(teacher_id: str, user: dict = require_role("admin", "ma
 
 @router.post("/teachers/assign-subject")
 def assign_subject_to_teacher(payload: AssignSubjectIn, user: dict = require_role("admin", "manager")):
-    """Присвоить предмет учителю (максимум 2)"""
+    """Присвоить предмет учителю."""
     sb = get_supabase()
     
     # Проверяем что учитель существует
@@ -188,11 +188,6 @@ def assign_subject_to_teacher(payload: AssignSubjectIn, user: dict = require_rol
     subject = sb.table("subjects").select("id").eq("id", payload.subject_id).limit(1).execute().data
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
-    
-    # Проверяем количество предметов у учителя
-    count = sb.table("teacher_subjects").select("subject_id", count="exact").eq("teacher_id", payload.teacher_id).execute()
-    if count.count and count.count >= 3:
-        raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
     
     # Проверяем что связь не существует
     existing = (
@@ -226,7 +221,7 @@ def remove_subject_from_teacher(teacher_id: str, subject_id: str, user: dict = r
 
 @router.put("/teachers/{teacher_id}/subjects")
 def replace_teacher_subjects(teacher_id: str, payload: ReplaceTeacherSubjectsIn, user: dict = require_role("admin", "manager")):
-    """Заменить предметы учителя (назначается при создании/редактировании учителя; максимум 2)."""
+    """Заменить предметы учителя (необязательно)."""
     sb = get_supabase()
 
     # Validate teacher
@@ -237,20 +232,18 @@ def replace_teacher_subjects(teacher_id: str, payload: ReplaceTeacherSubjectsIn,
     subject_ids = [s.strip() for s in (payload.subject_ids or []) if isinstance(s, str) and s.strip()]
     # unique preserve order
     subject_ids = list(dict.fromkeys(subject_ids))
-    if len(subject_ids) < 1:
-        raise HTTPException(status_code=400, detail="At least one subject is required")
-    if len(subject_ids) > 3:
-        raise HTTPException(status_code=400, detail="Teacher can have maximum 3 subjects")
 
-    # Validate subjects exist and collect names
-    subj_rows = sb.table("subjects").select("id,name").in_("id", subject_ids).execute().data or []
-    found = {r.get("id") for r in subj_rows}
-    if len(found) != len(subject_ids):
-        raise HTTPException(status_code=404, detail="Subject not found")
+    subject_names: list[str] = []
+    if subject_ids:
+        # Validate subjects exist and collect names
+        subj_rows = sb.table("subjects").select("id,name").in_("id", subject_ids).execute().data or []
+        found = {r.get("id") for r in subj_rows}
+        if len(found) != len(subject_ids):
+            raise HTTPException(status_code=404, detail="Subject not found")
 
-    names_by_id = {r.get("id"): (r.get("name") or "") for r in subj_rows}
-    subject_names = [str(names_by_id.get(sid, "")).strip() for sid in subject_ids]
-    subject_names = [n for n in subject_names if n]
+        names_by_id = {r.get("id"): (r.get("name") or "") for r in subj_rows}
+        subject_names = [str(names_by_id.get(sid, "")).strip() for sid in subject_ids]
+        subject_names = [n for n in subject_names if n]
 
     # Replace links
     sb.table("teacher_subjects").delete().eq("teacher_id", teacher_id).execute()
