@@ -44,7 +44,7 @@ def list_subjects(user: dict = require_role("admin", "manager", "teacher")):
 
 
 @router.get("/subjects-with-teachers")
-def list_subjects_with_teachers(user: dict = require_role("admin", "manager")):
+def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "teacher")):
     """Список предметов + учителя, которым назначен предмет.
 
     Нужен для админ-страницы "Предметы", чтобы отображать учителей на карточках.

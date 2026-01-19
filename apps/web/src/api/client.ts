@@ -251,7 +251,7 @@ export type Direction = {
 };
 
 export async function apiListDirections(token: string) {
-  return apiGet<{ directions: Direction[] }>("/admin/directions", token);
+  return apiGet<{ directions: Direction[] }>("/directions", token);
 }
 
 // Subject (предмет)
@@ -504,21 +504,21 @@ export type SubjectWithTeachers = Subject & {
 };
 
 export async function apiListSubjectsWithTeachers(token: string) {
-  return await apiGet<{ subjects: SubjectWithTeachers[] }>("/admin/subjects", token);
+  return await apiGet<{ subjects: SubjectWithTeachers[] }>("/subjects/subjects-with-teachers", token);
 }
 
 export const apiListSubjects = apiListSubjectsWithTeachers;
 
 export async function apiCreateSubject(token: string, name: string, photo_url: string | null) {
-  return await apiPost<{ subject: Subject }>("/admin/subjects", { name, photo_url }, token);
+  return await apiPost<{ subject: Subject }>("/subjects/subjects", { name, photo_url }, token);
 }
 
 export async function apiUpdateSubject(token: string, subjectId: string, name: string, photo_url: string | null) {
-  return await apiPut<{ subject: Subject }>(`/admin/subjects/${subjectId}`, { name, photo_url }, token);
+  return await apiPut<{ subject: Subject }>(`/subjects/subjects/${subjectId}`, { name, photo_url }, token);
 }
 
 export async function apiDeleteSubject(token: string, subjectId: string) {
-  return await http<{ ok: boolean }>(`/admin/subjects/${subjectId}`, {
+  return await http<{ ok: boolean }>(`/subjects/subjects/${subjectId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
