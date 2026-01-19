@@ -250,6 +250,10 @@ export type Direction = {
   code: string;
 };
 
+export async function apiListDirections(token: string) {
+  return apiGet<{ directions: Direction[] }>("/admin/directions", token);
+}
+
 // Subject (предмет)
 export type Subject = {
   id: string;
@@ -487,6 +491,13 @@ export async function apiSetTeacherSubjects(token: string, teacherId: string, su
   );
 }
 
+export async function apiGetTeacherSubjects(token: string, teacherId: string) {
+  return apiGet<{ subjects: Subject[] }>(
+    `/subjects/teachers/${encodeURIComponent(teacherId)}/subjects`,
+    token
+  );
+}
+
 // Subject management
 export type SubjectWithTeachers = Subject & {
   teachers?: { id: string; name: string }[];
@@ -495,6 +506,8 @@ export type SubjectWithTeachers = Subject & {
 export async function apiListSubjectsWithTeachers(token: string) {
   return await apiGet<{ subjects: SubjectWithTeachers[] }>("/admin/subjects", token);
 }
+
+export const apiListSubjects = apiListSubjectsWithTeachers;
 
 export async function apiCreateSubject(token: string, name: string, photo_url: string | null) {
   return await apiPost<{ subject: Subject }>("/admin/subjects", { name, photo_url }, token);

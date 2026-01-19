@@ -3,7 +3,7 @@ import { Navigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiListSubjects, Subject, trackedFetch } from "../../../api/client";
+import { apiListSubjectsWithTeachers, Subject, trackedFetch } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
 import { ChevronLeft, Download, RefreshCw, FileSpreadsheet, Filter } from "lucide-react";
 
@@ -98,7 +98,7 @@ export function AdminClassJournalPage() {
           if (!r.ok) throw new Error("Failed to load class info");
           return r.json();
         }),
-        apiListSubjects(token),
+        apiListSubjectsWithTeachers(token),
       ]);
 
       setJournalByDates(byDates);
