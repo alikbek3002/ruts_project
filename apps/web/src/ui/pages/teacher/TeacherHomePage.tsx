@@ -87,8 +87,7 @@ export function TeacherHomePage() {
         { to: "/app/teacher/vzvody", labelKey: "nav.myVzvody" },
         { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
         { to: "/app/teacher/workload", labelKey: "nav.workload" },
-        { to: "/app/teacher/library", labelKey: "nav.library" },
-        { to: "/app/teacher/courses", labelKey: "nav.courses" },
+        { to: "/app/teacher/subjects", labelKey: "nav.subjects" },
       ]}
     >
       <div className={styles.container}>
@@ -189,11 +188,11 @@ export function TeacherHomePage() {
                 <span className={styles.linkTitle}>{t("nav.myVzvody")}</span>
               </Link>
               
-              <Link to="/app/teacher/library" className={styles.quickLinkCard}>
+              <Link to="/app/teacher/subjects" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.orange}`}>
-                  <Library size={24} />
+                  <BookOpen size={24} />
                 </div>
-                <span className={styles.linkTitle}>{t("nav.library")}</span>
+                <span className={styles.linkTitle}>{t("nav.subjects")}</span>
               </Link>
             </div>
 

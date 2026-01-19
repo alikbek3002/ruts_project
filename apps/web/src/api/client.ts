@@ -358,96 +358,103 @@ export async function apiSubjectContentMarkRead(
   topicId: string,
   payload?: { student_id?: string; class_id?: string }
 ) {
-  return await apiPost<{ ok: boolean }>(`/api/subject-content/topics/${topicId}/read`, payload ?? {}, accessToken);
+  return apiPost<{ ok: boolean }>(`/api/subject-content/topics/${topicId}/read`, payload || {}, accessToken);
 }
 
-export async function apiSubjectStartAttempt(
-  accessToken: string,
-  testId: string,
-  payload?: { student_id?: string; class_id?: string }
-) {
-  return await apiPost<{
-    attempt: SubjectTestAttempt;
-    questions?: SubjectTestQuestion[];
-    time_limit_seconds?: number | null;
-    test?: any;
-  }>(`/api/subject-content/tests/${testId}/start`, payload ?? {}, accessToken);
-}
-
-export async function apiSubjectSubmitAttempt(
-  accessToken: string,
-  attemptId: string,
-  answers: Array<{ question_id: string; selected_option_id: string | null }>,
-  payload?: { student_id?: string; class_id?: string }
-) {
-  return await apiPost<any>(
-    `/api/subject-content/attempts/${attemptId}/submit`,
-    { answers, ...(payload ?? {}) },
-    accessToken
+export async function apiTeacherGetSubject(token: string, subjectId: string) {
+  return await apiGet<{ subject: SubjectContentSubject; topics: SubjectContentTopic[] }>(
+    `/api/subject-content/teacher/subjects/${subjectId}`,
+    token
   );
 }
 
-export async function apiSubjectGetAttempt(accessToken: string, attemptId: string) {
-  return await apiGet<{ attempt: SubjectTestAttempt; answers: SubjectTestAttemptAnswer[] }>(
-    `/api/subject-content/attempts/${attemptId}`,
-    accessToken
-  );
-}
-
-export async function apiSubjectListQuestions(accessToken: string, testId: string) {
-  return await apiGet<{ questions: SubjectTestQuestion[] }>(`/api/subject-content/tests/${testId}/questions`, accessToken);
-}
-
-export type SubjectTeacher = {
-  id: string;
-  name: string;
-};
-
-export type SubjectWithTeachers = Subject & {
-  teachers: SubjectTeacher[];
-};
-
-export async function apiListDirections(token: string) {
-  return apiGet<{ directions: Direction[] }>("/api/directions", token);
-}
-
-export async function apiListSubjects(token: string) {
-  return apiGet<{ subjects: Subject[] }>("/api/subjects/subjects", token);
-}
-
-export async function apiListSubjectsWithTeachers(token: string) {
-  return apiGet<{ subjects: SubjectWithTeachers[] }>("/api/subjects/subjects-with-teachers", token);
-}
-
-export async function apiCreateSubject(token: string, name: string, photoUrl?: string | null) {
-  return apiPost<{ subject: Subject }>("/subjects/subjects", { name, photo_url: photoUrl ?? null }, token);
-}
-
-export async function apiUpdateSubject(token: string, subjectId: string, name: string, photoUrl?: string | null) {
-  return http<{ subject: Subject }>(`/subjects/subjects/${encodeURIComponent(subjectId)}`, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, photo_url: photoUrl ?? null }),
+export async function apiSubjectContentUploadFile(
+  token: string,
+  topicId: string,
+  file: File,
+  title?: string
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  
+  const res = await fetch(`${API_BASE}${withApiPrefix(`/subject-content/topics/${topicId}/materials/file`)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Upload failed");
+  }
+  return await res.json();
 }
 
-export async function apiDeleteSubject(token: string, subjectId: string) {
-  return http<{ ok: boolean }>(`/subjects/subjects/${encodeURIComponent(subjectId)}`, {
+export async function apiSubjectContentCreateLink(
+  token: string,
+  topicId: string,
+  title: string,
+  url: string
+) {
+  return apiPost<{ material: SubjectContentMaterial }>(
+    `/api/subject-content/topics/${topicId}/materials/link`,
+    { title, url },
+    token
+  );
+}
+
+export async function apiSubjectContentDeleteMaterial(token: string, materialId: string) {
+  return http<{ ok: boolean }>(`/api/subject-content/materials/${materialId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
-export async function apiGetTeacherSubjects(token: string, teacherId: string) {
-  return apiGet<{ subjects: Subject[] }>(`/subjects/teachers/${encodeURIComponent(teacherId)}/subjects`, token);
+export async function apiSubjectContentCreateQuiz(
+  token: string,
+  topicId: string,
+  title: string,
+  timeLimitMinutes: number,
+  description?: string
+) {
+  return apiPost<{ test: SubjectContentTest }>(
+    `/api/subject-content/tests/quiz`,
+    { topic_id: topicId, title, time_limit_minutes: timeLimitMinutes, description },
+    token
+  );
 }
 
-export async function apiAssignSubjectToTeacher(token: string, teacherId: string, subjectId: string) {
-  return apiPost<{ ok: boolean }>("/subjects/teachers/assign-subject", { teacher_id: teacherId, subject_id: subjectId }, token);
+export async function apiSubjectContentCreateDocumentTest(
+  token: string,
+  topicId: string,
+  title: string,
+  file: File,
+  description?: string
+) {
+  const formData = new FormData();
+  formData.append("topic_id", topicId);
+  formData.append("title", title);
+  formData.append("document", file);
+  if (description) formData.append("description", description);
+
+  const res = await fetch(`${API_BASE}${withApiPrefix("/subject-content/tests/document")}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Create test failed");
+  }
+  return await res.json();
 }
 
-export async function apiRemoveSubjectFromTeacher(token: string, teacherId: string, subjectId: string) {
-  return http<{ ok: boolean }>(`/subjects/teachers/${encodeURIComponent(teacherId)}/subjects/${encodeURIComponent(subjectId)}`, {
+export async function apiSubjectContentDeleteTest(token: string, testId: string) {
+  return http<{ ok: boolean }>(`/api/subject-content/tests/${testId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -480,7 +487,31 @@ export async function apiSetTeacherSubjects(token: string, teacherId: string, su
   );
 }
 
-// Syllabus / Topic API
+// Subject management
+export type SubjectWithTeachers = Subject & {
+  teachers?: { id: string; name: string }[];
+};
+
+export async function apiListSubjectsWithTeachers(token: string) {
+  return await apiGet<{ subjects: SubjectWithTeachers[] }>("/admin/subjects", token);
+}
+
+export async function apiCreateSubject(token: string, name: string, photo_url: string | null) {
+  return await apiPost<{ subject: Subject }>("/admin/subjects", { name, photo_url }, token);
+}
+
+export async function apiUpdateSubject(token: string, subjectId: string, name: string, photo_url: string | null) {
+  return await apiPut<{ subject: Subject }>(`/admin/subjects/${subjectId}`, { name, photo_url }, token);
+}
+
+export async function apiDeleteSubject(token: string, subjectId: string) {
+  return await http<{ ok: boolean }>(`/admin/subjects/${subjectId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Syllabus functionality
 export type SubjectTopic = {
   id: string;
   subject_id: string;
@@ -1971,4 +2002,37 @@ export async function apiDownloadTeachersWorkload(token: string): Promise<Blob> 
   }
   
   return response.blob();
+}
+
+// Student API functions for Subject Tests
+export async function apiSubjectListQuestions(token: string, testId: string) {
+  return apiGet<{ questions: SubjectTestQuestion[] }>(`/api/subject-content/tests/${testId}/questions`, token);
+}
+
+export async function apiSubjectStartAttempt(token: string, testId: string, params?: { student_id?: string; class_id?: string }) {
+  return apiPost<{ attempt: SubjectTestAttempt; questions?: SubjectTestQuestion[]; time_limit_seconds?: number }>(
+    `/api/subject-content/tests/${testId}/start`,
+    params || {},
+    token
+  );
+}
+
+export async function apiSubjectSubmitAttempt(
+  token: string,
+  attemptId: string,
+  answers: { question_id: string; selected_option_id: string | null }[],
+  params?: { student_id?: string; class_id?: string }
+) {
+  return apiPost<{ attempt: SubjectTestAttempt; score: number; percentage_score: number; total_questions: number }>(
+    `/api/subject-content/attempts/${attemptId}/submit`,
+    { answers, ...(params || {}) },
+    token
+  );
+}
+
+export async function apiSubjectGetAttempt(token: string, attemptId: string) {
+  return apiGet<{ attempt: SubjectTestAttempt; answers?: SubjectTestAttemptAnswer[] }>(
+    `/api/subject-content/attempts/${attemptId}`,
+    token
+  );
 }

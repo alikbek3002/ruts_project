@@ -12,13 +12,12 @@ export function StudentHomePage() {
   if (user.role !== "student") return <Navigate to="/app" replace />;
 
   return (
-    <AppShell
-      titleKey="student.panelTitle"
+        <AppShell
+      title={t("nav.home")}
       nav={[
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/courses", labelKey: "nav.courses" },
       ]}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
