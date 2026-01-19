@@ -37,6 +37,8 @@ const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage
 const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTimetablePage').then(m => ({ default: m.StudentTimetablePage })));
 const StudentSubjectsPage = React.lazy(() => import('./pages/student/StudentSubjectsPage').then(m => ({ default: m.StudentSubjectsPage })));
 const StudentSubjectViewPage = React.lazy(() => import('./pages/student/StudentSubjectViewPage').then(m => ({ default: m.StudentSubjectViewPage })));
+const StudentTeachersPage = React.lazy(() => import('./pages/student/StudentTeachersPage').then(m => ({ default: m.StudentTeachersPage })));
+
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { state } = useAuth();
@@ -369,6 +371,14 @@ export function App() {
           element={
             <RequireAuth>
               <StudentSubjectViewPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/student/teachers"
+          element={
+            <RequireAuth>
+              <StudentTeachersPage />
             </RequireAuth>
           }
         />

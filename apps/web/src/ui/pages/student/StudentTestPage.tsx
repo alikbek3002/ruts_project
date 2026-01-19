@@ -184,7 +184,15 @@ export function StudentTestPage() {
 
   if (loading) {
     return (
-      <AppShell title="Тест" nav={[]}>
+      <AppShell
+        title="Тест"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <Loader text="Загрузка теста..." />
       </AppShell>
     );
@@ -193,7 +201,15 @@ export function StudentTestPage() {
   if (isSharedStudent && !attempt) {
     const canStart = !!classId && !!studentId;
     return (
-      <AppShell title="Тест" nav={[]}>
+      <AppShell
+        title="Тест"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <div className={styles.container}>
           <div className={styles.testHeader}>
             <h1>Перед тестом выберите группу и себя</h1>
@@ -253,7 +269,15 @@ export function StudentTestPage() {
 
   if (error && !attempt) {
     return (
-      <AppShell title="Тест" nav={[]}>
+      <AppShell
+        title="Тест"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <div className={styles.error}>{error}</div>
         <button onClick={() => navigate(`/app/student/courses/${courseId}`)} className={styles.backButton}>
           <ArrowLeft size={16} />
@@ -265,7 +289,15 @@ export function StudentTestPage() {
 
   if (!attempt) {
     return (
-      <AppShell title="Тест" nav={[]}>
+      <AppShell
+        title="Тест"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <div className={styles.error}>Не удалось начать тест</div>
       </AppShell>
     );
@@ -274,7 +306,15 @@ export function StudentTestPage() {
   // Document test
   if (test?.test_type === "document") {
     return (
-      <AppShell title="Домашнее задание" nav={[]}>
+      <AppShell
+        title="Домашнее задание"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <div className={styles.container}>
           <div className={styles.testHeader}>
             <h1>{test.title}</h1>
@@ -304,7 +344,15 @@ export function StudentTestPage() {
     const percentage = results.attempt?.percentage_score || 0;
 
     return (
-      <AppShell title="Результаты теста" nav={[]}>
+      <AppShell
+        title="Результаты теста"
+        nav={[
+          { to: "/app/student", labelKey: "nav.home" },
+          { to: "/app/student/timetable", labelKey: "nav.timetable" },
+          { to: "/app/student/subjects", labelKey: "nav.subjects" },
+          { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        ]}
+      >
         <div className={styles.container}>
           <div className={styles.resultsCard}>
             <h1>Результаты теста</h1>
@@ -378,7 +426,15 @@ export function StudentTestPage() {
 
   // Quiz test - in progress
   return (
-    <AppShell title="Прохождение теста" nav={[]}>
+    <AppShell
+      title="Прохождение теста"
+      nav={[
+        { to: "/app/student", labelKey: "nav.home" },
+        { to: "/app/student/timetable", labelKey: "nav.timetable" },
+        { to: "/app/student/subjects", labelKey: "nav.subjects" },
+        { to: "/app/student/teachers", labelKey: "nav.teachers" },
+      ]}
+    >
       <div className={styles.container}>
         <div className={styles.testHeader}>
           <div>

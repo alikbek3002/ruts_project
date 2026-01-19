@@ -105,6 +105,7 @@ export function StudentTimetablePage() {
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
+        { to: "/app/student/teachers", labelKey: "nav.teachers" },
       ]}
     >
       <div className={styles.container}>

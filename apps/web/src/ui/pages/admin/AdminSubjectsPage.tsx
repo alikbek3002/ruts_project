@@ -12,6 +12,7 @@ import {
   apiBulkUpdateSubjectTopics,
   apiTeacherGetSubject,
   apiSubjectContentUploadFile,
+  apiSubjectContentCreateLink,
   apiSubjectContentCreateQuiz,
   apiSubjectContentCreateDocumentTest,
   apiSubjectContentDeleteMaterial,
@@ -76,6 +77,27 @@ export function AdminSubjectsPage() {
   const [newTopicTestTitle, setNewTopicTestTitle] = useState("");
   const [newTopicTestType, setNewTopicTestType] = useState<"quiz" | "document">("quiz"); // simple toggle
   const [newTopicTestFile, setNewTopicTestFile] = useState<File | null>(null);
+
+  // Materials Modal
+  const [materialsModalOpen, setMaterialsModalOpen] = useState(false);
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  
+  // New Material Inputs
+  const [newMaterialType, setNewMaterialType] = useState<"file" | "link">("file");
+  const [newMaterialFile, setNewMaterialFile] = useState<File | null>(null);
+  const [newMaterialTitle, setNewMaterialTitle] = useState("");
+  const [newMaterialUrl, setNewMaterialUrl] = useState("");
+  const [newMaterialLoading, setNewMaterialLoading] = useState(false);
+
+  // New Test Inputs
+  const [newTestTitle, setNewTestTitle] = useState("");
+  const [newTestType, setNewTestType] = useState<"quiz" | "document">("quiz");
+  const [newTestFile, setNewTestFile] = useState<File | null>(null); // For document test
+  const [newTestLoading, setNewTestLoading] = useState(false);
+
+  const activeTopic = useMemo(() => {
+    return modalTopics.find(t => t.id === activeTopicId);
+  }, [modalTopics, activeTopicId]);
 
   async function reloadAll() {
     if (!token) return;
@@ -353,6 +375,78 @@ export function AdminSubjectsPage() {
     } catch(e) { setErr(String(e)); } finally { setLoading(false); }
   };
 
+  const openMaterialsModal = (topic: ExtendedSubjectTopic) => {
+    setActiveTopicId(topic.id);
+    setMaterialsModalOpen(true);
+    // Reset inputs
+    setNewMaterialType("file");
+    setNewMaterialFile(null);
+    setNewMaterialTitle("");
+    setNewMaterialUrl("");
+    setNewTestTitle("");
+    setNewTestType("quiz");
+    setNewTestFile(null);
+  };
+
+  const closeMaterialsModal = () => {
+    setMaterialsModalOpen(false);
+    setActiveTopicId(null);
+  };
+
+  const handleAddMaterial = async () => {
+    if (!token || !activeTopicId) return;
+    setNewMaterialLoading(true);
+    try {
+      if (newMaterialType === "file") {
+        if (!newMaterialFile) return;
+        await apiSubjectContentUploadFile(token, activeTopicId, newMaterialFile, newMaterialTitle || undefined);
+      } else {
+        if (!newMaterialUrl || !newMaterialTitle) return;
+        await apiSubjectContentCreateLink(token, activeTopicId, newMaterialTitle, newMaterialUrl);
+      }
+      setNewMaterialFile(null);
+      setNewMaterialTitle("");
+      setNewMaterialUrl("");
+      await reloadTopics();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setNewMaterialLoading(false);
+    }
+  };
+
+  const handleAddTest = async () => {
+    if (!token || !activeTopicId) return;
+    if (!activeTopic) return;
+    
+    // Check limit
+    if ((activeTopic.tests?.length || 0) >= 3) {
+      alert("Максимум 3 теста на одну тему");
+      return;
+    }
+
+    if (!newTestTitle) return;
+    setNewTestLoading(true);
+    try {
+      if (newTestType === "quiz") {
+        await apiSubjectContentCreateQuiz(token, activeTopicId, newTestTitle, 30);
+      } else {
+        if (!newTestFile) {
+           alert("Выберите файл теста");
+           return;
+        }
+        await apiSubjectContentCreateDocumentTest(token, activeTopicId, newTestTitle, newTestFile);
+      }
+      setNewTestTitle("");
+      setNewTestFile(null);
+      await reloadTopics();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setNewTestLoading(false);
+    }
+  };
+
 
   return (
     <AppShell
@@ -370,6 +464,8 @@ export function AdminSubjectsPage() {
         { to: `${base}/classes`, labelKey: "nav.groups" },
         { to: `${base}/streams`, labelKey: "nav.streams" },
         { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/courses`, labelKey: "nav.courses" },
+        { to: `${base}/meetings`, labelKey: "nav.meetings" },
         { to: `${base}/directions`, labelKey: "nav.directions" },
         { to: `${base}/timetable`, labelKey: "nav.timetable" },
         { to: `${base}/workload`, labelKey: "nav.workload" },
@@ -668,6 +764,9 @@ export function AdminSubjectsPage() {
                                 </>
                               ) : (
                                 <>
+                                  <button className="secondary" onClick={() => openMaterialsModal(topic)} disabled={loading} title="Материалы">
+                                    <Paperclip size={16} />
+                                  </button>
                                   <button className="secondary" onClick={() => startEditTopic(topic)} disabled={loading} title="Редактировать">
                                     <Edit2 size={16} />
                                   </button>
@@ -682,52 +781,6 @@ export function AdminSubjectsPage() {
                             </div>
                           </td>
                         </tr>
-                        {isEditing && (
-                          <tr style={{ background: "var(--color-bg-subtle)" }}>
-                            <td colSpan={9} style={{ padding: 12 }}>
-                                <div style={{ display: "flex", gap: 32 }}>
-                                   <div style={{ flex: 1 }}>
-                                     <strong style={{fontSize: 13}}>Материалы</strong>
-                                     <ul style={{ paddingLeft: 20, margin: "8px 0", fontSize: 13 }}>
-                                        {topic.materials?.map(m => (
-                                          <li key={m.id} style={{marginBottom: 4}}>
-                                            {m.title || "Файл"} <a href={m.signed_url || "#"} target="_blank" rel="noreferrer"><Download size={14} style={{verticalAlign: "middle"}}/></a>
-                                            <button className="secondary" style={{padding: 2, marginLeft: 8, border: "none", background: "transparent", color: "red", cursor:"pointer"}} onClick={() => handleDeleteMaterial(m.id)}><Trash2 size={14} style={{verticalAlign: "middle"}}/></button>
-                                          </li>
-                                        ))}
-                                     </ul>
-                                     <div style={{marginTop: 8}}>
-                                       <label style={{display:"block", fontSize:12, marginBottom:4}}>Добавить файл:</label>
-                                       <input type="file" style={{fontSize: 12}} onChange={(e) => {
-                                          const f = e.target.files?.[0];
-                                          if (f) handleUploadFileToTopic(topic.id, f).then(() => { e.target.value = ""; });
-                                       }} />
-                                     </div>
-                                   </div>
-                                   <div style={{ flex: 1 }}>
-                                      <strong style={{fontSize: 13}}>Тесты</strong>
-                                      <ul style={{ paddingLeft: 20, margin: "8px 0", fontSize: 13 }}>
-                                        {topic.tests?.map(t => (
-                                          <li key={t.id} style={{marginBottom: 4}}>
-                                            {t.title} <span style={{color: "gray", fontSize: 11}}>({t.test_type === "quiz" ? "Квиз" : "Файл"})</span>
-                                            <button className="secondary" style={{padding: 2, marginLeft: 8, border: "none", background: "transparent", color: "red", cursor:"pointer"}} onClick={() => handleDeleteTest(t.id)}><Trash2 size={14} style={{verticalAlign: "middle"}}/></button>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                      <div style={{display:"flex", gap:4, marginTop: 8}}>
-                                        <input id={`new-test-${topic.id}`} placeholder="Название квиза" style={{fontSize:12, padding: "4px 8px"}} />
-                                        <button className="secondary" style={{padding: "4px 8px", fontSize: 12}} onClick={() => {
-                                           const input = document.getElementById(`new-test-${topic.id}`) as HTMLInputElement;
-                                           if (input && input.value && token) {
-                                               apiSubjectContentCreateQuiz(token, topic.id, input.value, 30).then(() => { input.value = ""; reloadTopics(); });
-                                           }
-                                        }}>Создать</button>
-                                      </div>
-                                   </div>
-                                </div>
-                            </td>
-                          </tr>
-                        )}
                         </React.Fragment>
                       );
                     })}
@@ -807,29 +860,7 @@ export function AdminSubjectsPage() {
                       <tr className={styles.addExtrasRow}>
                         <td colSpan={9} style={{ padding: "0 12px 12px 12px", background: "var(--color-bg-subtle)" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-                                <div style={{ fontWeight: 600, fontSize: 13 }}>Материалы и Тесты</div>
-                                <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-                                    <div style={{ flex: 1, minWidth: 200 }}>
-                                        <label style={{ fontSize: 12, marginBottom: 4, display: "block" }}>Презентация / Файл</label>
-                                        <input type="file" onChange={(e) => setNewTopicFile(e.target.files?.[0] || null)} />
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: 200 }}>
-                                        <label style={{ fontSize: 12, marginBottom: 4, display: "block" }}>Добавить Тест (Опционально)</label>
-                                        <input 
-                                            placeholder="Название теста" 
-                                            value={newTopicTestTitle} 
-                                            onChange={(e) => setNewTopicTestTitle(e.target.value)} 
-                                            style={{ width: "100%", marginBottom: 4 }}
-                                        />
-                                        <div style={{ display: "flex", gap: 8, fontSize: 12 }}>
-                                            <label><input type="radio" checked={newTopicTestType === "quiz"} onChange={() => setNewTopicTestType("quiz")} /> Квиз</label>
-                                            <label><input type="radio" checked={newTopicTestType === "document"} onChange={() => setNewTopicTestType("document")} /> Файл</label>
-                                        </div>
-                                        {newTopicTestType === "document" && (
-                                            <input type="file" style={{ marginTop: 4 }} onChange={(e) => setNewTopicTestFile(e.target.files?.[0] || null)} />
-                                        )}
-                                    </div>
-                                </div>
+                                <div style={{ fontWeight: 600, fontSize: 13, opacity: 0.7 }}>Материалы можно будет добавить после создания темы</div>
                             </div>
                         </td>
                       </tr>
@@ -851,6 +882,136 @@ export function AdminSubjectsPage() {
             </div>
           </div>
         </div>
-      )}    </AppShell>
+      )}
+      {/* Materials Modal */}
+      {materialsModalOpen && activeTopic && (
+        <div className={styles.modalBackdrop} onClick={closeMaterialsModal}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ width: 800 }}>
+             <div className={styles.modalHeader}>
+                <h2 className={styles.modalTitle}>Материалы темы: {activeTopic.topic_name}</h2>
+                <button className={styles.closeButton} onClick={closeMaterialsModal}><X size={20} /></button>
+             </div>
+
+             <div className={styles.modalContent}>
+                
+                {/* Section: Presentations / Files / Links */}
+                <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--color-border)" }}>
+                   <h3 style={{ fontSize: 16, marginBottom: 12 }}>Презентации, файлы и ссылки</h3>
+                   
+                   {/* Existing Materials List */}
+                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                      {(activeTopic.materials || []).length === 0 && <span style={{ opacity: 0.6 }}>Нет материалов</span>}
+                      {activeTopic.materials?.map(m => (
+                        <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6 }}>
+                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                             {m.kind === "link" ? <LinkIcon size={16} /> : <Paperclip size={16} />}
+                             <a href={(m.kind === "link" ? m.url : m.signed_url) || "#"} target="_blank" rel="noreferrer" style={{ fontWeight: 500 }}>
+                               {m.title}
+                             </a>
+                             {m.kind === "link" && <span style={{ fontSize: 11, opacity: 0.6 }}>{m.url}</span>}
+                           </div>
+                           <button onClick={() => handleDeleteMaterial(m.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
+                              <Trash2 size={16} />
+                           </button>
+                        </div>
+                      ))}
+                   </div>
+
+                   {/* Add Material Form */}
+                   <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить новый материал</div>
+                      <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+                         <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                            <input type="radio" checked={newMaterialType === "file"} onChange={() => setNewMaterialType("file")} /> Файл / Презентация
+                         </label>
+                         <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                            <input type="radio" checked={newMaterialType === "link"} onChange={() => setNewMaterialType("link")} /> Ссылка
+                         </label>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                          {newMaterialType === "file" ? (
+                            <>
+                               <input type="text" placeholder="Название (опционально)" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} style={{ flex: 1 }} />
+                               <input type="file" onChange={(e) => setNewMaterialFile(e.target.files?.[0] || null)} style={{ width: 200 }} />
+                            </>
+                          ) : (
+                            <>
+                               <input type="text" placeholder="Название ссылки" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} style={{ flex: 1 }} />
+                               <input type="url" placeholder="URL (https://...)" value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} style={{ flex: 1 }} />
+                            </>
+                          )}
+                          <button className={styles.primaryButton} onClick={handleAddMaterial} disabled={newMaterialLoading}>
+                             {newMaterialLoading ? <Loader size="sm" /> : <Plus size={16} />} 
+                             Добавить
+                          </button>
+                      </div>
+                   </div>
+                </div>
+
+
+                {/* Section: Tests */}
+                <div>
+                  <h3 style={{ fontSize: 16, marginBottom: 12 }}>Тесты (максимум 3)</h3>
+                  
+                   {/* Existing Tests List */}
+                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                      {(activeTopic.tests || []).length === 0 && <span style={{ opacity: 0.6 }}>Нет тестов</span>}
+                      {activeTopic.tests?.map(t => (
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6 }}>
+                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                             <FlaskConical size={16} />
+                             <span style={{ fontWeight: 500 }}>{t.title}</span>
+                             <span style={{ fontSize: 11, padding: "2px 6px", background: "#ddd", borderRadius: 4 }}>
+                                {t.test_type === "quiz" ? "Квиз (30 мин)" : "Файл с тестом"}
+                             </span>
+                           </div>
+                           <button onClick={() => handleDeleteTest(t.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
+                              <Trash2 size={16} />
+                           </button>
+                        </div>
+                      ))}
+                   </div>
+                   
+                   {/* Add Test Form */}
+                   {(activeTopic.tests?.length || 0) < 3 ? (
+                      <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8 }}>
+                         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить новый тест</div>
+                         <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+                            <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                                <input type="radio" checked={newTestType === "quiz"} onChange={() => setNewTestType("quiz")} /> Онлайн-Квиз
+                            </label>
+                            <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                                <input type="radio" checked={newTestType === "document"} onChange={() => setNewTestType("document")} /> Файл (документ)
+                            </label>
+                         </div>
+
+                         <div style={{ display: "flex", gap: 8 }}>
+                            <input type="text" placeholder="Название теста" value={newTestTitle} onChange={(e) => setNewTestTitle(e.target.value)} style={{ flex: 1 }} />
+                            {newTestType === "document" && (
+                               <input type="file" onChange={(e) => setNewTestFile(e.target.files?.[0] || null)} style={{ width: 200 }} />
+                            )}
+                            <button className={styles.primaryButton} onClick={handleAddTest} disabled={newTestLoading}>
+                                {newTestLoading ? <Loader size="sm" /> : <Plus size={16} />}
+                                Создать
+                            </button>
+                         </div>
+                      </div>
+                   ) : (
+                      <div style={{ padding: 12, background: "#fff3cd", color: "#856404", borderRadius: 8, fontSize: 14 }}>
+                         Лимит тестов достигнут (3 из 3). Удалите старый тест, чтобы добавить новый.
+                      </div>
+                   )}
+                </div>
+
+             </div>
+             
+             <div className={styles.modalFooter}>
+                <button className={styles.secondaryButton} onClick={closeMaterialsModal}>Закрыть</button>
+             </div>
+          </div>
+        </div>
+      )}
+    </AppShell>
   );
 }

@@ -35,10 +35,8 @@ export default function StudentHomeworkPage() {
       nav={[
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/grades", labelKey: "nav.grades" },
-        { to: "/app/student/homework", labelKey: "nav.homework" },
-        { to: "/app/student/library", labelKey: "nav.library" },
-        { to: "/app/student/courses", labelKey: "nav.courses" },
+        { to: "/app/student/subjects", labelKey: "nav.subjects" },
+        { to: "/app/student/teachers", labelKey: "nav.teachers" },
       ]}
     >
       <h2>Домашнее задание</h2>

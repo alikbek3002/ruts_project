@@ -5,7 +5,7 @@ import styles from "./Loader.module.css";
 type LoaderProps = {
   text?: string;
   fullScreen?: boolean;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | number;
 };
 
 export function Loader({ text, fullScreen = false, size = "md" }: LoaderProps) {
