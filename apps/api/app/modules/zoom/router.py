@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional, Literal
 from urllib.parse import urlencode
 
 import httpx
