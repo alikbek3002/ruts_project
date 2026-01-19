@@ -135,6 +135,23 @@ export function AdminSubjectsPage() {
     if (can) reloadAll().catch((e) => setErr(String(e)));
   }, [can]);
 
+  const anyModalOpen = !!modalSubject || materialsModalOpen;
+  useEffect(() => {
+    if (!anyModalOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    const prevPaddingRight = document.body.style.paddingRight;
+
+    document.body.style.overflow = "hidden";
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollBarWidth > 0) document.body.style.paddingRight = `${scrollBarWidth}px`;
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPaddingRight;
+    };
+  }, [anyModalOpen]);
+
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager" && user.role !== "teacher") return <Navigate to="/app" replace />;
 
@@ -1028,7 +1045,7 @@ export function AdminSubjectsPage() {
                 <button className={styles.closeButton} onClick={closeMaterialsModal}><X size={20} /></button>
              </div>
 
-             <div className={styles.modalContent}>
+           <div className={styles.modalBody}>
                 
                 {/* Section: Presentations / Files / Links */}
                 <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--color-border)" }}>
