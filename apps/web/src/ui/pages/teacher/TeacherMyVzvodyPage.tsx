@@ -63,8 +63,7 @@ export function TeacherMyVzvodyPage() {
         { to: "/app/teacher/vzvody", labelKey: "nav.myVzvody" },
         { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
         { to: "/app/teacher/workload", labelKey: "nav.workload" },
-        { to: "/app/teacher/library", labelKey: "nav.library" },
-        { to: "/app/teacher/courses", labelKey: "nav.courses" },
+        { to: "/app/teacher/subjects", labelKey: "nav.subjects" },
       ]}
     >
       <div className={styles.container}>
