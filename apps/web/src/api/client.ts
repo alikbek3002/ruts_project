@@ -26,6 +26,8 @@ const AUTH_STORAGE_KEY = "ruts_auth";
 
 type LoadingListener = (isLoading: boolean) => void;
 
+const DEFAULT_FETCH_TIMEOUT_MS = 20000;
+
 let inFlightRequests = 0;
 const loadingListeners = new Set<LoadingListener>();
 
@@ -58,9 +60,30 @@ export function subscribeApiLoading(listener: LoadingListener): () => void {
 export async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   inFlightRequests += 1;
   emitLoading();
+  const hasSignal = !!init?.signal;
+  const controller = hasSignal ? null : new AbortController();
+  const timeoutId = controller
+    ? (globalThis.setTimeout(() => {
+        try {
+          controller.abort();
+        } catch {
+          // ignore
+        }
+      }, DEFAULT_FETCH_TIMEOUT_MS) as unknown as number)
+    : null;
   try {
-    return await fetch(input, init);
+    return await fetch(input, {
+      ...(init ?? {}),
+      signal: init?.signal ?? controller?.signal,
+    });
   } finally {
+    if (timeoutId != null) {
+      try {
+        globalThis.clearTimeout(timeoutId);
+      } catch {
+        // ignore
+      }
+    }
     inFlightRequests = Math.max(0, inFlightRequests - 1);
     emitLoading();
   }
@@ -206,6 +229,51 @@ function apiPut<T>(path: string, body: any, accessToken: string) {
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(body),
   });
+}
+
+async function apiPostForm<T>(path: string, formData: FormData, accessToken: string, _retry = true): Promise<T> {
+  let res: Response;
+  try {
+    res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+      credentials: "include",
+    });
+  } catch (e: any) {
+    const hint = API_BASE_PROBLEM
+      ? `${API_BASE_PROBLEM}. `
+      : "Не удалось подключиться к API. Проверь `VITE_API_URL`, CORS и доступность бэка. ";
+    const err: HttpError = new Error(`${hint}${String(e?.message ?? e ?? "")}`.trim()) as HttpError;
+    throw err;
+  }
+
+  if (res.status === 401 && _retry) {
+    const newToken = await refreshAccessTokenDedup();
+    if (newToken) return await apiPostForm<T>(path, formData, newToken, false);
+  }
+
+  if (!res.ok) {
+    const msg = await readErrorText(res);
+    let cleanMsg = msg;
+    try {
+      const json = JSON.parse(msg);
+      if (json && typeof json === "object" && (json as any).detail) {
+        const detail = (json as any).detail;
+        cleanMsg = typeof detail === "string" ? detail : JSON.stringify(detail);
+      }
+    } catch {
+      // ignore
+    }
+    const err: HttpError = new Error(cleanMsg || `HTTP ${res.status}`) as HttpError;
+    err.status = res.status;
+    err.bodyText = msg;
+    throw err;
+  }
+
+  return (await res.json()) as T;
 }
 
 export async function apiLogin(username: string, password: string) {
@@ -381,19 +449,12 @@ export async function apiSubjectContentUploadFile(
   const formData = new FormData();
   formData.append("file", file);
   if (title) formData.append("title", title);
-  
-  const res = await fetch(`${API_BASE}${withApiPrefix(`/subject-content/topics/${topicId}/materials/file`)}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Upload failed");
-  }
-  return await res.json();
+
+  return await apiPostForm<{ material: SubjectContentMaterial }>(
+    `/api/subject-content/topics/${topicId}/materials/file`,
+    formData,
+    token
+  );
 }
 
 export async function apiSubjectContentCreateLink(
@@ -430,6 +491,47 @@ export async function apiSubjectContentCreateQuiz(
   );
 }
 
+export async function apiSubjectContentCreateQuestion(
+  token: string,
+  testId: string,
+  questionText: string,
+  orderIndex: number
+) {
+  return apiPost<{ question: SubjectTestQuestion }>(
+    `/api/subject-content/tests/${encodeURIComponent(testId)}/questions`,
+    { question_text: questionText, order_index: orderIndex },
+    token
+  );
+}
+
+export async function apiSubjectContentDeleteQuestion(token: string, questionId: string) {
+  return http<{ ok: boolean }>(`/api/subject-content/questions/${encodeURIComponent(questionId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiSubjectContentCreateOption(
+  token: string,
+  questionId: string,
+  optionText: string,
+  isCorrect: boolean,
+  orderIndex: number
+) {
+  return apiPost<{ option: SubjectTestQuestionOption }>(
+    `/api/subject-content/questions/${encodeURIComponent(questionId)}/options`,
+    { option_text: optionText, is_correct: isCorrect, order_index: orderIndex },
+    token
+  );
+}
+
+export async function apiSubjectContentDeleteOption(token: string, optionId: string) {
+  return http<{ ok: boolean }>(`/api/subject-content/options/${encodeURIComponent(optionId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function apiSubjectContentCreateDocumentTest(
   token: string,
   topicId: string,
@@ -443,18 +545,11 @@ export async function apiSubjectContentCreateDocumentTest(
   formData.append("document", file);
   if (description) formData.append("description", description);
 
-  const res = await fetch(`${API_BASE}${withApiPrefix("/subject-content/tests/document")}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Create test failed");
-  }
-  return await res.json();
+  return await apiPostForm<{ test: SubjectContentTest }>(
+    `/api/subject-content/tests/document`,
+    formData,
+    token
+  );
 }
 
 export async function apiSubjectContentDeleteTest(token: string, testId: string) {
@@ -2033,8 +2128,16 @@ export async function apiDownloadTeachersWorkload(token: string): Promise<Blob> 
 }
 
 // Student API functions for Subject Tests
-export async function apiSubjectListQuestions(token: string, testId: string) {
-  return apiGet<{ questions: SubjectTestQuestion[] }>(`/api/subject-content/tests/${testId}/questions`, token);
+export async function apiSubjectListQuestions(
+  token: string,
+  testId: string,
+  params?: { attempt_id?: string; student_id?: string }
+) {
+  const qs = new URLSearchParams();
+  if (params?.attempt_id) qs.set("attempt_id", params.attempt_id);
+  if (params?.student_id) qs.set("student_id", params.student_id);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiGet<{ questions: SubjectTestQuestion[] }>(`/api/subject-content/tests/${testId}/questions${suffix}`, token);
 }
 
 export async function apiSubjectStartAttempt(token: string, testId: string, params?: { student_id?: string; class_id?: string }) {

@@ -1070,7 +1070,12 @@ def get_attempt(attempt_id: str, user: dict = require_role("admin", "teacher", "
 
 
 @router.get("/tests/{test_id}/questions")
-def list_questions(test_id: str, user: dict = require_role("admin", "teacher", "student", "manager")):
+def list_questions(
+    test_id: str,
+    attempt_id: str | None = None,
+    student_id: str | None = None,
+    user: dict = require_role("admin", "teacher", "student", "manager"),
+):
     sb = get_supabase()
 
     test = (
@@ -1085,6 +1090,35 @@ def list_questions(test_id: str, user: dict = require_role("admin", "teacher", "
         raise HTTPException(status_code=404, detail="Test not found")
     if test.get("test_type") != "quiz":
         raise HTTPException(status_code=400, detail="This endpoint is only for quiz tests")
+
+    reveal_correct = user.get("role") != "student"
+    if user.get("role") == "student" and attempt_id:
+        attempt = (
+            sb.table("subject_test_attempts")
+            .select("id,test_id,student_id,submitted_at")
+            .eq("id", attempt_id)
+            .single()
+            .execute()
+            .data
+        )
+        if not attempt:
+            raise HTTPException(status_code=404, detail="Attempt not found")
+        if str(attempt.get("test_id")) != str(test_id):
+            raise HTTPException(status_code=400, detail="Attempt does not belong to this test")
+        if not attempt.get("submitted_at"):
+            raise HTTPException(status_code=400, detail="Attempt is not submitted yet")
+
+        # Only reveal for own attempt. For shared student account, require explicit student_id match.
+        if _is_shared_student_account(user):
+            if not student_id:
+                raise HTTPException(status_code=400, detail="student_id is required for shared student account")
+            if str(attempt.get("student_id")) != str(student_id):
+                raise HTTPException(status_code=403, detail="Forbidden")
+        else:
+            if str(attempt.get("student_id")) != str(user.get("id")):
+                raise HTTPException(status_code=403, detail="Forbidden")
+
+        reveal_correct = True
 
     questions = (
         sb.table("subject_test_questions")
@@ -1111,7 +1145,7 @@ def list_questions(test_id: str, user: dict = require_role("admin", "teacher", "
         )
         for o in opts:
             qid = str(o.get("question_id"))
-            if user.get("role") == "student":
+            if not reveal_correct:
                 options_by_q.setdefault(qid, []).append(
                     {
                         "id": o.get("id"),

@@ -33,6 +33,8 @@ export function StudentSubjectViewPage() {
   const [classId, setClassId] = useState<string>("");
   const [students, setStudents] = useState<ClassStudent[]>([]);
   const [studentId, setStudentId] = useState<string>("");
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [studentsLoading, setStudentsLoading] = useState(false);
 
   const [title, setTitle] = useState<string>("Предмет");
   const [topics, setTopics] = useState<SubjectContentTopic[]>([]);
@@ -56,9 +58,11 @@ export function StudentSubjectViewPage() {
 
   useEffect(() => {
     if (!token || !isSharedStudent) return;
+    setClassesLoading(true);
     apiListClasses(token)
       .then((r) => setClasses(r.classes || []))
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setClassesLoading(false));
   }, [token, isSharedStudent]);
 
   useEffect(() => {
@@ -68,9 +72,11 @@ export function StudentSubjectViewPage() {
       setStudentId("");
       return;
     }
+    setStudentsLoading(true);
     apiGetClass(token, classId)
       .then((r) => setStudents(r.students || []))
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setStudentsLoading(false));
   }, [token, isSharedStudent, classId]);
 
   useEffect(() => {
@@ -145,7 +151,13 @@ export function StudentSubjectViewPage() {
       }));
       await apiSubjectSubmitAttempt(token, attemptId, arr, isSharedStudent ? { class_id: classId, student_id: studentId } : undefined);
       const details = await apiSubjectGetAttempt(token, attemptId);
-      const qs = (await apiSubjectListQuestions(token, activeTestId)).questions;
+      const qs = (
+        await apiSubjectListQuestions(
+          token,
+          activeTestId,
+          isSharedStudent ? { attempt_id: attemptId, student_id: studentId } : { attempt_id: attemptId }
+        )
+      ).questions;
       setQuestions(qs || []);
       setSubmitted(true);
       setResultAttempt(details.attempt);
@@ -186,8 +198,21 @@ export function StudentSubjectViewPage() {
             <h2 style={{ marginTop: 0 }}>Выберите группу и себя</h2>
             <p style={{ opacity: 0.8, marginTop: 0 }}>Нужно для записи результата в журнал.</p>
 
+            {error && <div className={styles.error}>{error}</div>}
+
+            {classesLoading ? (
+              <div className={styles.muted}>Загрузка групп...</div>
+            ) : classes.length === 0 ? (
+              <div className={styles.muted}>Нет доступных групп</div>
+            ) : null}
+
             <label className={styles.label}>Группа</label>
-            <select value={classId} onChange={(e) => setClassId(e.target.value)} className={styles.select}>
+            <select
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+              className={styles.select}
+              disabled={classesLoading}
+            >
               <option value="">— выберите группу —</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -203,7 +228,7 @@ export function StudentSubjectViewPage() {
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
               className={styles.select}
-              disabled={!classId}
+              disabled={!classId || studentsLoading || classesLoading}
             >
               <option value="">— выберите себя —</option>
               {students.map((s) => (
@@ -213,9 +238,25 @@ export function StudentSubjectViewPage() {
               ))}
             </select>
 
+            {classId ? (
+              studentsLoading ? (
+                <div className={styles.muted} style={{ marginTop: 8 }}>
+                  Загрузка учеников...
+                </div>
+              ) : students.length === 0 ? (
+                <div className={styles.muted} style={{ marginTop: 8 }}>
+                  В этой группе пока нет учеников
+                </div>
+              ) : null
+            ) : null}
+
             <div style={{ height: 12 }} />
 
-            <button className={styles.primaryButton} disabled={!classId || !studentId} onClick={() => load()}>
+            <button
+              className={styles.primaryButton}
+              disabled={!classId || !studentId || classesLoading || studentsLoading}
+              onClick={() => load()}
+            >
               Открыть предмет
             </button>
           </div>

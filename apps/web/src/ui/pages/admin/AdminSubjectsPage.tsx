@@ -14,6 +14,11 @@ import {
   apiSubjectContentUploadFile,
   apiSubjectContentCreateLink,
   apiSubjectContentCreateQuiz,
+  apiSubjectContentCreateQuestion,
+  apiSubjectContentDeleteQuestion,
+  apiSubjectContentCreateOption,
+  apiSubjectContentDeleteOption,
+  apiSubjectListQuestions,
   apiSubjectContentCreateDocumentTest,
   apiSubjectContentDeleteMaterial,
   apiSubjectContentDeleteTest,
@@ -23,6 +28,8 @@ import {
   type SubjectContentTopic,
   type SubjectContentMaterial,
   type SubjectContentTest,
+  type SubjectTestQuestion,
+  type SubjectTestQuestionOption,
   getSubjectTopicsExportUrl,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
@@ -94,6 +101,15 @@ export function AdminSubjectsPage() {
   const [newTestType, setNewTestType] = useState<"quiz" | "document">("quiz");
   const [newTestFile, setNewTestFile] = useState<File | null>(null); // For document test
   const [newTestLoading, setNewTestLoading] = useState(false);
+
+  // Quiz editor
+  const [editingQuizTestId, setEditingQuizTestId] = useState<string | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<SubjectTestQuestion[]>([]);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [newQuestionText, setNewQuestionText] = useState("");
+  const [newOptionTexts, setNewOptionTexts] = useState<string[]>(["", "", "", ""]);
+  const [newCorrectIndex, setNewCorrectIndex] = useState<number>(0);
+  const [quizSaving, setQuizSaving] = useState(false);
 
   const activeTopic = useMemo(() => {
     return modalTopics.find(t => t.id === activeTopicId);
@@ -386,11 +402,126 @@ export function AdminSubjectsPage() {
     setNewTestTitle("");
     setNewTestType("quiz");
     setNewTestFile(null);
+
+    setEditingQuizTestId(null);
+    setQuizQuestions([]);
+    setNewQuestionText("");
+    setNewOptionTexts(["", "", "", ""]);
+    setNewCorrectIndex(0);
   };
 
   const closeMaterialsModal = () => {
     setMaterialsModalOpen(false);
     setActiveTopicId(null);
+
+    setEditingQuizTestId(null);
+    setQuizQuestions([]);
+  };
+
+  const loadQuizQuestions = async (testId: string) => {
+    if (!token) return;
+    setQuizLoading(true);
+    try {
+      const res = await apiSubjectListQuestions(token, testId);
+      setQuizQuestions(res.questions || []);
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const openQuizEditor = async (testId: string) => {
+    setEditingQuizTestId(testId);
+    await loadQuizQuestions(testId);
+  };
+
+  const closeQuizEditor = () => {
+    setEditingQuizTestId(null);
+    setQuizQuestions([]);
+    setNewQuestionText("");
+    setNewOptionTexts(["", "", "", ""]);
+    setNewCorrectIndex(0);
+  };
+
+  const addQuizQuestion = async () => {
+    if (!token || !editingQuizTestId) return;
+
+    const qText = (newQuestionText || "").trim();
+    if (!qText) {
+      alert("Введите текст вопроса");
+      return;
+    }
+
+    const options = newOptionTexts.map((x) => (x || "").trim());
+    const nonEmpty = options
+      .map((text, idx) => ({ text, idx }))
+      .filter((x) => !!x.text);
+
+    if (nonEmpty.length < 2) {
+      alert("Добавьте минимум 2 варианта ответа");
+      return;
+    }
+
+    const correct = nonEmpty.find((x) => x.idx === newCorrectIndex);
+    if (!correct) {
+      alert("Выберите правильный вариант (он должен быть заполнен)");
+      return;
+    }
+
+    setQuizSaving(true);
+    try {
+      const orderIndex = (quizQuestions || []).length;
+      const created = await apiSubjectContentCreateQuestion(token, editingQuizTestId, qText, orderIndex);
+      const qid = created.question?.id;
+      if (!qid) throw new Error("Не удалось создать вопрос");
+
+      for (let i = 0; i < nonEmpty.length; i++) {
+        const item = nonEmpty[i];
+        await apiSubjectContentCreateOption(token, qid, item.text, item.idx === newCorrectIndex, i);
+      }
+
+      setNewQuestionText("");
+      setNewOptionTexts(["", "", "", ""]);
+      setNewCorrectIndex(0);
+
+      await loadQuizQuestions(editingQuizTestId);
+      await reloadTopics();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setQuizSaving(false);
+    }
+  };
+
+  const deleteQuizQuestion = async (questionId: string) => {
+    if (!token || !editingQuizTestId) return;
+    if (!window.confirm("Удалить вопрос?")) return;
+    setQuizSaving(true);
+    try {
+      await apiSubjectContentDeleteQuestion(token, questionId);
+      await loadQuizQuestions(editingQuizTestId);
+      await reloadTopics();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setQuizSaving(false);
+    }
+  };
+
+  const deleteQuizOption = async (optionId: string) => {
+    if (!token || !editingQuizTestId) return;
+    if (!window.confirm("Удалить вариант ответа?")) return;
+    setQuizSaving(true);
+    try {
+      await apiSubjectContentDeleteOption(token, optionId);
+      await loadQuizQuestions(editingQuizTestId);
+      await reloadTopics();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setQuizSaving(false);
+    }
   };
 
   const handleAddMaterial = async () => {
@@ -429,7 +560,13 @@ export function AdminSubjectsPage() {
     setNewTestLoading(true);
     try {
       if (newTestType === "quiz") {
-        await apiSubjectContentCreateQuiz(token, activeTopicId, newTestTitle, 30);
+        const created = await apiSubjectContentCreateQuiz(token, activeTopicId, newTestTitle, 30);
+        const newId = created.test?.id;
+        setNewTestTitle("");
+        setNewTestFile(null);
+        await reloadTopics();
+        if (newId) await openQuizEditor(newId);
+        return;
       } else {
         if (!newTestFile) {
            alert("Выберите файл теста");
@@ -957,20 +1094,140 @@ export function AdminSubjectsPage() {
                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                       {(activeTopic.tests || []).length === 0 && <span style={{ opacity: 0.6 }}>Нет тестов</span>}
                       {activeTopic.tests?.map(t => (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6 }}>
-                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6, gap: 12 }}>
+                           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                              <FlaskConical size={16} />
                              <span style={{ fontWeight: 500 }}>{t.title}</span>
                              <span style={{ fontSize: 11, padding: "2px 6px", background: "#ddd", borderRadius: 4 }}>
                                 {t.test_type === "quiz" ? "Квиз (30 мин)" : "Файл с тестом"}
                              </span>
                            </div>
-                           <button onClick={() => handleDeleteTest(t.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
-                              <Trash2 size={16} />
-                           </button>
+                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                             {t.test_type === "quiz" ? (
+                               <button className={styles.secondaryButton} onClick={() => openQuizEditor(t.id)} disabled={quizLoading || newTestLoading}>
+                                 Редактировать
+                               </button>
+                             ) : null}
+                             <button onClick={() => handleDeleteTest(t.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
+                                <Trash2 size={16} />
+                             </button>
+                           </div>
                         </div>
                       ))}
                    </div>
+
+                   {editingQuizTestId && (
+                     <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                         <div style={{ fontWeight: 700, fontSize: 13 }}>Редактор квиза</div>
+                         <button className={styles.secondaryButton} onClick={closeQuizEditor} disabled={quizSaving || quizLoading}>
+                           Закрыть редактор
+                         </button>
+                       </div>
+
+                       {quizLoading ? (
+                         <Loader text="Загрузка вопросов..." />
+                       ) : (
+                         <>
+                           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                             {quizQuestions.length === 0 ? (
+                               <div style={{ opacity: 0.7 }}>Пока нет вопросов. Добавьте первый ниже.</div>
+                             ) : (
+                               quizQuestions.map((q, qi) => (
+                                 <div key={q.id} style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 8, padding: 10 }}>
+                                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                                     <div style={{ fontWeight: 600 }}>
+                                       {qi + 1}. {q.question_text}
+                                     </div>
+                                     <button
+                                       onClick={() => deleteQuizQuestion(q.id)}
+                                       className={styles.iconButton}
+                                       style={{ color: "var(--color-danger)" }}
+                                       title="Удалить вопрос"
+                                       disabled={quizSaving}
+                                     >
+                                       <Trash2 size={16} />
+                                     </button>
+                                   </div>
+
+                                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                     {(q.options || []).length === 0 ? (
+                                       <div style={{ opacity: 0.7, fontSize: 13 }}>Нет вариантов ответа</div>
+                                     ) : (
+                                       (q.options as any as SubjectTestQuestionOption[]).map((o, oi) => (
+                                         <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                             <div style={{ width: 18, textAlign: "center", opacity: 0.8 }}>{oi + 1}.</div>
+                                             <div style={{ fontSize: 13 }}>{o.option_text}</div>
+                                             {(o as any).is_correct ? (
+                                               <span style={{ fontSize: 11, padding: "2px 6px", background: "var(--color-bg-subtle)", border: "1px solid var(--color-border)", borderRadius: 999 }}>
+                                                 Правильный
+                                               </span>
+                                             ) : null}
+                                           </div>
+                                           <button
+                                             onClick={() => deleteQuizOption(o.id)}
+                                             className={styles.iconButton}
+                                             style={{ color: "var(--color-danger)" }}
+                                             title="Удалить вариант"
+                                             disabled={quizSaving}
+                                           >
+                                             <Trash2 size={16} />
+                                           </button>
+                                         </div>
+                                       ))
+                                     )}
+                                   </div>
+                                 </div>
+                               ))
+                             )}
+                           </div>
+
+                           <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 8, padding: 10 }}>
+                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить вопрос</div>
+                             <textarea
+                               placeholder="Текст вопроса"
+                               value={newQuestionText}
+                               onChange={(e) => setNewQuestionText(e.target.value)}
+                               style={{ width: "100%", minHeight: 70, resize: "vertical", marginBottom: 10 }}
+                             />
+
+                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Варианты (выберите правильный)</div>
+                             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                               {newOptionTexts.map((val, idx) => (
+                                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                   <input
+                                     type="radio"
+                                     checked={newCorrectIndex === idx}
+                                     onChange={() => setNewCorrectIndex(idx)}
+                                     title="Правильный"
+                                   />
+                                   <input
+                                     type="text"
+                                     placeholder={`Вариант ${idx + 1}`}
+                                     value={val}
+                                     onChange={(e) =>
+                                       setNewOptionTexts((prev) => {
+                                         const next = [...prev];
+                                         next[idx] = e.target.value;
+                                         return next;
+                                       })
+                                     }
+                                     style={{ flex: 1 }}
+                                   />
+                                 </div>
+                               ))}
+                             </div>
+
+                             <button className={styles.primaryButton} onClick={addQuizQuestion} disabled={quizSaving}>
+                               {quizSaving ? <Loader size="sm" /> : <Plus size={16} />}
+                               Добавить вопрос
+                             </button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   )}
                    
                    {/* Add Test Form */}
                    {(activeTopic.tests?.length || 0) < 3 ? (
