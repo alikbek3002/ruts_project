@@ -154,42 +154,59 @@ def _get_valid_access_token(teacher_id: str) -> str:
 
 
 class ZoomMeetingCreateIn(BaseModel):
-    timetableEntryId: str
+    timetableEntryId: Optional[str] = None
     startsAt: str
+    title: Optional[str] = None
+    targetAudience: Optional[Literal["teachers", "students", "class"]] = None
+    classId: Optional[str] = None
 
 
 @router.post("/meetings")
-def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("teacher", "admin")):
-    """Create a Zoom meeting for a timetable entry"""
+def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("teacher", "admin", "manager")):
+    """Create a Zoom meeting for a timetable entry or a custom meeting"""
     # startsAt: local ISO datetime (e.g. 2025-12-22T09:00:00) interpreted in settings.app_timezone
     access_token = _get_valid_access_token(user["id"])
 
     timetableEntryId = payload_in.timetableEntryId
     startsAt = payload_in.startsAt
-
+    targetAudience = payload_in.targetAudience or "class"
+    
     sb = get_supabase()
-    entry = (
-        sb.table("timetable_entries")
-        .select("id,class_id,teacher_id,subject,start_time,end_time, classes(name)")
-        .eq("id", timetableEntryId)
-        .single()
-        .execute()
-        .data
-    )
-    if not entry:
-        raise HTTPException(status_code=404, detail="Timetable entry not found")
-    if user["role"] == "teacher" and entry.get("teacher_id") != user["id"]:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    topic = payload_in.title or "Meeting"
+    duration = 40 # default
 
-    class_name = (entry.get("classes") or {}).get("name")
-    topic = f"{class_name} - {entry.get('subject')}" if class_name else str(entry.get("subject") or "Lesson")
+    if timetableEntryId:
+        entry = (
+            sb.table("timetable_entries")
+            .select("id,class_id,teacher_id,subject,start_time,end_time, classes(name)")
+            .eq("id", timetableEntryId)
+            .single()
+            .execute()
+            .data
+        )
+        if not entry:
+            raise HTTPException(status_code=404, detail="Timetable entry not found")
+        # Teacher can only create for their own entry, Admin for any
+        if user["role"] == "teacher" and entry.get("teacher_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
-    # duration in minutes from start/end times
-    def _to_minutes(t: str) -> int:
-        hh, mm, *_ = t.split(":")
-        return int(hh) * 60 + int(mm)
+        class_name = (entry.get("classes") or {}).get("name")
+        topic = f"{class_name} - {entry.get('subject')}" if class_name else str(entry.get("subject") or "Lesson")
 
-    duration = max(15, _to_minutes(entry["end_time"]) - _to_minutes(entry["start_time"]))
+        # duration in minutes from start/end times
+        def _to_minutes(t: str) -> int:
+            hh, mm, *_ = t.split(":")
+            return int(hh) * 60 + int(mm)
+
+        duration = max(15, _to_minutes(entry["end_time"]) - _to_minutes(entry["start_time"]))
+    else:
+        # Custom meeting (Admin/Manager only, or Teacher for general?)
+        # For now let Admin/Manager create custom meetings
+        if user["role"] not in ["admin", "manager"]:
+             raise HTTPException(status_code=403, detail="Only admins can create custom meetings")
+        
+        if not payload_in.title:
+            topic = "General Meeting"
 
     payload = {
         "topic": topic,
@@ -217,23 +234,33 @@ def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("t
     zoom_meeting_id = str(m.get("id"))
     join_url = m.get("join_url")
 
-    db_resp = sb.table("zoom_meetings").insert(
-        {
-            "timetable_entry_id": timetableEntryId,
-            "starts_at": startsAt,
-            "zoom_meeting_id": zoom_meeting_id,
-            "join_url": join_url,
-            "start_url": m.get("start_url"),
-            "created_by": user["id"],
-        }
-    ).execute()
+    # Insert into DB
+    insert_data = {
+        "starts_at": startsAt,
+        "zoom_meeting_id": zoom_meeting_id,
+        "join_url": join_url,
+        "start_url": m.get("start_url"),
+        "created_by": user["id"],
+        "title": topic,
+        "target_audience": targetAudience,
+    }
+    
+    if timetableEntryId:
+        insert_data["timetable_entry_id"] = timetableEntryId
+        insert_data["target_audience"] = "class" # implied
+    
+    if payload_in.classId:
+        insert_data["class_id"] = payload_in.classId
+        insert_data["target_audience"] = "class"
+
+    db_resp = sb.table("zoom_meetings").insert(insert_data).execute()
 
     meeting = db_resp.data[0] if isinstance(db_resp.data, list) and db_resp.data else db_resp.data
     return {"meeting": meeting}
 
 
 @router.get("/meetings")
-def list_meetings(user: dict = require_role("teacher", "admin", "student")):
+def list_meetings(user: dict = require_role("teacher", "admin", "student", "manager")):
     """List all upcoming Zoom meetings for the user"""
     sb = get_supabase()
     
@@ -241,40 +268,70 @@ def list_meetings(user: dict = require_role("teacher", "admin", "student")):
     now = datetime.now(tz=timezone.utc)
     
     if user["role"] == "teacher":
-        # Get meetings created by this teacher
+        # Teachers see their own meetings OR meetings targeted at 'teachers'
+        # OR meetings they created
+        
+        # Simple logical OR in supabase is tricky with different conditions.
+        # We'll fetch all relevant meetings and filter or use .or_()
+        
+        # meetings created by me OR target_audience = 'teachers'
+        
         resp = (
             sb.table("zoom_meetings")
-            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
-            .eq("created_by", user["id"])
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,title,target_audience,timetable_entries(subject,start_time,end_time,classes(name))")
+            .or_(f"created_by.eq.{user['id']},target_audience.eq.teachers")
             .gte("starts_at", now.isoformat())
             .order("starts_at", desc=False)
             .limit(50)
             .execute()
         )
     elif user["role"] == "student":
-        # Students see all meetings (shared account can view all classes)
-        # Get all timetable entries
+        # Students see meetings for their class or target_audience='students' (global) 
+        # For now, let's assume global 'students' audience is visible to all students.
+        # And class-specific meetings (via timetable or class_id)
+        
+        # 1. Get student's class_id ?? Wait, student user might be shared or linked.
+        # Ideally we know the student's class. For shared 'student' account, we might see everything or select? 
+        # Existing logic used `timetable_entries` list.
+        
+        # Existing logic:
         timetable_resp = sb.table("timetable_entries").select("id").execute()
         timetable_ids = [t["id"] for t in (timetable_resp.data or [])]
         
         if not timetable_ids:
-            return {"meetings": []}
+            # Fallback to check if there are any global student meetings
+             resp = (
+                sb.table("zoom_meetings")
+                .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,created_at,title,target_audience,timetable_entries(subject,start_time,end_time,classes(name))")
+                .eq("target_audience", "students")
+                .gte("starts_at", now.isoformat())
+                .limit(50)
+                .execute()
+            )
+             return {"meetings": resp.data or []}
+
+        # Get meetings for those timetable entries OR target_audience='students'
+        # .in_() doesn't mix well with .or_() in simple query builder for complex logic sometimes.
+        # Let's try: timetable_entry_id.in.(...ids),target_audience.eq.students
         
-        # Get meetings for those timetable entries
+        ids_str = ",".join(timetable_ids)
+        # Query: (timetable_entry_id in ids) OR (target_audience = 'students')
+        # Supabase syntax: .or_(f"timetable_entry_id.in.({ids_str}),target_audience.eq.students")
+        
         resp = (
             sb.table("zoom_meetings")
-            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
-            .in_("timetable_entry_id", timetable_ids)
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,created_at,title,target_audience,timetable_entries(subject,start_time,end_time,classes(name))")
+            .or_(f"timetable_entry_id.in.({ids_str}),target_audience.eq.students")
             .gte("starts_at", now.isoformat())
             .order("starts_at", desc=False)
             .limit(50)
             .execute()
         )
-    else:  # admin
+    else:  # admin/manager
         # Get all meetings
         resp = (
             sb.table("zoom_meetings")
-            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,timetable_entries(subject,start_time,end_time,classes(name))")
+            .select("id,timetable_entry_id,starts_at,zoom_meeting_id,join_url,start_url,created_at,title, target_audience,timetable_entries(subject,start_time,end_time,classes(name))")
             .gte("starts_at", now.isoformat())
             .order("starts_at", desc=False)
             .limit(50)

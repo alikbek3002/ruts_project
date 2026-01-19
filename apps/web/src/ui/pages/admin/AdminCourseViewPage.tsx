@@ -64,7 +64,8 @@ export function AdminCourseViewPage() {
       title={user.role === "manager" ? "Менеджер → Курс" : "Админ → Курс"}
       nav={[
         { to: base, labelKey: "nav.home" },
-        { to: `${base}/courses`, labelKey: "nav.courses" },
+                { to: `${base}/subjects`, labelKey: "nav.subjects" },
+        { to: `${base}/meetings`, labelKey: "nav.meetings" },
       ]}
     >
       <div className={styles.container}>

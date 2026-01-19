@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Video, ExternalLink, Trash2 } from "lucide-react";
-import { apiDeleteZoomMeeting, apiListZoomMeetings, type ZoomMeeting } from "../../../api/client";
+import { Video, Trash2, Plus, X, ExternalLink } from "lucide-react";
+import { 
+  apiDeleteZoomMeeting, 
+  apiListZoomMeetings, 
+  apiCreateCustomZoomMeeting,
+  apiListClasses,
+  type ZoomMeeting,
+  type ClassItem
+} from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
@@ -22,6 +29,18 @@ export function AdminMeetingsPage() {
   const [meetings, setMeetings] = useState<ZoomMeeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Create Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  
+  // Form State
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [audience, setAudience] = useState<"teachers" | "class">("class");
+  const [selectedClassId, setSelectedClassId] = useState("");
 
   const base = user?.role === "manager" ? "/app/manager" : "/app/admin";
 
@@ -40,6 +59,13 @@ export function AdminMeetingsPage() {
     }
   }
 
+  useEffect(() => {
+    if (can && token) {
+      reload();
+      apiListClasses(token).then(r => setClasses(r.classes || [])).catch(console.error);
+    }
+  }, [can, token]);
+
   async function onDelete(meetingId: string) {
     if (!token) return;
     if (!window.confirm("Удалить конференцию?") ) return;
@@ -51,10 +77,37 @@ export function AdminMeetingsPage() {
     }
   }
 
-  useEffect(() => {
-    if (can) reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [can]);
+  async function handleCreate() {
+    if (!title || !date || !time) {
+      alert("Заполните все поля");
+      return;
+    }
+    if (audience === "class" && !selectedClassId) {
+      alert("Выберите группу");
+      return;
+    }
+    
+    setCreateLoading(true);
+    try {
+      const startsAt = `${date}T${time}:00`; // Local time, backend handles timezone
+      await apiCreateCustomZoomMeeting(token as string, {
+        title,
+        startsAt,
+        targetAudience: audience,
+        classId: audience === "class" ? selectedClassId : undefined
+      });
+      setIsModalOpen(false);
+      setTitle("");
+      setDate("");
+      setTime("");
+      setSelectedClassId("");
+      await reload();
+    } catch (e: any) {
+      alert(e.message || "Ошибка создания");
+    } finally {
+      setCreateLoading(false);
+    }
+  }
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
@@ -68,14 +121,18 @@ export function AdminMeetingsPage() {
         { to: `${base}/classes`, labelKey: "nav.groups" },
         { to: `${base}/streams`, labelKey: "nav.streams" },
         { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/courses`, labelKey: "nav.courses" },
         { to: `${base}/meetings`, labelKey: "nav.meetings" },
         { to: `${base}/timetable`, labelKey: "nav.timetable" },
       ]}
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <h2>Конференции (Zoom)</h2>
+          <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+            <h2>Конференции (Zoom)</h2>
+            <button className={styles.createBtn} onClick={() => setIsModalOpen(true)}>
+              <Plus size={16} /> Создать
+            </button>
+          </div>
           <button className={styles.refreshBtn} onClick={reload} disabled={loading}>
             Обновить
           </button>
@@ -92,8 +149,8 @@ export function AdminMeetingsPage() {
         ) : (
           <div className={styles.list}>
             {meetings.map((m) => {
-              const subject = m.timetable_entries?.subject || "Занятие";
-              const className = m.timetable_entries?.classes?.name;
+              const subject = m.title || m.timetable_entries?.subject || "Занятие";
+              const className = m.timetable_entries?.classes?.name || (m.target_audience === 'teachers' ? 'Все учителя' : '—');
               const time = fmtStartsAt(m.starts_at);
               return (
                 <div key={m.id} className={styles.item}>
@@ -124,6 +181,96 @@ export function AdminMeetingsPage() {
           </div>
         )}
       </div>
+      
+      {isModalOpen && (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h3>Создать конференцию</h3>
+              <button 
+                className={styles.closeBtn} 
+                onClick={() => setIsModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className={styles.modalBody}>
+              <label>Название</label>
+              <input 
+                type="text" 
+                value={title} 
+                onChange={e => setTitle(e.target.value)} 
+                placeholder="Например: Общее собрание"
+                className={styles.input}
+              />
+              
+              <div className={styles.row}>
+                <div>
+                  <label>Дата</label>
+                  <input 
+                    type="date" 
+                    value={date} 
+                    onChange={e => setDate(e.target.value)}
+                    className={styles.input}
+                  />
+                </div>
+                <div>
+                  <label>Время</label>
+                  <input 
+                    type="time" 
+                    value={time} 
+                    onChange={e => setTime(e.target.value)}
+                    className={styles.input}
+                  />
+                </div>
+              </div>
+              
+              <label>Кто участвует?</label>
+              <div className={styles.audienceSwitch}>
+                <button 
+                  className={audience === "class" ? styles.active : ""}
+                  onClick={() => setAudience("class")}
+                >
+                  Для учеников
+                </button>
+                <button 
+                  className={audience === "teachers" ? styles.active : ""}
+                  onClick={() => setAudience("teachers")}
+                >
+                  Для учителей
+                </button>
+              </div>
+              
+              {audience === "class" && (
+                <>
+                  <label>Группа</label>
+                  <select 
+                    value={selectedClassId} 
+                    onChange={e => setSelectedClassId(e.target.value)}
+                    className={styles.select}
+                  >
+                    <option value="">— Выберите группу —</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+              
+              <div className={styles.modalFooter}>
+                <button 
+                  onClick={handleCreate} 
+                  disabled={createLoading}
+                  className={styles.primaryBtn}
+                >
+                  {createLoading ? "Создание..." : "Создать конференцию"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

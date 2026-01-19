@@ -490,7 +490,6 @@ export function AdminTimetablePage() {
         { to: `${base}/classes`, labelKey: "nav.groups" },
         { to: `${base}/streams`, labelKey: "nav.streams" },
         { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/courses`, labelKey: "nav.courses" },
         { to: `${base}/meetings`, labelKey: "nav.meetings" },
         { to: `${base}/directions`, labelKey: "nav.directions" },
         { to: `${base}/timetable`, labelKey: "nav.timetable" },

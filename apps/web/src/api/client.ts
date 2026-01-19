@@ -1083,6 +1083,9 @@ export type ZoomMeeting = {
   join_url: string;
   start_url?: string | null;
   created_at: string;
+  title?: string;
+  target_audience?: "teachers" | "students" | "class";
+  class_id?: string;
   timetable_entries?: {
     subject: string;
     start_time: string;
@@ -1091,9 +1094,21 @@ export type ZoomMeeting = {
   };
 };
 
+export type ZoomMeetingPayload = {
+  timetableEntryId?: string;
+  startsAt: string;
+  title?: string;
+  targetAudience?: "teachers" | "students" | "class";
+  classId?: string;
+};
+
 export async function apiCreateZoomMeetingNew(token: string, timetableEntryId: string, startsAtLocalISO: string) {
   const body = { timetableEntryId, startsAt: startsAtLocalISO };
   return apiPost<{ meeting: ZoomMeeting }>("/zoom/meetings", body, token);
+}
+
+export async function apiCreateCustomZoomMeeting(token: string, payload: ZoomMeetingPayload) {
+  return apiPost<{ meeting: ZoomMeeting }>("/zoom/meetings", payload, token);
 }
 
 export async function apiListZoomMeetings(token: string) {
