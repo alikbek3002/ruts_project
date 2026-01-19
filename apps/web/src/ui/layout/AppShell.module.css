@@ -20,19 +20,16 @@
   padding: 0 var(--spacing-lg);
   display: flex;
   gap: var(--spacing-lg);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  height: 48px; /* Fixed height for nav bar */
+  flex-wrap: wrap;
+  row-gap: var(--spacing-sm);
+  padding-top: 8px;
+  padding-bottom: 8px;
+  min-height: 48px;
   align-items: center;
 }
 
-.navContainer::-webkit-scrollbar {
-  height: 0; /* Hide scrollbar */
-  width: 0;
-}
-
 .navLink {
-  height: 100%;
+  height: 32px;
   display: flex;
   align-items: center;
   padding: 0 var(--spacing-xs);
@@ -71,6 +68,8 @@
   .navContainer {
     padding: 0 var(--spacing-md);
     gap: var(--spacing-md);
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
   
   .navLink {

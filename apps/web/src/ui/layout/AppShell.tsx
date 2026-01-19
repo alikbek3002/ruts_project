@@ -23,15 +23,17 @@ export function AppShell(props: {
       <Header title={title} />
       <nav className={styles.nav}>
         <div className={styles.navContainer}>
-          {props.nav.map((n) => (
-            <Link
-              key={n.to}
-              to={n.to}
-              className={`${styles.navLink} ${location.pathname === n.to ? styles.active : ""}`}
-            >
-              {n.labelKey ? t(n.labelKey) : n.label}
-            </Link>
-          ))}
+          {props.nav.map((n) => {
+            const isActive =
+              location.pathname === n.to ||
+              (n.to !== "/" && location.pathname.startsWith(n.to.endsWith("/") ? n.to : `${n.to}/`));
+
+            return (
+              <Link key={n.to} to={n.to} className={`${styles.navLink} ${isActive ? styles.active : ""}`}>
+                {n.labelKey ? t(n.labelKey) : n.label}
+              </Link>
+            );
+          })}
         </div>
       </nav>
       <main className={styles.content}>{props.children}</main>
