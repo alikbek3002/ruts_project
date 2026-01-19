@@ -60,6 +60,10 @@ frontend_origin = _normalize_origin(settings.app_frontend_base)
 if frontend_origin:
     origins_set.add(frontend_origin)
 
+# Explicitly add production domains
+origins_set.add("https://ruts-edu.online")
+origins_set.add("https://www.ruts-edu.online")
+
 origins = sorted(origins_set)
 # In dev, Vite may auto-bump the port (5173 -> 5174, etc). Allow any localhost port.
 origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$" if settings.app_env == "dev" else None
