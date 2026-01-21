@@ -3,6 +3,7 @@ import { Navigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft, FileText, Clock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import { apiGetCourse, type Course } from "../../../api/client";
 import styles from "../student/StudentCourseView.module.css";
@@ -62,11 +63,7 @@ export function AdminCourseViewPage() {
   return (
     <AppShell
       title={user.role === "manager" ? "Менеджер → Курс" : "Админ → Курс"}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-                { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/meetings`, labelKey: "nav.meetings" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <Link to={`${base}/courses`} className={styles.backLink}>

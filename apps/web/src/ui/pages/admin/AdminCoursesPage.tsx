@@ -4,6 +4,7 @@ import { BookOpen } from "lucide-react";
 import { apiListCourses, type Course } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "../student/StudentCourses.module.css";
 
@@ -44,18 +45,7 @@ export function AdminCoursesPage() {
   return (
     <AppShell
       title={user.role === "manager" ? "Менеджер → Курсы" : "Админ → Курсы"}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/meetings`, labelKey: "nav.meetings" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>

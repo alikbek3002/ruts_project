@@ -23,22 +23,23 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminUsers.module.css";
-import { 
-  Search, 
-  Plus, 
-  X, 
-  User, 
-  Calendar, 
-  Phone, 
-  BookOpen, 
-  GraduationCap, 
-  Trash2, 
-  Edit2, 
-  RefreshCw, 
-  Camera, 
+import {
+  Search,
+  Plus,
+  X,
+  User,
+  Calendar,
+  Phone,
+  BookOpen,
+  GraduationCap,
+  Trash2,
+  Edit2,
+  RefreshCw,
+  Camera,
   Save,
   Briefcase,
   Shield,
@@ -259,17 +260,7 @@ export function AdminUsersPage() {
   return (
     <AppShell
       title={title}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>
@@ -289,22 +280,22 @@ export function AdminUsersPage() {
 
         <div className={styles.controls}>
           <div className={styles.tabs}>
-            <button 
-              className={tab === "students" ? "" : "secondary"} 
+            <button
+              className={tab === "students" ? "" : "secondary"}
               onClick={() => setTab("students")}
             >
               <GraduationCap size={16} style={{ marginRight: 8 }} />
               Студенты
             </button>
-            <button 
-              className={tab === "teachers" ? "" : "secondary"} 
+            <button
+              className={tab === "teachers" ? "" : "secondary"}
               onClick={() => setTab("teachers")}
             >
               <Briefcase size={16} style={{ marginRight: 8 }} />
               Учителя
             </button>
           </div>
-          
+
           <div className={styles.searchBar}>
             <Search className={styles.searchIcon} />
             <input
@@ -314,7 +305,7 @@ export function AdminUsersPage() {
               placeholder="Поиск по ФИО"
             />
           </div>
-          
+
           <button className="secondary" onClick={() => reload()}>
             <RefreshCw size={16} />
           </button>
@@ -323,16 +314,16 @@ export function AdminUsersPage() {
         {err && <div className={styles.error}>{err}</div>}
 
         {tab === "students" && (
-          <div style={{ 
-            padding: "12px 16px", 
-            background: "#e0f2fe", 
-            color: "#0c4a6e", 
-            borderRadius: "8px", 
+          <div style={{
+            padding: "12px 16px",
+            background: "#e0f2fe",
+            color: "#0c4a6e",
+            borderRadius: "8px",
             marginBottom: "16px",
             fontSize: "14px",
             border: "1px solid #7dd3fc"
           }}>
-            ℹ️ Все студенты используют общий аккаунт для входа:<br/>
+            ℹ️ Все студенты используют общий аккаунт для входа:<br />
             <strong>Логин:</strong> student &nbsp;|&nbsp; <strong>Пароль:</strong> 123456
           </div>
         )}
@@ -343,53 +334,53 @@ export function AdminUsersPage() {
           </div>
         ) : (
           <div className={styles.grid}>
-          {users.map((u) => (
-            <div
-              key={u.id}
-              className={styles.card}
-              onClick={() => openUserCard(u)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") openUserCard(u);
-              }}
-            >
-              <div className={styles.cardHeader}>
-                {u.photo_data_url ? (
-                  <img src={u.photo_data_url} alt={u.full_name || ""} className={styles.avatar} />
-                ) : (
-                  <div className={styles.avatarPlaceholder}>
-                    {u.first_name?.[0] || u.username?.[0] || "?"}
-                  </div>
-                )}
-                <div className={styles.userInfo}>
-                  <div className={styles.userName}>{u.full_name || u.username}</div>
-                  <div className={styles.userRole}>
-                    {u.role === "student" ? t("role.student") : u.role === "teacher" ? t("role.teacher") : t("role.admin")}
+            {users.map((u) => (
+              <div
+                key={u.id}
+                className={styles.card}
+                onClick={() => openUserCard(u)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") openUserCard(u);
+                }}
+              >
+                <div className={styles.cardHeader}>
+                  {u.photo_data_url ? (
+                    <img src={u.photo_data_url} alt={u.full_name || ""} className={styles.avatar} />
+                  ) : (
+                    <div className={styles.avatarPlaceholder}>
+                      {u.first_name?.[0] || u.username?.[0] || "?"}
+                    </div>
+                  )}
+                  <div className={styles.userInfo}>
+                    <div className={styles.userName}>{u.full_name || u.username}</div>
+                    <div className={styles.userRole}>
+                      {u.role === "student" ? t("role.student") : u.role === "teacher" ? t("role.teacher") : t("role.admin")}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.infoRow}>
-                  <User className={styles.infoIcon} />
-                  <span>{u.username}</span>
+                <div className={styles.cardBody}>
+                  <div className={styles.infoRow}>
+                    <User className={styles.infoIcon} />
+                    <span>{u.username}</span>
+                  </div>
+                  {u.role === "student" && u.class?.name && (
+                    <div className={styles.infoRow}>
+                      <GraduationCap className={styles.infoIcon} />
+                      <span>{u.class.name}</span>
+                    </div>
+                  )}
+                  {u.role === "teacher" && u.teacher_subject && (
+                    <div className={styles.infoRow}>
+                      <BookOpen className={styles.infoIcon} />
+                      <span>{u.teacher_subject}</span>
+                    </div>
+                  )}
                 </div>
-                {u.role === "student" && u.class?.name && (
-                  <div className={styles.infoRow}>
-                    <GraduationCap className={styles.infoIcon} />
-                    <span>{u.class.name}</span>
-                  </div>
-                )}
-                {u.role === "teacher" && u.teacher_subject && (
-                  <div className={styles.infoRow}>
-                    <BookOpen className={styles.infoIcon} />
-                    <span>{u.teacher_subject}</span>
-                  </div>
-                )}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         )}
 
         {/* Create User Modal */}
@@ -532,7 +523,7 @@ export function AdminUsersPage() {
                       <input value={generatedPassword} readOnly placeholder="Сначала нажмите “Сгенерировать”" />
                     </div>
                   </div>
-                  
+
                   <div className={styles.fullWidth} style={{ display: "flex", justifyContent: "flex-end" }}>
                     <button
                       className="secondary"
@@ -645,15 +636,15 @@ export function AdminUsersPage() {
                 <div style={{ display: "flex", gap: 8 }}>
                   {!viewLoading && viewUser && (
                     <>
-                      <button 
-                        className="secondary" 
+                      <button
+                        className="secondary"
                         onClick={() => setViewEdit(!viewEdit)}
                         title="Редактировать"
                       >
                         <Edit2 size={18} />
                       </button>
-                      <button 
-                        className="secondary" 
+                      <button
+                        className="secondary"
                         style={{ color: "var(--color-error)", borderColor: "var(--color-error)" }}
                         onClick={deleteUserFromCard}
                         title="Удалить"
@@ -705,17 +696,17 @@ export function AdminUsersPage() {
                             <label htmlFor="edit-photo-upload" style={{ position: "absolute", inset: 0, cursor: "pointer" }} />
                           </div>
                         ) : (
-                          <img 
-                            src={viewUser.photo_data_url || ""} 
-                            alt={viewUser.full_name || ""} 
-                            style={{ 
-                              width: 120, 
-                              height: 120, 
-                              borderRadius: "var(--radius-lg)", 
+                          <img
+                            src={viewUser.photo_data_url || ""}
+                            alt={viewUser.full_name || ""}
+                            style={{
+                              width: 120,
+                              height: 120,
+                              borderRadius: "var(--radius-lg)",
                               objectFit: "cover",
                               background: "var(--color-bg)",
                               border: "1px solid var(--color-border)"
-                            }} 
+                            }}
                           />
                         )}
                       </div>
@@ -735,7 +726,7 @@ export function AdminUsersPage() {
                                 : t("role.admin")}
                           </span>
                         </div>
-                        
+
                         {/* Password Reset Section */}
                         <div style={{ marginTop: "var(--spacing-md)", padding: "var(--spacing-md)", background: "var(--color-bg-subtle)", borderRadius: "var(--radius-md)" }}>
                           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Сброс пароля</div>
@@ -747,8 +738,8 @@ export function AdminUsersPage() {
                               </button>
                             </div>
                           ) : (
-                            <button 
-                              className="secondary" 
+                            <button
+                              className="secondary"
                               style={{ fontSize: 13 }}
                               onClick={async () => {
                                 if (!token) return;
@@ -837,9 +828,9 @@ export function AdminUsersPage() {
                     </div>
 
                     {viewUser.role === "teacher" && (
-                      <div style={{ 
-                        border: "1px solid var(--color-border)", 
-                        borderRadius: "var(--radius-md)", 
+                      <div style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
                         padding: "var(--spacing-md)",
                         background: "var(--color-bg-subtle)"
                       }}>
@@ -891,16 +882,16 @@ export function AdminUsersPage() {
                     )}
 
                     {viewUser.role === "teacher" && viewWorkload && (
-                      <div style={{ 
-                        border: "1px solid var(--color-border)", 
-                        borderRadius: "var(--radius-md)", 
+                      <div style={{
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-md)",
                         padding: "var(--spacing-md)",
                         background: "var(--color-bg-subtle)",
                         marginTop: "var(--spacing-md)"
                       }}>
-                        <div style={{ 
-                          fontSize: 13, 
-                          fontWeight: 500, 
+                        <div style={{
+                          fontSize: 13,
+                          fontWeight: 500,
                           marginBottom: "var(--spacing-md)",
                           display: "flex",
                           alignItems: "center",

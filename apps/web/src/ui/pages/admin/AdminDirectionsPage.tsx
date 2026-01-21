@@ -6,10 +6,12 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminDirections.module.css";
 import { Map, Hash } from "lucide-react";
+import { DirectionSubjectsModal } from "./modals/DirectionSubjectsModal";
 
 export function AdminDirectionsPage() {
   const { state } = useAuth();
@@ -43,20 +45,15 @@ export function AdminDirectionsPage() {
   const base = user.role === "manager" ? "/app/manager" : "/app/admin";
   const titleKey = user.role === "manager" ? "admin.directions.pageTitleManager" : "admin.directions.pageTitleAdmin";
 
+  /* New logic */
+  const [modalDirection, setModalDirection] = useState<Direction | null>(null);
+
+  /* ... */
+
   return (
     <AppShell
       titleKey={titleKey}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>
@@ -77,6 +74,14 @@ export function AdminDirectionsPage() {
                 <Hash size={14} style={{ display: "inline-block", verticalAlign: "text-bottom", marginRight: 4 }} />
                 {d.code}
               </div>
+
+              <button
+                className="secondary"
+                style={{ marginTop: 16, width: "100%", fontSize: 13 }}
+                onClick={() => setModalDirection(d)}
+              >
+                Учебный план
+              </button>
             </div>
           ))}
 
@@ -92,6 +97,14 @@ export function AdminDirectionsPage() {
           <p>{t("admin.directions.aboutText")}</p>
         </div>
       </div>
+
+      {modalDirection && token && (
+        <DirectionSubjectsModal
+          direction={modalDirection}
+          token={token}
+          onClose={() => setModalDirection(null)}
+        />
+      )}
     </AppShell>
   );
 }

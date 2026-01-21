@@ -1,0 +1,51 @@
+:root {
+    /* Brand Colors - Strict & Professional */
+    --color-primary: #1e3a8a;
+    /* Deep Royal Blue */
+    --color-primary-dark: #172554;
+    /* Darker Navy */
+    --color-primary-light: #3b82f6;
+    /* Brighter Blue for focus/accents */
+    --color-secondary: #f8fafc;
+
+    /* Backgrounds */
+    --color-bg: #f1f5f9;
+    /* Slate-50 - Cool greyish white */
+    --color-bg-subtle: #f8fafc;
+    --color-card: #ffffff;
+
+    /* Text */
+    --color-text: #0f172a;
+    /* Slate-900 - Almost black */
+    --color-text-secondary: #475569;
+    /* Slate-600 */
+    --color-text-light: #94a3b8;
+    /* Slate-400 */
+
+    /* Borders */
+    --color-border: #e2e8f0;
+    /* Slate-200 */
+
+    /* Status */
+    --color-success: #16a34a;
+    /* Green-600 */
+    --color-error: #dc2626;
+    /* Red-600 */
+    --color-error-bg: #fef2f2;
+
+    /* Spacing */
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Radius */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}

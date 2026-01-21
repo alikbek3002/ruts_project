@@ -15,17 +15,18 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import styles from "./AdminClasses.module.css";
-import { 
-  Plus, 
-  RefreshCw, 
-  Users, 
-  MapPin, 
-  User, 
-  BookOpen, 
-  Edit2, 
-  Trash2, 
-  X, 
+import {
+  Plus,
+  RefreshCw,
+  Users,
+  MapPin,
+  User,
+  BookOpen,
+  Edit2,
+  Trash2,
+  X,
   Save,
   UserPlus
 } from "lucide-react";
@@ -203,17 +204,7 @@ export function AdminClassesPage() {
   return (
     <AppShell
       title={title}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>
@@ -241,7 +232,7 @@ export function AdminClassesPage() {
                   {cls.student_count ?? 0}
                 </span>
               </div>
-              
+
               <div className={styles.cardBody}>
                 {cls.direction && (
                   <div className={styles.infoRow}>
@@ -268,10 +259,10 @@ export function AdminClassesPage() {
                 <button className="secondary" onClick={() => handleEditClass(cls)} title="Редактировать" style={{ padding: 8 }}>
                   <Edit2 size={18} />
                 </button>
-                <button 
-                  className="secondary" 
+                <button
+                  className="secondary"
                   style={{ color: "var(--color-error)", borderColor: "var(--color-error)", padding: 8 }}
-                  onClick={() => handleDeleteClass(cls)} 
+                  onClick={() => handleDeleteClass(cls)}
                   title="Удалить взвод"
                 >
                   <Trash2 size={18} />
@@ -296,7 +287,7 @@ export function AdminClassesPage() {
                   <X size={20} />
                 </button>
               </div>
-              
+
               <div className={styles.modalContent}>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Название</label>
@@ -474,7 +465,7 @@ export function AdminClassesPage() {
                   <X size={20} />
                 </button>
               </div>
-              
+
               <div className={styles.modalContent}>
                 <h4 className={styles.sectionTitle} style={{ marginTop: 0 }}>Записать студента</h4>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>

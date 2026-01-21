@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Navigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import { apiListSubjectsWithTeachers, Subject, trackedFetch } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
@@ -180,17 +181,7 @@ export function AdminClassJournalPage() {
   return (
     <AppShell
       title={title}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>

@@ -4,6 +4,7 @@ import { Clock, Download, Search, TrendingUp, Users } from "lucide-react";
 import { apiGetAllTeachersWorkload, apiDownloadTeachersWorkload } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminWorkload.module.css";
 
@@ -60,7 +61,7 @@ export function AdminWorkloadPage() {
 
   function handleDownloadWorkload() {
     if (!token) return;
-    
+
     apiDownloadTeachersWorkload(token)
       .then(blob => {
         const url = window.URL.createObjectURL(blob);
@@ -90,17 +91,7 @@ export function AdminWorkloadPage() {
   return (
     <AppShell
       title={user.role === "manager" ? "Менеджер → Часы работы" : "Админ → Часы работы"}
-      nav={[
-        { to: `${base}`, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>

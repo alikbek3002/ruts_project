@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Video, Trash2, Plus, X, ExternalLink } from "lucide-react";
-import { 
-  apiDeleteZoomMeeting, 
-  apiListZoomMeetings, 
+import {
+  apiDeleteZoomMeeting,
+  apiListZoomMeetings,
   apiCreateCustomZoomMeeting,
   apiListClasses,
   type ZoomMeeting,
@@ -11,6 +11,7 @@ import {
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminMeetings.module.css";
 
@@ -29,12 +30,12 @@ export function AdminMeetingsPage() {
   const [meetings, setMeetings] = useState<ZoomMeeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Create Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  
+
   // Form State
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -68,7 +69,7 @@ export function AdminMeetingsPage() {
 
   async function onDelete(meetingId: string) {
     if (!token) return;
-    if (!window.confirm("Удалить конференцию?") ) return;
+    if (!window.confirm("Удалить конференцию?")) return;
     try {
       await apiDeleteZoomMeeting(token, meetingId);
       await reload();
@@ -86,7 +87,7 @@ export function AdminMeetingsPage() {
       alert("Выберите группу");
       return;
     }
-    
+
     setCreateLoading(true);
     try {
       const startsAt = `${date}T${time}:00`; // Local time, backend handles timezone
@@ -115,19 +116,11 @@ export function AdminMeetingsPage() {
   return (
     <AppShell
       title={user.role === "manager" ? "Менеджер → Конференции" : "Админ → Конференции"}
-      nav={[
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/meetings`, labelKey: "nav.meetings" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-      ]}
+      nav={getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h2>Конференции (Zoom)</h2>
             <button className={styles.createBtn} onClick={() => setIsModalOpen(true)}>
               <Plus size={16} /> Создать
@@ -181,72 +174,72 @@ export function AdminMeetingsPage() {
           </div>
         )}
       </div>
-      
+
       {isModalOpen && (
         <div className={styles.modalBackdrop}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
               <h3>Создать конференцию</h3>
-              <button 
-                className={styles.closeBtn} 
+              <button
+                className={styles.closeBtn}
                 onClick={() => setIsModalOpen(false)}
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className={styles.modalBody}>
               <label>Название</label>
-              <input 
-                type="text" 
-                value={title} 
-                onChange={e => setTitle(e.target.value)} 
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
                 placeholder="Например: Общее собрание"
                 className={styles.input}
               />
-              
+
               <div className={styles.row}>
                 <div>
                   <label>Дата</label>
-                  <input 
-                    type="date" 
-                    value={date} 
+                  <input
+                    type="date"
+                    value={date}
                     onChange={e => setDate(e.target.value)}
                     className={styles.input}
                   />
                 </div>
                 <div>
                   <label>Время</label>
-                  <input 
-                    type="time" 
-                    value={time} 
+                  <input
+                    type="time"
+                    value={time}
                     onChange={e => setTime(e.target.value)}
                     className={styles.input}
                   />
                 </div>
               </div>
-              
+
               <label>Кто участвует?</label>
               <div className={styles.audienceSwitch}>
-                <button 
+                <button
                   className={audience === "class" ? styles.active : ""}
                   onClick={() => setAudience("class")}
                 >
                   Для учеников
                 </button>
-                <button 
+                <button
                   className={audience === "teachers" ? styles.active : ""}
                   onClick={() => setAudience("teachers")}
                 >
                   Для учителей
                 </button>
               </div>
-              
+
               {audience === "class" && (
                 <>
                   <label>Группа</label>
-                  <select 
-                    value={selectedClassId} 
+                  <select
+                    value={selectedClassId}
                     onChange={e => setSelectedClassId(e.target.value)}
                     className={styles.select}
                   >
@@ -257,10 +250,10 @@ export function AdminMeetingsPage() {
                   </select>
                 </>
               )}
-              
+
               <div className={styles.modalFooter}>
-                <button 
-                  onClick={handleCreate} 
+                <button
+                  onClick={handleCreate}
                   disabled={createLoading}
                   className={styles.primaryBtn}
                 >

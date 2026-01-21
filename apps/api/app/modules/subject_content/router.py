@@ -80,13 +80,11 @@ class CreateQuizTestIn(BaseModel):
 
 
 class CreateQuestionIn(BaseModel):
-    test_id: str
     question_text: str
     order_index: int = 0
 
 
 class CreateOptionIn(BaseModel):
-    question_id: str
     option_text: str
     is_correct: bool = False
     order_index: int = 0

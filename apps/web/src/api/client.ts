@@ -64,12 +64,12 @@ export async function trackedFetch(input: RequestInfo | URL, init?: RequestInit)
   const controller = hasSignal ? null : new AbortController();
   const timeoutId = controller
     ? (globalThis.setTimeout(() => {
-        try {
-          controller.abort();
-        } catch {
-          // ignore
-        }
-      }, DEFAULT_FETCH_TIMEOUT_MS) as unknown as number)
+      try {
+        controller.abort();
+      } catch {
+        // ignore
+      }
+    }, DEFAULT_FETCH_TIMEOUT_MS) as unknown as number)
     : null;
   try {
     return await fetch(input, {
@@ -151,6 +151,7 @@ function hasAuthHeader(init?: RequestInit): boolean {
 }
 
 async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
+  console.log('[API] Request:', init?.method || 'GET', path, init?.body ? JSON.parse(init.body as string) : null);
   let res: Response;
   try {
     res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
@@ -206,9 +207,12 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
     err.status = res.status;
     err.bodyText = msg;
     if (detailObj !== undefined) err.detail = detailObj;
+    console.error('[API] Error:', init?.method || 'GET', path, err);
     throw err;
   }
-  return (await res.json()) as T;
+  const result = (await res.json()) as T;
+  console.log('[API] Success:', init?.method || 'GET', path, result);
+  return result;
 }
 
 function apiGet<T>(path: string, accessToken: string) {
@@ -644,9 +648,9 @@ export type SubjectTopicInput = {
 };
 
 export async function apiGetSubjectTopics(token: string, subjectId: string) {
-  return apiGet<{ 
-    subject: { id: string; name: string }; 
-    topics: SubjectTopic[]; 
+  return apiGet<{
+    subject: { id: string; name: string };
+    topics: SubjectTopic[];
     totals: {
       lecture_hours: number;
       seminar_hours: number;
@@ -785,9 +789,9 @@ export async function apiAdminGenerateCredentials(
   return apiPost<{ username: string; password: string }>("/admin/users/credentials", body, token);
 }
 
-export type ClassItem = { 
-  id: string; 
-  name: string; 
+export type ClassItem = {
+  id: string;
+  name: string;
   direction_id?: string | null;
   direction?: Direction | null;
   student_count?: number;
@@ -1123,7 +1127,7 @@ export async function apiUploadLibraryFile(
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    
+
     if (onProgress) {
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
@@ -1855,11 +1859,11 @@ export async function apiCreateTopic(
 }
 
 export async function apiUpdateTopic(
-  token: string, 
-  topicId: string, 
-  data: { 
-    title?: string; 
-    description?: string | null; 
+  token: string,
+  topicId: string,
+  data: {
+    title?: string;
+    description?: string | null;
     order_index?: number;
     presentation?: File | null;
     links?: { title: string; url: string }[];
@@ -2080,22 +2084,26 @@ export async function apiGetTeacherWorkload(token: string, teacherId: string): P
   });
 }
 
-export async function apiGetAllTeachersWorkload(token: string): Promise<{ teachers: Array<{
-  teacher_id: string;
-  teacher_name: string;
-  weekly_hours: number;
-  weekly_lessons: number;
-  monthly_hours: number;
-  three_month_hours: number;
-}> }> {
-  return http<{ teachers: Array<{
+export async function apiGetAllTeachersWorkload(token: string): Promise<{
+  teachers: Array<{
     teacher_id: string;
     teacher_name: string;
     weekly_hours: number;
     weekly_lessons: number;
     monthly_hours: number;
     three_month_hours: number;
-  }> }>("/timetable/teachers/workload/all", {
+  }>
+}> {
+  return http<{
+    teachers: Array<{
+      teacher_id: string;
+      teacher_name: string;
+      weekly_hours: number;
+      weekly_lessons: number;
+      monthly_hours: number;
+      three_month_hours: number;
+    }>
+  }>("/timetable/teachers/workload/all", {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -2106,11 +2114,11 @@ export async function apiDownloadClassesWithStreams(token: string): Promise<Blob
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
-  
+
   if (!response.ok) {
     throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
   }
-  
+
   return response.blob();
 }
 
@@ -2119,11 +2127,11 @@ export async function apiDownloadTeachersWorkload(token: string): Promise<Blob> 
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
-  
+
   if (!response.ok) {
     throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
   }
-  
+
   return response.blob();
 }
 
@@ -2166,4 +2174,44 @@ export async function apiSubjectGetAttempt(token: string, attemptId: string) {
     `/api/subject-content/attempts/${attemptId}`,
     token
   );
+}
+// --- Direction Subjects (Curriculum) ---
+export type DirectionSubject = {
+  id: string;
+  direction_id: string;
+  subject_id: string;
+  subject_name: string;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  exam_hours: number;
+  total_hours: number;
+};
+
+export type DirectionSubjectInput = {
+  subject_id: string;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  exam_hours: number;
+  total_hours: number;
+};
+
+export async function apiListDirectionSubjects(token: string, directionId: string): Promise<{ subjects: DirectionSubject[] }> {
+  return apiGet<{ subjects: DirectionSubject[] }>(`/directions/${directionId}/subjects`, token);
+}
+
+export async function apiAddDirectionSubject(token: string, directionId: string, payload: DirectionSubjectInput): Promise<{ subject: DirectionSubject }> {
+  return apiPost<{ subject: DirectionSubject }>(`/directions/${directionId}/subjects`, payload, token);
+}
+
+export async function apiUpdateDirectionSubject(token: string, directionId: string, itemId: string, payload: DirectionSubjectInput): Promise<{ subject: DirectionSubject }> {
+  return apiPut<{ subject: DirectionSubject }>(`/directions/${directionId}/subjects/${itemId}`, payload, token);
+}
+
+export async function apiDeleteDirectionSubject(token: string, directionId: string, itemId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/directions/${directionId}/subjects/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
+  });
 }

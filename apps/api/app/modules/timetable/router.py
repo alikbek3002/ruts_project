@@ -303,6 +303,89 @@ def _build_conflicts_payload(
     }
 
 
+def _validate_hours_limit(sb, *, class_ids: list[str], subject_id: str, start_str: str, end_str: str, exclude_entry_id: str | None = None) -> None:
+    """
+    Проверяет, не превышает ли создание занятия лимит часов по учебному плану (direction_subjects).
+    Расчет: (Сумма минут в неделю * 12 недель) / 60 <= План Часов
+    """
+    if not subject_id or not class_ids:
+        return
+
+    # 1. Calculate duration of the new/updated lesson
+    t1 = _parse_hhmm(start_str)
+    t2 = _parse_hhmm(end_str)
+    new_dur_min = (t2.hour * 60 + t2.minute) - (t1.hour * 60 + t1.minute)
+    if new_dur_min <= 0:
+        return
+
+    # 2. Check each class
+    # Get directions
+    try:
+        classes = sb.table("classes").select("id,name,direction_id").in_("id", class_ids).execute().data or []
+    except Exception:
+        # If DB error (e.g. table missing? should not happen for classes), skip
+        return
+
+    for cls in classes:
+        did = cls.get("direction_id")
+        if not did:
+            continue
+
+        # Get Plan
+        try:
+            plan_res = sb.table("direction_subjects").select("total_hours").eq("direction_id", did).eq("subject_id", subject_id).execute()
+            if not plan_res.data:
+                # No plan -> Allow? Or Block? Let's allow but maybe warn? Assuming unlimited if not in plan.
+                continue
+            limit_hours = float(plan_res.data[0].get("total_hours", 0))
+        except Exception:
+            # Table likely missing or error. unexpected, but don't block basic flow if feature not ready.
+            continue
+
+        if limit_hours <= 0:
+            # No hours allocated? Block?
+            pass 
+
+        # Get existing entries for this class+subject
+        # We query by subject_id. 
+        # Note: class_ids column is JSONB/array. We check if cls['id'] is in it.
+        try:
+            # Using current weekday logic? No, we sum ALL active entries for the week.
+            q = sb.table("timetable_entries").select("id,start_time,end_time").eq("active", True).eq("subject_id", subject_id)
+            # Filter by class using CS (contains)
+            q = q.cs("class_ids", [cls["id"]])
+            
+            existing = q.execute().data or []
+        except Exception:
+            continue
+
+        existing_weekly_min = 0
+        for e in existing:
+            if exclude_entry_id and str(e.get("id")) == str(exclude_entry_id):
+                continue
+            
+            # If creating a conflict? No, existing entries are already in DB.
+            # We assume conflict check passed or is separate.
+            
+            st = _parse_hhmm(e.get("start_time"))
+            et = _parse_hhmm(e.get("end_time"))
+            dur = (et.hour * 60 + et.minute) - (st.hour * 60 + st.minute)
+            existing_weekly_min += max(0, dur)
+
+        # Projection
+        total_weekly_min = existing_weekly_min + new_dur_min
+        # 12 weeks assumption
+        projected_total_hours = (total_weekly_min / 60.0) * 12
+
+        # Allow small margin? (e.g. 0.1h)
+        if projected_total_hours > (limit_hours + 0.5):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Лимит часов превышен для {cls['name']}. План: {limit_hours}ч. Прогноз (12 нед): {projected_total_hours:.1f}ч"
+            )
+
+
+
 class TimetableEntryIn(BaseModel):
     class_id: str
     stream_id: str | None = None
@@ -428,6 +511,16 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
                     "supabase/migrations/20251223_000003_timetable_room_and_crud.sql and restart the API."
                 ),
             )
+
+        # Validate Curriculum limits
+        if data.get("subject_id"):
+             _validate_hours_limit(
+                 sb, 
+                 class_ids=class_ids, 
+                 subject_id=str(data["subject_id"]), 
+                 start_str=new_start, 
+                 end_str=new_end
+             )
 
         resp = sb.table("timetable_entries").insert(data).execute()
         return {"entry": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
@@ -564,6 +657,22 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
                     "DB schema is missing timetable_entries.room. Apply migration "
                     "supabase/migrations/20251223_000003_timetable_room_and_crud.sql and restart the API."
                 ),
+            )
+        
+        # Validate Curriculum limits (if time or subject changed)
+        # We need subject_id. If updated, use new. If not, use existing.
+        check_subject_id = update.get("subject_id") if "subject_id" in update else existing.get("subject_id")
+        check_start = result_start
+        check_end = result_end
+        
+        if check_subject_id:
+            _validate_hours_limit(
+                sb,
+                class_ids=class_ids,
+                subject_id=str(check_subject_id),
+                start_str=check_start,
+                end_str=check_end,
+                exclude_entry_id=entry_id
             )
 
         resp = sb.table("timetable_entries").update(update).eq("id", entry_id).execute()

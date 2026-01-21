@@ -5,43 +5,15 @@ import {
   apiCreateSubject,
   apiUpdateSubject,
   apiDeleteSubject,
-  apiGetSubjectTopics,
-  apiCreateSubjectTopic,
-  apiUpdateSubjectTopic,
-  apiDeleteSubjectTopic,
-  apiBulkUpdateSubjectTopics,
-  apiTeacherGetSubject,
-  apiSubjectContentUploadFile,
-  apiSubjectContentCreateLink,
-  apiSubjectContentCreateQuiz,
-  apiSubjectContentCreateQuestion,
-  apiSubjectContentDeleteQuestion,
-  apiSubjectContentCreateOption,
-  apiSubjectContentDeleteOption,
-  apiSubjectListQuestions,
-  apiSubjectContentCreateDocumentTest,
-  apiSubjectContentDeleteMaterial,
-  apiSubjectContentDeleteTest,
   type SubjectWithTeachers,
-  type SubjectTopic,
-  type SubjectTopicInput,
-  type SubjectContentTopic,
-  type SubjectContentMaterial,
-  type SubjectContentTest,
-  type SubjectTestQuestion,
-  type SubjectTestQuestionOption,
-  getSubjectTopicsExportUrl,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
+import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminSubjects.module.css";
-import { BookOpen, Trash2, Plus, Image as ImageIcon, User, FileDown, Save, X, Edit2, FileText, FlaskConical, Paperclip, Link as LinkIcon, Download } from "lucide-react";
-
-type ExtendedSubjectTopic = SubjectTopic & {
-  materials?: SubjectContentMaterial[];
-  tests?: SubjectContentTest[];
-};
+import { BookOpen, Trash2, Plus, Image as ImageIcon, User, Save, X, Edit2 } from "lucide-react";
+import { SubjectTopicsModal } from "./modals/SubjectTopicsModal";
 
 export function AdminSubjectsPage() {
   const { state } = useAuth();
@@ -61,59 +33,7 @@ export function AdminSubjectsPage() {
   const [editSubjectPhotoUrl, setEditSubjectPhotoUrl] = useState("");
 
   // Modal state
-  const [modalSubject, setModalSubject] = useState<SubjectWithTeachers | null>(null);
-  const [modalTopics, setModalTopics] = useState<ExtendedSubjectTopic[]>([]);
-  const [modalTotals, setModalTotals] = useState({ lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
-  
-  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
-  const [editingTopic, setEditingTopic] = useState<SubjectTopicInput | null>(null);
-  
-  const [isAddingNew, setIsAddingNew] = useState(false);
-  const [newTopic, setNewTopic] = useState<SubjectTopicInput>({
-    topic_number: 1,
-    topic_name: "",
-    lecture_hours: 0,
-    seminar_hours: 0,
-    practical_hours: 0,
-    exam_hours: 0,
-    description: "",
-  });
-  
-  // Attachments for new topic
-  const [newTopicFile, setNewTopicFile] = useState<File | null>(null);
-  const [newTopicTestTitle, setNewTopicTestTitle] = useState("");
-  const [newTopicTestType, setNewTopicTestType] = useState<"quiz" | "document">("quiz"); // simple toggle
-  const [newTopicTestFile, setNewTopicTestFile] = useState<File | null>(null);
-
-  // Materials Modal
-  const [materialsModalOpen, setMaterialsModalOpen] = useState(false);
-  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
-  
-  // New Material Inputs
-  const [newMaterialType, setNewMaterialType] = useState<"file" | "link">("file");
-  const [newMaterialFile, setNewMaterialFile] = useState<File | null>(null);
-  const [newMaterialTitle, setNewMaterialTitle] = useState("");
-  const [newMaterialUrl, setNewMaterialUrl] = useState("");
-  const [newMaterialLoading, setNewMaterialLoading] = useState(false);
-
-  // New Test Inputs
-  const [newTestTitle, setNewTestTitle] = useState("");
-  const [newTestType, setNewTestType] = useState<"quiz" | "document">("quiz");
-  const [newTestFile, setNewTestFile] = useState<File | null>(null); // For document test
-  const [newTestLoading, setNewTestLoading] = useState(false);
-
-  // Quiz editor
-  const [editingQuizTestId, setEditingQuizTestId] = useState<string | null>(null);
-  const [quizQuestions, setQuizQuestions] = useState<SubjectTestQuestion[]>([]);
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [newQuestionText, setNewQuestionText] = useState("");
-  const [newOptionTexts, setNewOptionTexts] = useState<string[]>(["", "", "", ""]);
-  const [newCorrectIndex, setNewCorrectIndex] = useState<number>(0);
-  const [quizSaving, setQuizSaving] = useState(false);
-
-  const activeTopic = useMemo(() => {
-    return modalTopics.find(t => t.id === activeTopicId);
-  }, [modalTopics, activeTopicId]);
+  const [selectedSubject, setSelectedSubject] = useState<SubjectWithTeachers | null>(null);
 
   async function reloadAll() {
     if (!token) return;
@@ -135,22 +55,14 @@ export function AdminSubjectsPage() {
     if (can) reloadAll().catch((e) => setErr(String(e)));
   }, [can]);
 
-  const anyModalOpen = !!modalSubject || materialsModalOpen;
   useEffect(() => {
-    if (!anyModalOpen) return;
-
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-
-    document.body.style.overflow = "hidden";
-    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-    if (scrollBarWidth > 0) document.body.style.paddingRight = `${scrollBarWidth}px`;
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
-    };
-  }, [anyModalOpen]);
+    if (selectedSubject) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [selectedSubject]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager" && user.role !== "teacher") return <Navigate to="/app" replace />;
@@ -160,12 +72,11 @@ export function AdminSubjectsPage() {
   const title = isTeacher ? "Учитель → Предметы" : (user.role === "manager" ? "Менеджер → Предметы" : "Админ → Предметы");
 
   const handleCreateSubject = async () => {
-    if (isTeacher) return; // Teachers cannot create subjects
+    if (isTeacher) return;
     if (!token || !newSubjectName.trim()) return;
     setErr(null);
     setLoading(true);
     try {
-      // пока фото хранится как URL
       await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null);
       setNewSubjectName("");
       setNewSubjectPhotoUrl("");
@@ -221,387 +132,6 @@ export function AdminSubjectsPage() {
     }
   };
 
-  const reloadTopics = async (subjectId?: string) => {
-    const sid = subjectId || modalSubject?.id;
-    if (!token || !sid) return;
-    setLoading(true);
-    try {
-      // Parallel fetch for hours (syllabus) and content (teacher view)
-      const [syllabusData, contentData] = await Promise.all([
-        apiGetSubjectTopics(token, sid),
-        apiTeacherGetSubject(token, sid).catch(() => ({ topics: [] })) // fallback if content fails
-      ]);
-
-      const mergedTopics: ExtendedSubjectTopic[] = syllabusData.topics.map((t) => {
-        const c = contentData.topics.find((ct) => ct.id === t.id);
-        return {
-          ...t,
-          materials: c?.materials || [],
-          tests: c?.tests || [],
-        };
-      });
-
-      setModalTopics(mergedTopics);
-      setModalTotals(syllabusData.totals || { lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, total_hours: 0 });
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openModal = async (subject: SubjectWithTeachers) => {
-    if (!token) return;
-    setModalSubject(subject);
-    setErr(null);
-    setLoading(true);
-    try {
-      await reloadTopics(subject.id);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const closeModal = () => {
-    setModalSubject(null);
-    setModalTopics([]);
-    setEditingTopicId(null);
-    setEditingTopic(null);
-    setIsAddingNew(false);
-    setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
-    setNewTopicFile(null);
-    setNewTopicTestTitle("");
-    setNewTopicTestFile(null);
-  };
-
-  const startEditTopic = (topic: ExtendedSubjectTopic) => {
-    setEditingTopicId(topic.id);
-    setEditingTopic({
-      topic_number: topic.topic_number,
-      topic_name: topic.topic_name,
-      lecture_hours: topic.lecture_hours,
-      seminar_hours: topic.seminar_hours,
-      practical_hours: topic.practical_hours,
-      exam_hours: topic.exam_hours,
-      description: topic.description || "",
-    });
-  };
-
-  const cancelEdit = () => {
-    setEditingTopicId(null);
-    setEditingTopic(null);
-  };
-
-  const saveEditTopic = async () => {
-    if (!token || !modalSubject || !editingTopicId || !editingTopic) return;
-    setErr(null);
-    setLoading(true);
-    try {
-      await apiUpdateSubjectTopic(token, modalSubject.id, editingTopicId, editingTopic);
-      await reloadTopics();
-      setEditingTopicId(null);
-      setEditingTopic(null);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startAddNew = () => {
-    const nextNumber = modalTopics.length > 0 ? Math.max(...modalTopics.map(t => t.topic_number)) + 1 : 1;
-    setNewTopic({ topic_number: nextNumber, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
-    setIsAddingNew(true);
-  };
-
-  const cancelAddNew = () => {
-    setIsAddingNew(false);
-    setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
-    setNewTopicFile(null);
-    setNewTopicTestTitle("");
-    setNewTopicTestFile(null);
-  };
-
-  const saveNewTopic = async () => {
-    if (!token || !modalSubject || !newTopic.topic_name.trim()) return;
-    setErr(null);
-    setLoading(true);
-    try {
-      // 1. Create Topic
-      const res = await apiCreateSubjectTopic(token, modalSubject.id, newTopic);
-      const topicId = res.topic.id;
-
-      // 2. Upload File if present
-      if (newTopicFile) {
-        await apiSubjectContentUploadFile(token, topicId, newTopicFile);
-      }
-
-      // 3. Create Test if present
-      if (newTopicTestTitle.trim()) {
-        if (newTopicTestType === "document" && newTopicTestFile) {
-          await apiSubjectContentCreateDocumentTest(token, topicId, newTopicTestTitle, newTopicTestFile);
-        } else if (newTopicTestType === "quiz") {
-          await apiSubjectContentCreateQuiz(token, topicId, newTopicTestTitle, 30); // default 30 mins
-        }
-      }
-
-      await reloadTopics();
-      setIsAddingNew(false);
-      setNewTopic({ topic_number: 1, topic_name: "", lecture_hours: 0, seminar_hours: 0, practical_hours: 0, exam_hours: 0, description: "" });
-      setNewTopicFile(null);
-      setNewTopicTestTitle("");
-      setNewTopicTestFile(null);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteTopic = async (topicId: string) => {
-    if (!token || !modalSubject) return;
-    if (!window.confirm("Удалить тему?")) return;
-    setErr(null);
-    setLoading(true);
-    try {
-      await apiDeleteSubjectTopic(token, modalSubject.id, topicId);
-      await reloadTopics();
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadExcel = () => {
-    if (!token || !modalSubject) return;
-    const url = getSubjectTopicsExportUrl(modalSubject.id, token);
-    window.open(url, "_blank");
-  };
-
-  const handleUploadFileToTopic = async (topicId: string, file: File) => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      await apiSubjectContentUploadFile(token, topicId, file);
-      await reloadTopics();
-    } catch(e) { setErr(String(e)); } finally { setLoading(false); }
-  };
-
-  const handleDeleteMaterial = async (materialId: string) => {
-    if (!token || !window.confirm("Удалить файл?")) return;
-    setLoading(true);
-    try {
-      await apiSubjectContentDeleteMaterial(token, materialId);
-      await reloadTopics();
-    } catch(e) { setErr(String(e)); } finally { setLoading(false); }
-  };
-
-  const handleDeleteTest = async (testId: string) => {
-    if (!token || !window.confirm("Удалить тест?")) return;
-    setLoading(true);
-    try {
-      await apiSubjectContentDeleteTest(token, testId);
-      await reloadTopics();
-    } catch(e) { setErr(String(e)); } finally { setLoading(false); }
-  };
-
-  const openMaterialsModal = (topic: ExtendedSubjectTopic) => {
-    setActiveTopicId(topic.id);
-    setMaterialsModalOpen(true);
-    // Reset inputs
-    setNewMaterialType("file");
-    setNewMaterialFile(null);
-    setNewMaterialTitle("");
-    setNewMaterialUrl("");
-    setNewTestTitle("");
-    setNewTestType("quiz");
-    setNewTestFile(null);
-
-    setEditingQuizTestId(null);
-    setQuizQuestions([]);
-    setNewQuestionText("");
-    setNewOptionTexts(["", "", "", ""]);
-    setNewCorrectIndex(0);
-  };
-
-  const closeMaterialsModal = () => {
-    setMaterialsModalOpen(false);
-    setActiveTopicId(null);
-
-    setEditingQuizTestId(null);
-    setQuizQuestions([]);
-  };
-
-  const loadQuizQuestions = async (testId: string) => {
-    if (!token) return;
-    setQuizLoading(true);
-    try {
-      const res = await apiSubjectListQuestions(token, testId);
-      setQuizQuestions(res.questions || []);
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setQuizLoading(false);
-    }
-  };
-
-  const openQuizEditor = async (testId: string) => {
-    setEditingQuizTestId(testId);
-    await loadQuizQuestions(testId);
-  };
-
-  const closeQuizEditor = () => {
-    setEditingQuizTestId(null);
-    setQuizQuestions([]);
-    setNewQuestionText("");
-    setNewOptionTexts(["", "", "", ""]);
-    setNewCorrectIndex(0);
-  };
-
-  const addQuizQuestion = async () => {
-    if (!token || !editingQuizTestId) return;
-
-    const qText = (newQuestionText || "").trim();
-    if (!qText) {
-      alert("Введите текст вопроса");
-      return;
-    }
-
-    const options = newOptionTexts.map((x) => (x || "").trim());
-    const nonEmpty = options
-      .map((text, idx) => ({ text, idx }))
-      .filter((x) => !!x.text);
-
-    if (nonEmpty.length < 2) {
-      alert("Добавьте минимум 2 варианта ответа");
-      return;
-    }
-
-    const correct = nonEmpty.find((x) => x.idx === newCorrectIndex);
-    if (!correct) {
-      alert("Выберите правильный вариант (он должен быть заполнен)");
-      return;
-    }
-
-    setQuizSaving(true);
-    try {
-      const orderIndex = (quizQuestions || []).length;
-      const created = await apiSubjectContentCreateQuestion(token, editingQuizTestId, qText, orderIndex);
-      const qid = created.question?.id;
-      if (!qid) throw new Error("Не удалось создать вопрос");
-
-      for (let i = 0; i < nonEmpty.length; i++) {
-        const item = nonEmpty[i];
-        await apiSubjectContentCreateOption(token, qid, item.text, item.idx === newCorrectIndex, i);
-      }
-
-      setNewQuestionText("");
-      setNewOptionTexts(["", "", "", ""]);
-      setNewCorrectIndex(0);
-
-      await loadQuizQuestions(editingQuizTestId);
-      await reloadTopics();
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setQuizSaving(false);
-    }
-  };
-
-  const deleteQuizQuestion = async (questionId: string) => {
-    if (!token || !editingQuizTestId) return;
-    if (!window.confirm("Удалить вопрос?")) return;
-    setQuizSaving(true);
-    try {
-      await apiSubjectContentDeleteQuestion(token, questionId);
-      await loadQuizQuestions(editingQuizTestId);
-      await reloadTopics();
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setQuizSaving(false);
-    }
-  };
-
-  const deleteQuizOption = async (optionId: string) => {
-    if (!token || !editingQuizTestId) return;
-    if (!window.confirm("Удалить вариант ответа?")) return;
-    setQuizSaving(true);
-    try {
-      await apiSubjectContentDeleteOption(token, optionId);
-      await loadQuizQuestions(editingQuizTestId);
-      await reloadTopics();
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setQuizSaving(false);
-    }
-  };
-
-  const handleAddMaterial = async () => {
-    if (!token || !activeTopicId) return;
-    setNewMaterialLoading(true);
-    try {
-      if (newMaterialType === "file") {
-        if (!newMaterialFile) return;
-        await apiSubjectContentUploadFile(token, activeTopicId, newMaterialFile, newMaterialTitle || undefined);
-      } else {
-        if (!newMaterialUrl || !newMaterialTitle) return;
-        await apiSubjectContentCreateLink(token, activeTopicId, newMaterialTitle, newMaterialUrl);
-      }
-      setNewMaterialFile(null);
-      setNewMaterialTitle("");
-      setNewMaterialUrl("");
-      await reloadTopics();
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setNewMaterialLoading(false);
-    }
-  };
-
-  const handleAddTest = async () => {
-    if (!token || !activeTopicId) return;
-    if (!activeTopic) return;
-    
-    // Check limit
-    if ((activeTopic.tests?.length || 0) >= 3) {
-      alert("Максимум 3 теста на одну тему");
-      return;
-    }
-
-    if (!newTestTitle) return;
-    setNewTestLoading(true);
-    try {
-      if (newTestType === "quiz") {
-        const created = await apiSubjectContentCreateQuiz(token, activeTopicId, newTestTitle, 30);
-        const newId = created.test?.id;
-        setNewTestTitle("");
-        setNewTestFile(null);
-        await reloadTopics();
-        if (newId) await openQuizEditor(newId);
-        return;
-      } else {
-        if (!newTestFile) {
-           alert("Выберите файл теста");
-           return;
-        }
-        await apiSubjectContentCreateDocumentTest(token, activeTopicId, newTestTitle, newTestFile);
-      }
-      setNewTestTitle("");
-      setNewTestFile(null);
-      await reloadTopics();
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setNewTestLoading(false);
-    }
-  };
-
-
   return (
     <AppShell
       title={title}
@@ -632,35 +162,35 @@ export function AdminSubjectsPage() {
 
         {err && <div className={styles.error}>{err}</div>}
         {loading && <Loader text="Загрузка..." />}
-        
+
         <div className={styles.createRow}>
           {/* Hide create subject for teachers */}
           {!isTeacher && (
             <>
-            <div style={{ position: "relative", flex: 1 }}>
-              <BookOpen size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
-              <input
-                placeholder="Название предмета"
-                value={newSubjectName}
-                onChange={(e) => setNewSubjectName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
-                style={{ paddingLeft: 40, width: "100%" }}
-              />
-            </div>
-            <div style={{ position: "relative", flex: 1 }}>
-              <ImageIcon size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
-              <input
-                placeholder="Ссылка на фото (необязательно)"
-                value={newSubjectPhotoUrl}
-                onChange={(e) => setNewSubjectPhotoUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
-                style={{ paddingLeft: 40, width: "100%" }}
-              />
-            </div>
-            <button onClick={handleCreateSubject} disabled={loading || !newSubjectName.trim()} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Plus size={18} />
-              Создать предмет
-            </button>
+              <div style={{ position: "relative", flex: 1 }}>
+                <BookOpen size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
+                <input
+                  placeholder="Название предмета"
+                  value={newSubjectName}
+                  onChange={(e) => setNewSubjectName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
+                  style={{ paddingLeft: 40, width: "100%" }}
+                />
+              </div>
+              <div style={{ position: "relative", flex: 1 }}>
+                <ImageIcon size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-light)" }} />
+                <input
+                  placeholder="Ссылка на фото (необязательно)"
+                  value={newSubjectPhotoUrl}
+                  onChange={(e) => setNewSubjectPhotoUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateSubject()}
+                  style={{ paddingLeft: 40, width: "100%" }}
+                />
+              </div>
+              <button onClick={handleCreateSubject} disabled={loading || !newSubjectName.trim()} className={styles.primaryBtn}>
+                <Plus size={18} />
+                Создать предмет
+              </button>
             </>
           )}
         </div>
@@ -668,7 +198,7 @@ export function AdminSubjectsPage() {
         <div className={styles.cardsGrid}>
           {!loading && subjects.map((s) => {
             const isEditing = editingSubjectId === s.id;
-            
+
             return (
               <div key={s.id} className={styles.card}>
                 {isEditing ? (
@@ -693,20 +223,20 @@ export function AdminSubjectsPage() {
                       />
                     </div>
                     <div style={{ display: "flex", gap: 8, width: "100%" }}>
-                      <button 
-                        className="secondary" 
-                        onClick={saveEditSubject} 
+                      <button
+                        className={styles.secondaryBtn}
+                        onClick={saveEditSubject}
                         disabled={loading || !editSubjectName.trim()}
-                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                        style={{ flex: 1 }}
                       >
                         <Save size={16} />
                         Сохранить
                       </button>
-                      <button 
-                        className="secondary" 
-                        onClick={cancelEditSubject} 
+                      <button
+                        className={styles.secondaryBtn}
+                        onClick={cancelEditSubject}
                         disabled={loading}
-                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                        style={{ flex: 1 }}
                       >
                         <X size={16} />
                         Отмена
@@ -714,7 +244,7 @@ export function AdminSubjectsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className={styles.cardTop} onClick={() => openModal(s)} style={{ cursor: "pointer" }}>
+                  <div className={styles.cardTop} onClick={() => setSelectedSubject(s)} style={{ cursor: "pointer" }}>
                     <img
                       className={styles.photo}
                       src={(s as any).photo_url || "/favicon.svg"}
@@ -734,21 +264,21 @@ export function AdminSubjectsPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 4 }}>
-                      <button 
-                        className="secondary" 
-                        onClick={(e) => { e.stopPropagation(); startEditSubject(s); }} 
-                        title="Редактировать" 
+                      <button
+                        className={styles.iconBtn}
+                        onClick={(e) => { e.stopPropagation(); startEditSubject(s); }}
+                        title="Редактировать"
                         disabled={loading || isTeacher}
-                        style={{ padding: 8, opacity: isTeacher ? 0.3 : 1 }}
+                        style={{ opacity: isTeacher ? 0.3 : 1 }}
                       >
                         <Edit2 size={18} />
                       </button>
-                      <button 
-                        className={`secondary ${styles.deleteBtn}`} 
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }} 
-                        title="Удалить" 
+                      <button
+                        className={styles.iconBtnDanger}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }}
+                        title="Удалить"
                         disabled={loading || isTeacher}
-                        style={{ padding: 8, opacity: isTeacher ? 0.3 : 1 }}
+                        style={{ opacity: isTeacher ? 0.3 : 1 }}
                       >
                         <Trash2 size={18} />
                       </button>
@@ -759,531 +289,24 @@ export function AdminSubjectsPage() {
             );
           })}
 
-          {subjects.length === 0 && <div className={styles.empty}>Предметы не созданы</div>}
+          {subjects.length === 0 && !loading && <div className={styles.empty}>Предметы не созданы</div>}
         </div>
 
-        <div className={styles.infoBox}>
+        <div style={{ background: "var(--color-bg-subtle)", padding: 24, borderRadius: 12 }}>
           <h3>👨‍🏫 Предметы учителям</h3>
-          <p>
+          <p style={{ marginTop: 8, opacity: 0.7 }}>
             Предметы назначаются при создании учителя в разделе “Пользователи”.
           </p>
         </div>
       </div>
-      {modalSubject && (
-        <div className={styles.modalOverlay} onClick={closeModal}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2>{modalSubject.name}</h2>
-              <button className="secondary" onClick={closeModal} title="Закрыть">
-                <X size={20} />
-              </button>
-            </div>
 
-            {err && <div className={styles.error}>{err}</div>}
-
-            <div className={styles.modalBody}>
-              <div className={styles.syllabusActions}>
-                {/* Teachers cannot add new topics */}
-                {!isTeacher && (
-                  <button onClick={startAddNew} disabled={loading || isAddingNew} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Plus size={18} />
-                    Добавить тему
-                  </button>
-                )}
-                <button onClick={downloadExcel} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <FileDown size={18} />
-                  Скачать Excel
-                </button>
-              </div>
-
-              <div className={styles.syllabusTable}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>№</th>
-                      <th>Название темы</th>
-                      <th>Лекции (ч)</th>
-                      <th>Семинары (ч)</th>
-                      <th>Практика (ч)</th>
-                      <th>Экзамен (ч)</th>
-                      <th>Всего (ч)</th>
-                      <th>Описание</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modalTopics.map((topic) => {
-                      const isEditing = editingTopicId === topic.id;
-                      const data = isEditing ? editingTopic! : topic;
-                      
-                      return (
-                        <React.Fragment key={topic.id}>
-                        <tr>
-                          <td>
-                            {isEditing ? (
-                              <input 
-                                type="number" 
-                                value={data.topic_number} 
-                                onChange={(e) => setEditingTopic({ ...data, topic_number: parseInt(e.target.value) || 0 })}
-                                style={{ width: "60px" }}
-                              />
-                            ) : (
-                              topic.topic_number
-                            )}
-                          </td>
-                          <td>
-                            {isEditing ? (
-                              <input 
-                                type="text" 
-                                value={data.topic_name} 
-                                onChange={(e) => setEditingTopic({ ...data, topic_name: e.target.value })}
-                                style={{ width: "100%" }}
-                              />
-                            ) : (
-                              topic.topic_name
-                            )}
-                          </td>
-                          <td>
-                            {isEditing && !isTeacher ? (
-                              <input 
-                                type="number" 
-                                value={data.lecture_hours} 
-                                onChange={(e) => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 })}
-                                style={{ width: "80px" }}
-                              />
-                            ) : (
-                              topic.lecture_hours
-                            )}
-                          </td>
-                          <td>
-                            {isEditing && !isTeacher ? (
-                              <input 
-                                type="number" 
-                                value={data.seminar_hours} 
-                                onChange={(e) => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 })}
-                                style={{ width: "80px" }}
-                              />
-                            ) : (
-                              topic.seminar_hours
-                            )}
-                          </td>
-                          <td>
-                            {isEditing && !isTeacher ? (
-                              <input 
-                                type="number" 
-                                value={data.practical_hours} 
-                                onChange={(e) => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 })}
-                                style={{ width: "80px" }}
-                              />
-                            ) : (
-                              topic.practical_hours
-                            )}
-                          </td>
-                          <td>
-                            {isEditing && !isTeacher ? (
-                              <input 
-                                type="number" 
-                                value={data.exam_hours} 
-                                onChange={(e) => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 })}
-                                style={{ width: "80px" }}
-                              />
-                            ) : (
-                              topic.exam_hours
-                            )}
-                          </td>
-                          <td>{topic.total_hours}</td>
-                          <td>
-                            {isEditing ? (
-                              <input 
-                                type="text" 
-                                value={data.description || ""} 
-                                onChange={(e) => setEditingTopic({ ...data, description: e.target.value })}
-                                style={{ width: "100%" }}
-                              />
-                            ) : (
-                              topic.description || "—"
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              {isEditing ? (
-                                <>
-                                  <button className="secondary" onClick={saveEditTopic} disabled={loading} title="Сохранить">
-                                    <Save size={16} />
-                                  </button>
-                                  <button className="secondary" onClick={cancelEdit} disabled={loading} title="Отмена">
-                                    <X size={16} />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button className="secondary" onClick={() => openMaterialsModal(topic)} disabled={loading} title="Материалы">
-                                    <Paperclip size={16} />
-                                  </button>
-                                  <button className="secondary" onClick={() => startEditTopic(topic)} disabled={loading} title="Редактировать">
-                                    <Edit2 size={16} />
-                                  </button>
-                                  {/* Teachers cannot delete topics */}
-                                  {!isTeacher && (
-                                    <button className="secondary" onClick={() => deleteTopic(topic.id)} disabled={loading} title="Удалить">
-                                      <Trash2 size={16} />
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        </React.Fragment>
-                      );
-                    })}
-
-                    {isAddingNew && (
-                      <>
-                      <tr>
-                        <td>
-                          <input 
-                            type="number" 
-                            value={newTopic.topic_number} 
-                            onChange={(e) => setNewTopic({ ...newTopic, topic_number: parseInt(e.target.value) || 0 })}
-                            style={{ width: "60px" }}
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            type="text" 
-                            value={newTopic.topic_name} 
-                            onChange={(e) => setNewTopic({ ...newTopic, topic_name: e.target.value })}
-                            style={{ width: "100%" }}
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            type="number" 
-                            value={newTopic.lecture_hours} 
-                            onChange={(e) => setNewTopic({ ...newTopic, lecture_hours: parseFloat(e.target.value) || 0 })}
-                            style={{ width: "80px" }}
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            type="number" 
-                            value={newTopic.seminar_hours} 
-                            onChange={(e) => setNewTopic({ ...newTopic, seminar_hours: parseFloat(e.target.value) || 0 })}
-                            style={{ width: "80px" }}
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            type="number" 
-                            value={newTopic.practical_hours} 
-                            onChange={(e) => setNewTopic({ ...newTopic, practical_hours: parseFloat(e.target.value) || 0 })}
-                            style={{ width: "80px" }}
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            type="number" 
-                            value={newTopic.exam_hours} 
-                            onChange={(e) => setNewTopic({ ...newTopic, exam_hours: parseFloat(e.target.value) || 0 })}
-                            style={{ width: "80px" }}
-                          />
-                        </td>
-                        <td>—</td>
-                        <td>
-                          <input 
-                            type="text" 
-                            value={newTopic.description || ""} 
-                            onChange={(e) => setNewTopic({ ...newTopic, description: e.target.value })}
-                            style={{ width: "100%" }}
-                          />
-                        </td>
-                        <td>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button className="secondary" onClick={saveNewTopic} disabled={loading || !newTopic.topic_name.trim()} title="Сохранить">
-                              <Save size={16} />
-                            </button>
-                            <button className="secondary" onClick={cancelAddNew} disabled={loading} title="Отмена">
-                              <X size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {/* Expanded inputs for attachments when adding new */}
-                      <tr className={styles.addExtrasRow}>
-                        <td colSpan={9} style={{ padding: "0 12px 12px 12px", background: "var(--color-bg-subtle)" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-                                <div style={{ fontWeight: 600, fontSize: 13, opacity: 0.7 }}>Материалы можно будет добавить после создания темы</div>
-                            </div>
-                        </td>
-                      </tr>
-                      </>
-                    )}
-
-                    <tr className={styles.totalsRow}>
-                      <td colSpan={2}><strong>ИТОГО</strong></td>
-                      <td><strong>{modalTotals.lecture_hours}</strong></td>
-                      <td><strong>{modalTotals.seminar_hours}</strong></td>
-                      <td><strong>{modalTotals.practical_hours}</strong></td>
-                      <td><strong>{modalTotals.exam_hours}</strong></td>
-                      <td><strong>{modalTotals.total_hours}</strong></td>
-                      <td colSpan={2}></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Materials Modal */}
-      {materialsModalOpen && activeTopic && (
-        <div className={styles.modalBackdrop} onClick={closeMaterialsModal}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ width: 800 }}>
-             <div className={styles.modalHeader}>
-                <h2 className={styles.modalTitle}>Материалы темы: {activeTopic.topic_name}</h2>
-                <button className={styles.closeButton} onClick={closeMaterialsModal}><X size={20} /></button>
-             </div>
-
-           <div className={styles.modalBody}>
-                
-                {/* Section: Presentations / Files / Links */}
-                <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--color-border)" }}>
-                   <h3 style={{ fontSize: 16, marginBottom: 12 }}>Презентации, файлы и ссылки</h3>
-                   
-                   {/* Existing Materials List */}
-                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                      {(activeTopic.materials || []).length === 0 && <span style={{ opacity: 0.6 }}>Нет материалов</span>}
-                      {activeTopic.materials?.map(m => (
-                        <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6 }}>
-                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                             {m.kind === "link" ? <LinkIcon size={16} /> : <Paperclip size={16} />}
-                             <a href={(m.kind === "link" ? m.url : m.signed_url) || "#"} target="_blank" rel="noreferrer" style={{ fontWeight: 500 }}>
-                               {m.title}
-                             </a>
-                             {m.kind === "link" && <span style={{ fontSize: 11, opacity: 0.6 }}>{m.url}</span>}
-                           </div>
-                           <button onClick={() => handleDeleteMaterial(m.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
-                              <Trash2 size={16} />
-                           </button>
-                        </div>
-                      ))}
-                   </div>
-
-                   {/* Add Material Form */}
-                   <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить новый материал</div>
-                      <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
-                         <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                            <input type="radio" checked={newMaterialType === "file"} onChange={() => setNewMaterialType("file")} /> Файл / Презентация
-                         </label>
-                         <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                            <input type="radio" checked={newMaterialType === "link"} onChange={() => setNewMaterialType("link")} /> Ссылка
-                         </label>
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                          {newMaterialType === "file" ? (
-                            <>
-                               <input type="text" placeholder="Название (опционально)" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} style={{ flex: 1 }} />
-                               <input type="file" onChange={(e) => setNewMaterialFile(e.target.files?.[0] || null)} style={{ width: 200 }} />
-                            </>
-                          ) : (
-                            <>
-                               <input type="text" placeholder="Название ссылки" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} style={{ flex: 1 }} />
-                               <input type="url" placeholder="URL (https://...)" value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} style={{ flex: 1 }} />
-                            </>
-                          )}
-                          <button className={styles.primaryButton} onClick={handleAddMaterial} disabled={newMaterialLoading}>
-                             {newMaterialLoading ? <Loader size="sm" /> : <Plus size={16} />} 
-                             Добавить
-                          </button>
-                      </div>
-                   </div>
-                </div>
-
-
-                {/* Section: Tests */}
-                <div>
-                  <h3 style={{ fontSize: 16, marginBottom: 12 }}>Тесты (максимум 3)</h3>
-                  
-                   {/* Existing Tests List */}
-                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                      {(activeTopic.tests || []).length === 0 && <span style={{ opacity: 0.6 }}>Нет тестов</span>}
-                      {activeTopic.tests?.map(t => (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--color-bg-subtle)", borderRadius: 6, gap: 12 }}>
-                           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                             <FlaskConical size={16} />
-                             <span style={{ fontWeight: 500 }}>{t.title}</span>
-                             <span style={{ fontSize: 11, padding: "2px 6px", background: "#ddd", borderRadius: 4 }}>
-                                {t.test_type === "quiz" ? "Квиз (30 мин)" : "Файл с тестом"}
-                             </span>
-                           </div>
-                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                             {t.test_type === "quiz" ? (
-                               <button className={styles.secondaryButton} onClick={() => openQuizEditor(t.id)} disabled={quizLoading || newTestLoading}>
-                                 Редактировать
-                               </button>
-                             ) : null}
-                             <button onClick={() => handleDeleteTest(t.id)} className={styles.iconButton} style={{ color: "var(--color-danger)" }} title="Удалить">
-                                <Trash2 size={16} />
-                             </button>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-
-                   {editingQuizTestId && (
-                     <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8, marginBottom: 16 }}>
-                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-                         <div style={{ fontWeight: 700, fontSize: 13 }}>Редактор квиза</div>
-                         <button className={styles.secondaryButton} onClick={closeQuizEditor} disabled={quizSaving || quizLoading}>
-                           Закрыть редактор
-                         </button>
-                       </div>
-
-                       {quizLoading ? (
-                         <Loader text="Загрузка вопросов..." />
-                       ) : (
-                         <>
-                           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-                             {quizQuestions.length === 0 ? (
-                               <div style={{ opacity: 0.7 }}>Пока нет вопросов. Добавьте первый ниже.</div>
-                             ) : (
-                               quizQuestions.map((q, qi) => (
-                                 <div key={q.id} style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 8, padding: 10 }}>
-                                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-                                     <div style={{ fontWeight: 600 }}>
-                                       {qi + 1}. {q.question_text}
-                                     </div>
-                                     <button
-                                       onClick={() => deleteQuizQuestion(q.id)}
-                                       className={styles.iconButton}
-                                       style={{ color: "var(--color-danger)" }}
-                                       title="Удалить вопрос"
-                                       disabled={quizSaving}
-                                     >
-                                       <Trash2 size={16} />
-                                     </button>
-                                   </div>
-
-                                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                     {(q.options || []).length === 0 ? (
-                                       <div style={{ opacity: 0.7, fontSize: 13 }}>Нет вариантов ответа</div>
-                                     ) : (
-                                       (q.options as any as SubjectTestQuestionOption[]).map((o, oi) => (
-                                         <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                             <div style={{ width: 18, textAlign: "center", opacity: 0.8 }}>{oi + 1}.</div>
-                                             <div style={{ fontSize: 13 }}>{o.option_text}</div>
-                                             {(o as any).is_correct ? (
-                                               <span style={{ fontSize: 11, padding: "2px 6px", background: "var(--color-bg-subtle)", border: "1px solid var(--color-border)", borderRadius: 999 }}>
-                                                 Правильный
-                                               </span>
-                                             ) : null}
-                                           </div>
-                                           <button
-                                             onClick={() => deleteQuizOption(o.id)}
-                                             className={styles.iconButton}
-                                             style={{ color: "var(--color-danger)" }}
-                                             title="Удалить вариант"
-                                             disabled={quizSaving}
-                                           >
-                                             <Trash2 size={16} />
-                                           </button>
-                                         </div>
-                                       ))
-                                     )}
-                                   </div>
-                                 </div>
-                               ))
-                             )}
-                           </div>
-
-                           <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 8, padding: 10 }}>
-                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить вопрос</div>
-                             <textarea
-                               placeholder="Текст вопроса"
-                               value={newQuestionText}
-                               onChange={(e) => setNewQuestionText(e.target.value)}
-                               style={{ width: "100%", minHeight: 70, resize: "vertical", marginBottom: 10 }}
-                             />
-
-                             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Варианты (выберите правильный)</div>
-                             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                               {newOptionTexts.map((val, idx) => (
-                                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                   <input
-                                     type="radio"
-                                     checked={newCorrectIndex === idx}
-                                     onChange={() => setNewCorrectIndex(idx)}
-                                     title="Правильный"
-                                   />
-                                   <input
-                                     type="text"
-                                     placeholder={`Вариант ${idx + 1}`}
-                                     value={val}
-                                     onChange={(e) =>
-                                       setNewOptionTexts((prev) => {
-                                         const next = [...prev];
-                                         next[idx] = e.target.value;
-                                         return next;
-                                       })
-                                     }
-                                     style={{ flex: 1 }}
-                                   />
-                                 </div>
-                               ))}
-                             </div>
-
-                             <button className={styles.primaryButton} onClick={addQuizQuestion} disabled={quizSaving}>
-                               {quizSaving ? <Loader size="sm" /> : <Plus size={16} />}
-                               Добавить вопрос
-                             </button>
-                           </div>
-                         </>
-                       )}
-                     </div>
-                   )}
-                   
-                   {/* Add Test Form */}
-                   {(activeTopic.tests?.length || 0) < 3 ? (
-                      <div style={{ background: "var(--color-bg-subtle)", padding: 12, borderRadius: 8 }}>
-                         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Добавить новый тест</div>
-                         <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
-                            <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                                <input type="radio" checked={newTestType === "quiz"} onChange={() => setNewTestType("quiz")} /> Онлайн-Квиз
-                            </label>
-                            <label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                                <input type="radio" checked={newTestType === "document"} onChange={() => setNewTestType("document")} /> Файл (документ)
-                            </label>
-                         </div>
-
-                         <div style={{ display: "flex", gap: 8 }}>
-                            <input type="text" placeholder="Название теста" value={newTestTitle} onChange={(e) => setNewTestTitle(e.target.value)} style={{ flex: 1 }} />
-                            {newTestType === "document" && (
-                               <input type="file" onChange={(e) => setNewTestFile(e.target.files?.[0] || null)} style={{ width: 200 }} />
-                            )}
-                            <button className={styles.primaryButton} onClick={handleAddTest} disabled={newTestLoading}>
-                                {newTestLoading ? <Loader size="sm" /> : <Plus size={16} />}
-                                Создать
-                            </button>
-                         </div>
-                      </div>
-                   ) : (
-                      <div style={{ padding: 12, background: "#fff3cd", color: "#856404", borderRadius: 8, fontSize: 14 }}>
-                         Лимит тестов достигнут (3 из 3). Удалите старый тест, чтобы добавить новый.
-                      </div>
-                   )}
-                </div>
-
-             </div>
-             
-             <div className={styles.modalFooter}>
-                <button className={styles.secondaryButton} onClick={closeMaterialsModal}>Закрыть</button>
-             </div>
-          </div>
-        </div>
+      {selectedSubject && token && (
+        <SubjectTopicsModal
+          subject={selectedSubject}
+          token={token}
+          isTeacher={isTeacher}
+          onClose={() => setSelectedSubject(null)}
+        />
       )}
     </AppShell>
   );
