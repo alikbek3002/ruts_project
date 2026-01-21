@@ -1659,38 +1659,6 @@ export async function apiCreateCurriculumTemplate(
   return { template: res };
 }
 
-export async function apiAddCurriculumItem(
-  token: string,
-  templateId: string,
-  data: {
-    subject_id: string;
-    hours_per_week: number;
-    lesson_type?: string;
-  }
-): Promise<{ message: string; item: any }> {
-  return await http<{ message: string; item: any }>(
-    `/streams/curriculum-templates/${encodeURIComponent(templateId)}/items`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }
-  );
-}
-
-export async function apiDeleteCurriculumItem(
-  token: string,
-  templateId: string,
-  itemId: string
-): Promise<void> {
-  await http<void>(
-    `/streams/curriculum-templates/${encodeURIComponent(templateId)}/items/${encodeURIComponent(itemId)}`,
-    {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
-}
 
 export async function apiGenerateStreamSchedule(
   token: string,
@@ -2211,6 +2179,57 @@ export async function apiUpdateDirectionSubject(token: string, directionId: stri
 
 export async function apiDeleteDirectionSubject(token: string, directionId: string, itemId: string): Promise<{ ok: boolean }> {
   return http<{ ok: boolean }>(`/directions/${directionId}/subjects/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+
+// ============================================================
+// Curriculum Plan (structured curriculum with sections)
+// ============================================================
+
+export type CurriculumItem = {
+  id: string;
+  direction_id: string;
+  subject_id: string;
+  subject_name: string;
+  section: 'general' | 'special_legal' | 'special';
+  total_hours: number;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  has_credit: boolean;
+  has_exam: boolean;
+  has_test: boolean;
+};
+
+export type CurriculumItemInput = {
+  subject_id: string;
+  section: 'general' | 'special_legal' | 'special';
+  total_hours: number;
+  lecture_hours: number;
+  seminar_hours: number;
+  practical_hours: number;
+  has_credit: boolean;
+  has_exam: boolean;
+  has_test: boolean;
+};
+
+export async function apiListCurriculum(token: string, directionId: string): Promise<{ items: CurriculumItem[] }> {
+  return apiGet<{ items: CurriculumItem[] }>(`/directions/${directionId}/curriculum`, token);
+}
+
+export async function apiAddCurriculumItem(token: string, directionId: string, payload: CurriculumItemInput): Promise<{ item: CurriculumItem }> {
+  return apiPost<{ item: CurriculumItem }>(`/directions/${directionId}/curriculum`, payload, token);
+}
+
+export async function apiUpdateCurriculumItem(token: string, directionId: string, itemId: string, payload: CurriculumItemInput): Promise<{ item: CurriculumItem }> {
+  return apiPut<{ item: CurriculumItem }>(`/directions/${directionId}/curriculum/${itemId}`, payload, token);
+}
+
+export async function apiDeleteCurriculumItem(token: string, directionId: string, itemId: string): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>(`/directions/${directionId}/curriculum/${itemId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
   });

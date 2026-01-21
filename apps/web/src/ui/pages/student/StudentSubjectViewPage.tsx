@@ -27,7 +27,7 @@ export function StudentSubjectViewPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
 
-  const isSharedStudent = user?.role === "student" && (user.username || "").toLowerCase() === "student";
+  const isSharedStudent = false; // Disabled - all students see content directly
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [classId, setClassId] = useState<string>("");
@@ -94,11 +94,7 @@ export function StudentSubjectViewPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiSubjectContentGetSubject(
-        token,
-        subjectId,
-        isSharedStudent ? { class_id: classId, student_id: studentId } : undefined
-      );
+      const res = await apiSubjectContentGetSubject(token, subjectId);
       setTitle(res.subject?.name || "Предмет");
       setTopics(res.topics || []);
     } catch (e) {
@@ -111,7 +107,7 @@ export function StudentSubjectViewPage() {
   async function markRead(topicId: string) {
     if (!token) return;
     try {
-      await apiSubjectContentMarkRead(token, topicId, isSharedStudent ? { class_id: classId, student_id: studentId } : undefined);
+      await apiSubjectContentMarkRead(token, topicId);
       await load();
     } catch (e) {
       setError(String(e));
@@ -127,7 +123,7 @@ export function StudentSubjectViewPage() {
     setResultAnswers([]);
     setActiveTestId(testId);
     try {
-      const res = await apiSubjectStartAttempt(token, testId, isSharedStudent ? { class_id: classId, student_id: studentId } : undefined);
+      const res = await apiSubjectStartAttempt(token, testId);
       setAttemptId(res.attempt?.id || null);
       const qs = res.questions || (await apiSubjectListQuestions(token, testId)).questions;
       setQuestions(qs || []);
@@ -149,13 +145,13 @@ export function StudentSubjectViewPage() {
         question_id: questionId,
         selected_option_id: optionId || null,
       }));
-      await apiSubjectSubmitAttempt(token, attemptId, arr, isSharedStudent ? { class_id: classId, student_id: studentId } : undefined);
+      await apiSubjectSubmitAttempt(token, attemptId, arr);
       const details = await apiSubjectGetAttempt(token, attemptId);
       const qs = (
         await apiSubjectListQuestions(
           token,
           activeTestId,
-          isSharedStudent ? { attempt_id: attemptId, student_id: studentId } : { attempt_id: attemptId }
+          { attempt_id: attemptId }
         )
       ).questions;
       setQuestions(qs || []);
@@ -176,7 +172,7 @@ export function StudentSubjectViewPage() {
 
   if (loading) {
     return (
-      <AppShell title={title} nav={[]}> 
+      <AppShell title={title} nav={[]}>
         <Loader text="Загрузка..." />
       </AppShell>
     );

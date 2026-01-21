@@ -11,7 +11,7 @@ import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminDirections.module.css";
 import { Map, Hash } from "lucide-react";
-import { DirectionSubjectsModal } from "./modals/DirectionSubjectsModal";
+import { CurriculumModal } from "./modals/CurriculumModal";
 
 export function AdminDirectionsPage() {
   const { state } = useAuth();
@@ -99,7 +99,7 @@ export function AdminDirectionsPage() {
       </div>
 
       {modalDirection && token && (
-        <DirectionSubjectsModal
+        <CurriculumModal
           direction={modalDirection}
           token={token}
           onClose={() => setModalDirection(null)}
