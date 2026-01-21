@@ -16,7 +16,7 @@ def list_teachers(user: dict = require_role("admin", "manager", "teacher", "stud
     # Получаем только активных учителей с основной информацией
     resp = (
         sb.table("users")
-        .select("id,username,full_name,photo_data_url,teacher_subject,phone,email")
+        .select("id,username,full_name,photo_data_url,teacher_subject,phone")
         .eq("role", "teacher")
         .eq("is_active", True)
         .order("full_name")
