@@ -11,7 +11,7 @@ type Teacher = {
   id: string;
   full_name: string | null;
   username: string;
-  photo_url?: string | null;
+  photo_data_url?: string | null;
   teacher_subject?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -37,33 +37,36 @@ export function StudentTeachersPage() {
     setLoading(true);
     setError(null);
     try {
-      // Re-using the admin user list endpoint but filtering for 'teacher' on client or asking backend
-      // Since student might not have access to admin endpoints, we should create a public endpoint or use a safe one.
-      // However, usually "apiAdminListUsers" is protected. We need a safe way to list teachers.
-      // Let's assume there is an endpoint or we can try fetching.
-      // If no endpoint exists, we'll need to create one. For now I'll use a direct fetch to a new endpoint 
-      // or filter if the backend allows public viewing of teachers.
-      
-      // Checking if there is a 'public' or 'student' accessible endpoint for teachers.
-      // Given the file structure, maybe we need to create one. 
-      // But let's check if we can query users? Usually not.
-      
-      // Let's try to fetch from a hypothetically created safe endpoint or existing.
-      // "admin/users?role=teacher" requires admin/manager role usually.
-      
-      // Correct approach: Add a new endpoint for students to view teachers OR assume one exists.
-      // Since I can't edit backend easily without checking rights, I'll assume we need to add one
-      // or use a generic one. Let's try `api/users/teachers`.
+      console.log("[StudentTeachersPage] Fetching teachers from /api/users/teachers");
       
       const res = await trackedFetch("/api/users/teachers", {
          headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error("Не удалось загрузить список учителей");
+      
+      console.log("[StudentTeachersPage] Response status:", res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("[StudentTeachersPage] Error response:", errorText);
+        throw new Error("Не удалось загрузить список учителей");
+      }
+      
       const data = await res.json();
+      console.log("[StudentTeachersPage] Received data:", data);
+      console.log("[StudentTeachersPage] Teachers count:", data.teachers?.length || 0);
+      
+      if (data.teachers && data.teachers.length > 0) {
+        console.log("[StudentTeachersPage] Sample teacher:", {
+          username: data.teachers[0].username,
+          has_photo_data_url: !!data.teachers[0].photo_data_url,
+          has_email: !!data.teachers[0].email,
+          has_phone: !!data.teachers[0].phone
+        });
+      }
+      
       setTeachers(data.teachers || []);
     } catch (e) {
-      console.error(e);
-      // Fallback dummy data if endpoint missing (to demonstrate UI) or show error
+      console.error("[StudentTeachersPage] Load error:", e);
       setError("Список учителей временно недоступен");
     } finally {
       setLoading(false);
@@ -118,8 +121,8 @@ export function StudentTeachersPage() {
               {filtered.map(t => (
                   <div key={t.id} className={styles.card}>
                       <div className={styles.avatar}>
-                          {t.photo_url ? (
-                              <img src={t.photo_url} alt={t.full_name || t.username} />
+                          {t.photo_data_url ? (
+                              <img src={t.photo_data_url} alt={t.full_name || t.username} />
                           ) : (
                               <User size={32} />
                           )}
