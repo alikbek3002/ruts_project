@@ -190,7 +190,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <Loader text="Загрузка теста..." />
@@ -207,7 +206,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <div className={styles.container}>
@@ -275,7 +273,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <div className={styles.error}>{error}</div>
@@ -295,7 +292,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <div className={styles.error}>Не удалось начать тест</div>
@@ -312,7 +308,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <div className={styles.container}>
@@ -350,7 +345,6 @@ export function StudentTestPage() {
           { to: "/app/student", labelKey: "nav.home" },
           { to: "/app/student/timetable", labelKey: "nav.timetable" },
           { to: "/app/student/subjects", labelKey: "nav.subjects" },
-          { to: "/app/student/teachers", labelKey: "nav.teachers" },
         ]}
       >
         <div className={styles.container}>
@@ -432,7 +426,6 @@ export function StudentTestPage() {
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/teachers", labelKey: "nav.teachers" },
       ]}
     >
       <div className={styles.container}>

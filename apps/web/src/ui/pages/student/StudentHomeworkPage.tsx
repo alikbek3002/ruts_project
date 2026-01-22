@@ -36,7 +36,6 @@ export default function StudentHomeworkPage() {
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/teachers", labelKey: "nav.teachers" },
       ]}
     >
       <h2>Домашнее задание</h2>

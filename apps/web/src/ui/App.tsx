@@ -37,7 +37,6 @@ const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage
 const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTimetablePage').then(m => ({ default: m.StudentTimetablePage })));
 const StudentSubjectsPage = React.lazy(() => import('./pages/student/StudentSubjectsPage').then(m => ({ default: m.StudentSubjectsPage })));
 const StudentSubjectViewPage = React.lazy(() => import('./pages/student/StudentSubjectViewPage').then(m => ({ default: m.StudentSubjectViewPage })));
-const StudentTeachersPage = React.lazy(() => import('./pages/student/StudentTeachersPage').then(m => ({ default: m.StudentTeachersPage })));
 const SubjectTestFullscreenPage = React.lazy(() => import('./pages/student/SubjectTestFullscreenPage').then(m => ({ default: m.SubjectTestFullscreenPage })));
 
 
@@ -372,14 +371,6 @@ export function App() {
               element={
                 <RequireAuth>
                   <StudentSubjectViewPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/app/student/teachers"
-              element={
-                <RequireAuth>
-                  <StudentTeachersPage />
                 </RequireAuth>
               }
             />

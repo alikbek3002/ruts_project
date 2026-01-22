@@ -39,7 +39,6 @@ export function StudentLibraryPage() {
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/teachers", labelKey: "nav.teachers" },
       ]}
     >
       {err && <div style={{ padding: "12px", background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 16 }}>{err}</div>}
