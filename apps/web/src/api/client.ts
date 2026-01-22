@@ -2255,8 +2255,8 @@ export async function apiDeleteCurriculumItem(token: string, directionId: string
   });
 }
 
-export async function apiDuplicateCurriculum(token: string, sourceDirectionId: string, targetDirectionId: string): Promise<{ ok: boolean; copied_count: number }> {
-  return http<{ ok: boolean; copied_count: number }>(`/directions/${sourceDirectionId}/curriculum/duplicate?target_direction_id=${targetDirectionId}`, {
+export async function apiDuplicateCurriculum(token: string, sourceDirectionId: string, targetDirectionId: string, overwrite: boolean = false): Promise<{ ok: boolean; copied_count: number }> {
+  return http<{ ok: boolean; copied_count: number }>(`/directions/${sourceDirectionId}/curriculum/duplicate?target_direction_id=${targetDirectionId}&overwrite=${overwrite}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }
   });

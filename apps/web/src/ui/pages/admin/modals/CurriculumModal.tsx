@@ -177,12 +177,30 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
         setError(null);
         setDuplicating(true);
         try {
-            const res = await apiDuplicateCurriculum(token, direction.id, targetDirectionId);
+            const res = await apiDuplicateCurriculum(token, direction.id, targetDirectionId, false);
             alert(`Успешно скопировано ${res.copied_count} предметов!`);
             setShowDuplicateDialog(false);
             setTargetDirectionId("");
         } catch (e) {
-            setError(String(e));
+            const errorMsg = String(e);
+            // Если целевое направление уже имеет учебный план, предложить перезапись
+            if (errorMsg.includes("already has curriculum items")) {
+                const confirmed = window.confirm(
+                    "Выбранное направление уже имеет учебный план. Хотите заменить его на дублируемый? Это действие удалит все существующие предметы в целевом направлении."
+                );
+                if (confirmed) {
+                    try {
+                        const res = await apiDuplicateCurriculum(token, direction.id, targetDirectionId, true);
+                        alert(`Успешно скопировано ${res.copied_count} предметов!`);
+                        setShowDuplicateDialog(false);
+                        setTargetDirectionId("");
+                    } catch (e2) {
+                        setError(String(e2));
+                    }
+                }
+            } else {
+                setError(errorMsg);
+            }
         } finally {
             setDuplicating(false);
         }

@@ -126,8 +126,19 @@ def delete_curriculum_item(direction_id: str, item_id: str, user: dict = require
 
 
 @router.post("/{direction_id}/curriculum/duplicate")
-def duplicate_curriculum(direction_id: str, target_direction_id: str, user: dict = require_role("admin", "manager")):
-    """Дублировать учебный план в другое направление"""
+def duplicate_curriculum(
+    direction_id: str, 
+    target_direction_id: str, 
+    overwrite: bool = False,
+    user: dict = require_role("admin", "manager")
+):
+    """Дублировать учебный план в другое направление
+    
+    Args:
+        direction_id: ID исходного направления
+        target_direction_id: ID целевого направления
+        overwrite: Если True, удалить существующий учебный план в целевом направлении перед копированием
+    """
     sb = get_supabase()
     
     # Get source curriculum
@@ -150,7 +161,11 @@ def duplicate_curriculum(direction_id: str, target_direction_id: str, user: dict
     )
     
     if existing.data and len(existing.data) > 0:
-        raise HTTPException(status_code=400, detail="Target direction already has curriculum items. Please delete them first.")
+        if overwrite:
+            # Delete existing curriculum items
+            sb.table("curriculum_plan").delete().eq("direction_id", target_direction_id).execute()
+        else:
+            raise HTTPException(status_code=400, detail="Target direction already has curriculum items. Use overwrite=true to replace them.")
     
     # Copy items
     new_items = []
