@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, Edit2, Save } from "lucide-react";
 import {
     apiListCurriculum,
     apiAddCurriculumItem,
@@ -30,6 +30,10 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Editing state
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingItem, setEditingItem] = useState<CurriculumItem | null>(null);
 
     const [newItem, setNewItem] = useState<CurriculumItemInput>({
         subject_id: "",
@@ -111,9 +115,27 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                 test_hours: item.test_hours,
             };
             await apiUpdateCurriculumItem(token, direction.id, item.id, payload);
+            setEditingId(null);
+            setEditingItem(null);
             await load();
         } catch (e) {
             setError(String(e));
+        }
+    }
+
+    function startEditing(item: CurriculumItem) {
+        setEditingId(item.id);
+        setEditingItem({ ...item });
+    }
+
+    function cancelEditing() {
+        setEditingId(null);
+        setEditingItem(null);
+    }
+
+    function saveEditing() {
+        if (editingItem) {
+            handleUpdate(editingItem);
         }
     }
 
@@ -206,97 +228,146 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {itemsBySection[sectionKey].map((item) => (
+                                                {itemsBySection[sectionKey].map((item) => {
+                                                    const isEditing = editingId === item.id;
+                                                    const displayItem = isEditing && editingItem ? editingItem : item;
+                                                    
+                                                    return (
                                                     <tr key={item.id}>
                                                         <td>{item.subject_name}</td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.total_hours}
+                                                                value={displayItem.total_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, total_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, total_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.lecture_hours}
+                                                                value={displayItem.lecture_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, lecture_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, lecture_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.seminar_hours}
+                                                                value={displayItem.seminar_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, seminar_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, seminar_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.practical_hours}
+                                                                value={displayItem.practical_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, practical_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, practical_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.credit_hours}
+                                                                value={displayItem.credit_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, credit_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, credit_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.exam_hours}
+                                                                value={displayItem.exam_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, exam_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, exam_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
                                                                 type="number"
-                                                                value={item.test_hours}
+                                                                value={displayItem.test_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, test_hours: parseFloat(e.target.value) || 0 };
-                                                                    handleUpdate(updated);
+                                                                    if (isEditing && editingItem) {
+                                                                        setEditingItem({ ...editingItem, test_hours: parseFloat(e.target.value) || 0 });
+                                                                    }
                                                                 }}
+                                                                disabled={!isEditing}
                                                                 className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
-                                                            <button
-                                                                className={styles.deleteBtn}
-                                                                onClick={() => handleDelete(item.id)}
-                                                                title="Удалить"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
+                                                            <div style={{ display: 'flex', gap: 4 }}>
+                                                                {isEditing ? (
+                                                                    <>
+                                                                        <button
+                                                                            className={styles.saveBtn}
+                                                                            onClick={saveEditing}
+                                                                            title="Сохранить"
+                                                                        >
+                                                                            <Save size={16} />
+                                                                        </button>
+                                                                        <button
+                                                                            className={styles.cancelBtn}
+                                                                            onClick={cancelEditing}
+                                                                            title="Отмена"
+                                                                        >
+                                                                            <X size={16} />
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <button
+                                                                            className={styles.editBtn}
+                                                                            onClick={() => startEditing(item)}
+                                                                            title="Изменить"
+                                                                        >
+                                                                            <Edit2 size={16} />
+                                                                        </button>
+                                                                        <button
+                                                                            className={styles.deleteBtn}
+                                                                            onClick={() => handleDelete(item.id)}
+                                                                            title="Удалить"
+                                                                        >
+                                                                            <Trash2 size={16} />
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     )}

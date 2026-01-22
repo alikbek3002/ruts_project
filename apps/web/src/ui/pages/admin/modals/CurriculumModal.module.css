@@ -188,10 +188,55 @@
     border-color: #3b82f6;
 }
 
+.inputSmall:disabled {
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: not-allowed;
+}
+
 .table input[type="checkbox"] {
     cursor: pointer;
     width: 18px;
     height: 18px;
+}
+
+.editBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #3b82f6;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.editBtn:hover {
+    color: #2563eb;
+}
+
+.saveBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #10b981;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.saveBtn:hover {
+    color: #059669;
+}
+
+.cancelBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.cancelBtn:hover {
+    color: #374151;
 }
 
 .deleteBtn {
