@@ -24,6 +24,7 @@ export function AdminSubjectsPage() {
   const [subjects, setSubjects] = useState<SubjectWithTeachers[]>([]);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectPhotoUrl, setNewSubjectPhotoUrl] = useState("");
+  const [newSubjectOpenToAllTeachers, setNewSubjectOpenToAllTeachers] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +32,7 @@ export function AdminSubjectsPage() {
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editSubjectName, setEditSubjectName] = useState("");
   const [editSubjectPhotoUrl, setEditSubjectPhotoUrl] = useState("");
+  const [editSubjectOpenToAllTeachers, setEditSubjectOpenToAllTeachers] = useState(false);
 
   // Modal state
   const [selectedSubject, setSelectedSubject] = useState<SubjectWithTeachers | null>(null);
@@ -77,9 +79,10 @@ export function AdminSubjectsPage() {
     setErr(null);
     setLoading(true);
     try {
-      await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null);
+      await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null, newSubjectOpenToAllTeachers);
       setNewSubjectName("");
       setNewSubjectPhotoUrl("");
+      setNewSubjectOpenToAllTeachers(false);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
@@ -92,12 +95,14 @@ export function AdminSubjectsPage() {
     setEditingSubjectId(subject.id);
     setEditSubjectName(subject.name);
     setEditSubjectPhotoUrl(subject.photo_url || "");
+    setEditSubjectOpenToAllTeachers(!!(subject as any).open_to_all_teachers);
   };
 
   const cancelEditSubject = () => {
     setEditingSubjectId(null);
     setEditSubjectName("");
     setEditSubjectPhotoUrl("");
+    setEditSubjectOpenToAllTeachers(false);
   };
 
   const saveEditSubject = async () => {
@@ -105,10 +110,17 @@ export function AdminSubjectsPage() {
     setErr(null);
     setLoading(true);
     try {
-      await apiUpdateSubject(token, editingSubjectId, editSubjectName.trim(), editSubjectPhotoUrl.trim() || null);
+      await apiUpdateSubject(
+        token,
+        editingSubjectId,
+        editSubjectName.trim(),
+        editSubjectPhotoUrl.trim() || null,
+        editSubjectOpenToAllTeachers,
+      );
       setEditingSubjectId(null);
       setEditSubjectName("");
       setEditSubjectPhotoUrl("");
+      setEditSubjectOpenToAllTeachers(false);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
@@ -191,6 +203,15 @@ export function AdminSubjectsPage() {
                 <Plus size={18} />
                 Создать предмет
               </button>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)" }}>
+                <input
+                  type="checkbox"
+                  checked={newSubjectOpenToAllTeachers}
+                  onChange={(e) => setNewSubjectOpenToAllTeachers(e.target.checked)}
+                />
+                Доступен всем учителям (без присвоения)
+              </label>
             </>
           )}
         </div>
@@ -222,6 +243,15 @@ export function AdminSubjectsPage() {
                         style={{ paddingLeft: 40, width: "100%" }}
                       />
                     </div>
+
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)" }}>
+                      <input
+                        type="checkbox"
+                        checked={editSubjectOpenToAllTeachers}
+                        onChange={(e) => setEditSubjectOpenToAllTeachers(e.target.checked)}
+                      />
+                      Доступен всем учителям (без присвоения)
+                    </label>
                     <div style={{ display: "flex", gap: 8, width: "100%" }}>
                       <button
                         className={styles.secondaryBtn}

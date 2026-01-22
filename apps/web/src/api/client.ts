@@ -331,6 +331,7 @@ export type Subject = {
   id: string;
   name: string;
   photo_url?: string | null;
+  open_to_all_teachers?: boolean;
 };
 
 export type SubjectContentMaterial = {
@@ -608,12 +609,31 @@ export async function apiListSubjectsWithTeachers(token: string) {
 
 export const apiListSubjects = apiListSubjectsWithTeachers;
 
-export async function apiCreateSubject(token: string, name: string, photo_url: string | null) {
-  return await apiPost<{ subject: Subject }>("/subjects/subjects", { name, photo_url }, token);
+export async function apiCreateSubject(
+  token: string,
+  name: string,
+  photo_url: string | null,
+  open_to_all_teachers?: boolean | null,
+) {
+  return await apiPost<{ subject: Subject }>(
+    "/subjects/subjects",
+    { name, photo_url, open_to_all_teachers: open_to_all_teachers ?? undefined },
+    token
+  );
 }
 
-export async function apiUpdateSubject(token: string, subjectId: string, name: string, photo_url: string | null) {
-  return await apiPut<{ subject: Subject }>(`/subjects/subjects/${subjectId}`, { name, photo_url }, token);
+export async function apiUpdateSubject(
+  token: string,
+  subjectId: string,
+  name: string,
+  photo_url: string | null,
+  open_to_all_teachers?: boolean | null,
+) {
+  return await apiPut<{ subject: Subject }>(
+    `/subjects/subjects/${subjectId}`,
+    { name, photo_url, open_to_all_teachers: open_to_all_teachers ?? undefined },
+    token
+  );
 }
 
 export async function apiDeleteSubject(token: string, subjectId: string) {

@@ -19,11 +19,13 @@ def _teacher_display_name(row: dict) -> str:
 class CreateSubjectIn(BaseModel):
     name: str
     photo_url: str | None = None
+    open_to_all_teachers: bool | None = None
 
 
 class UpdateSubjectIn(BaseModel):
     name: str
     photo_url: str | None = None
+    open_to_all_teachers: bool | None = None
 
 
 class AssignSubjectIn(BaseModel):
@@ -52,6 +54,28 @@ def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "t
     sb = get_supabase()
 
     subjects = sb.table("subjects").select("*").order("name").execute().data or []
+
+    # For teacher cabinet, show only subjects that are either assigned to this teacher
+    # or explicitly marked as open_to_all_teachers.
+    if user.get("role") == "teacher":
+        assigned_rows = (
+            sb.table("teacher_subjects")
+            .select("subject_id")
+            .eq("teacher_id", user.get("id"))
+            .execute()
+            .data
+            or []
+        )
+        assigned_ids = {str(r.get("subject_id")) for r in assigned_rows if r.get("subject_id")}
+
+        filtered: list[dict] = []
+        for s in subjects:
+            sid = str(s.get("id")) if s.get("id") else ""
+            if not sid:
+                continue
+            if bool(s.get("open_to_all_teachers")) or sid in assigned_ids:
+                filtered.append(s)
+        subjects = filtered
     links = sb.table("teacher_subjects").select("teacher_id,subject_id").execute().data or []
 
     teacher_ids: list[str] = []
@@ -112,6 +136,8 @@ def create_subject(payload: CreateSubjectIn, user: dict = require_role("admin", 
     insert_data = {"name": name}
     if photo_url:
         insert_data["photo_url"] = photo_url
+    if payload.open_to_all_teachers is not None:
+        insert_data["open_to_all_teachers"] = bool(payload.open_to_all_teachers)
 
     resp = sb.table("subjects").insert(insert_data).execute()
     return {"subject": resp.data[0] if resp.data else None}
@@ -141,6 +167,9 @@ def update_subject(subject_id: str, payload: UpdateSubjectIn, user: dict = requi
         update_data["photo_url"] = photo_url
     else:
         update_data["photo_url"] = None
+
+    if payload.open_to_all_teachers is not None:
+        update_data["open_to_all_teachers"] = bool(payload.open_to_all_teachers)
 
     resp = sb.table("subjects").update(update_data).eq("id", subject_id).execute()
     return {"subject": resp.data[0] if resp.data else None}
