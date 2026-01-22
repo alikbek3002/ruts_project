@@ -40,7 +40,7 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
 
     // Duplicate state
     const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
-    const [targetDirectionId, setTargetDirectionId] = useState<string>("");
+    const [targetDirectionId, setTargetDirectionId] = useState<number | null>(null);
     const [duplicating, setDuplicating] = useState(false);
 
     const [newItem, setNewItem] = useState<CurriculumItemInput>({
@@ -442,7 +442,7 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                                 <p>Выберите направление, в которое хотите скопировать план "{direction.name}":</p>
                                 <select 
                                     value={targetDirectionId || ''} 
-                                    onChange={(e) => setTargetDirectionId(Number(e.target.value))}
+                                    onChange={(e) => setTargetDirectionId(e.target.value ? Number(e.target.value) : null)}
                                     className={styles.select}
                                     style={{ width: '100%', padding: 8, marginTop: 12 }}
                                 >
