@@ -173,7 +173,7 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
             setError("Выберите направление");
             return;
         }
-        
+
         setError(null);
         setDuplicating(true);
         try {
@@ -222,8 +222,8 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                 <div className={styles.header}>
                     <h2>Учебный план: {direction.name}</h2>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button 
-                            className={styles.duplicateBtn} 
+                        <button
+                            className={styles.duplicateBtn}
                             onClick={() => setShowDuplicateDialog(true)}
                             disabled={!canDuplicate}
                             title={canDuplicate ? "Дублировать план в другое направление" : "План пуст, дублирование недоступно"}
@@ -293,148 +293,148 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                                                 <tr>
                                                     <th>л/з</th>
                                                     <th>с/з</th>
-                                                    <th>пр/з</th>
+                                                    <th>с/з</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {itemsBySection[sectionKey].map((item) => {
                                                     const isEditing = editingId === item.id;
                                                     const displayItem = isEditing && editingItem ? editingItem : item;
-                                                    
+
                                                     return (
-                                                    <tr key={item.id}>
-                                                        <td>{item.subject_name}</td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.total_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, total_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.lecture_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, lecture_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.seminar_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, seminar_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.practical_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, practical_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.credit_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, credit_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.exam_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, exam_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="number"
-                                                                value={displayItem.test_hours}
-                                                                onChange={(e) => {
-                                                                    if (isEditing && editingItem) {
-                                                                        setEditingItem({ ...editingItem, test_hours: parseFloat(e.target.value) || 0 });
-                                                                    }
-                                                                }}
-                                                                disabled={!isEditing}
-                                                                className={styles.inputSmall}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <div style={{ display: 'flex', gap: 4 }}>
-                                                                {isEditing ? (
-                                                                    <>
-                                                                        <button
-                                                                            className={styles.saveBtn}
-                                                                            onClick={saveEditing}
-                                                                            title="Сохранить"
-                                                                        >
-                                                                            <Save size={16} />
-                                                                        </button>
-                                                                        <button
-                                                                            className={styles.cancelBtn}
-                                                                            onClick={cancelEditing}
-                                                                            title="Отмена"
-                                                                        >
-                                                                            <X size={16} />
-                                                                        </button>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <button
-                                                                            className={styles.editBtn}
-                                                                            onClick={() => startEditing(item)}
-                                                                            title="Изменить"
-                                                                        >
-                                                                            <Edit2 size={16} />
-                                                                        </button>
-                                                                        <button
-                                                                            className={styles.deleteBtn}
-                                                                            onClick={() => handleDelete(item.id)}
-                                                                            title="Удалить"
-                                                                        >
-                                                                            <Trash2 size={16} />
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
+                                                        <tr key={item.id}>
+                                                            <td>{item.subject_name}</td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.total_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, total_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.lecture_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, lecture_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.seminar_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, seminar_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.practical_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, practical_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.credit_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, credit_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.exam_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, exam_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <input
+                                                                    type="number"
+                                                                    value={displayItem.test_hours}
+                                                                    onChange={(e) => {
+                                                                        if (isEditing && editingItem) {
+                                                                            setEditingItem({ ...editingItem, test_hours: parseFloat(e.target.value) || 0 });
+                                                                        }
+                                                                    }}
+                                                                    disabled={!isEditing}
+                                                                    className={styles.inputSmall}
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                                    {isEditing ? (
+                                                                        <>
+                                                                            <button
+                                                                                className={styles.saveBtn}
+                                                                                onClick={saveEditing}
+                                                                                title="Сохранить"
+                                                                            >
+                                                                                <Save size={16} />
+                                                                            </button>
+                                                                            <button
+                                                                                className={styles.cancelBtn}
+                                                                                onClick={cancelEditing}
+                                                                                title="Отмена"
+                                                                            >
+                                                                                <X size={16} />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <button
+                                                                                className={styles.editBtn}
+                                                                                onClick={() => startEditing(item)}
+                                                                                title="Изменить"
+                                                                            >
+                                                                                <Edit2 size={16} />
+                                                                            </button>
+                                                                            <button
+                                                                                className={styles.deleteBtn}
+                                                                                onClick={() => handleDelete(item.id)}
+                                                                                title="Удалить"
+                                                                            >
+                                                                                <Trash2 size={16} />
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
                                                     );
                                                 })}
                                             </tbody>
@@ -458,8 +458,8 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                             </div>
                             <div className={styles.content}>
                                 <p>Выберите направление, в которое хотите скопировать план "{direction.name}":</p>
-                                <select 
-                                    value={targetDirectionId || ''} 
+                                <select
+                                    value={targetDirectionId || ''}
                                     onChange={(e) => setTargetDirectionId(e.target.value)}
                                     className={styles.select}
                                     style={{ width: '100%', padding: 8, marginTop: 12 }}
@@ -473,14 +473,14 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                                     }
                                 </select>
                                 <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-                                    <button 
+                                    <button
                                         className={styles.cancelBtn}
                                         onClick={() => setShowDuplicateDialog(false)}
                                         disabled={duplicating}
                                     >
                                         Отмена
                                     </button>
-                                    <button 
+                                    <button
                                         className={styles.saveBtn}
                                         onClick={handleDuplicate}
                                         disabled={!targetDirectionId || duplicating}

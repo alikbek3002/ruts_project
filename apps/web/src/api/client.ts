@@ -867,7 +867,7 @@ export type TimetableEntry = {
   start_time: string;
   end_time: string;
   room?: string;
-  lesson_type?: "theoretical" | "practical" | "credit";
+  lesson_type?: "lecture" | "seminar" | "credit";
 };
 
 export async function apiCreateTimetableEntry(
@@ -885,7 +885,7 @@ export async function apiUpdateTimetableEntry(
     subject?: string;
     subject_id?: string | null;
     room?: string | null;
-    lesson_type?: "theoretical" | "practical" | "credit";
+    lesson_type?: "lecture" | "seminar" | "credit";
     stream_id?: string | null;
     class_ids?: string[] | null;
   }
@@ -1539,7 +1539,7 @@ export interface CurriculumTemplate {
     subject_id: string;
     subject_name?: string;
     hours_per_week: number;
-    lesson_type: string;
+    lesson_type?: "lecture" | "seminar" | "credit";
   }>;
 }
 
@@ -2259,5 +2259,182 @@ export async function apiDuplicateCurriculum(token: string, sourceDirectionId: s
   return http<{ ok: boolean; copied_count: number }>(`/directions/${sourceDirectionId}/curriculum/duplicate?target_direction_id=${targetDirectionId}&overwrite=${overwrite}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+// ============================================================
+// ARCHIVE API - работа с архивом потоков
+// ============================================================
+
+export interface ArchivedStreamStats {
+  stream_id: string;
+  stream_name: string;
+  start_date: string;
+  end_date: string;
+  archived_at: string | null;
+  direction_id?: string | null;
+  direction_name?: string | null;
+  total_classes: number;
+  total_students: number;
+  avg_attendance_percentage: number | null;
+  avg_lesson_grade: number | null;
+  total_lesson_grades: number;
+  avg_subject_grade: number | null;
+  total_subject_grades: number;
+  total_test_attempts: number;
+  avg_test_score: number | null;
+  total_subject_test_attempts: number;
+  avg_subject_test_score: number | null;
+  total_timetable_entries: number;
+}
+
+export interface ArchivedStudentPerformance {
+  student_id: string;
+  student_name: string;
+  class_id: string;
+  class_name: string;
+  total_lessons: number;
+  lessons_attended: number;
+  attendance_percentage: number | null;
+  avg_lesson_grade: number | null;
+  lesson_grades_count: number;
+  avg_subject_grade: number | null;
+  subject_grades_count: number;
+  test_attempts_count: number;
+  tests_completed: number;
+  avg_test_score: number | null;
+  subject_test_attempts_count: number;
+  subject_tests_completed: number;
+  avg_subject_test_score: number | null;
+  passed_course: boolean;
+}
+
+export interface ArchiveSummary {
+  total_archived_streams: number;
+  total_students_in_archive: number;
+  total_classes_in_archive: number;
+  avg_attendance_overall: number;
+  avg_grade_overall: number;
+  oldest_archived: string | null;
+  newest_archived: string | null;
+}
+
+// Получить список архивированных потоков
+export async function apiGetArchivedStreams(token: string, directionId?: string): Promise<ArchivedStreamStats[]> {
+  const params = new URLSearchParams();
+  if (directionId) params.append("direction_id", directionId);
+
+  return http<ArchivedStreamStats[]>(`/streams/archived${params.toString() ? `?${params.toString()}` : ""}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Получить детальную статистику архивированного потока
+export async function apiGetArchivedStreamDetails(token: string, streamId: string): Promise<ArchivedStreamStats> {
+  return http<ArchivedStreamStats>(`/streams/archived/${encodeURIComponent(streamId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Получить студентов архивированного потока с их успеваемостью
+export async function apiGetArchivedStreamStudents(
+  token: string,
+  streamId: string,
+  classId?: string,
+  passedOnly?: boolean
+): Promise<ArchivedStudentPerformance[]> {
+  const params = new URLSearchParams();
+  if (classId) params.append("class_id", classId);
+  if (passedOnly !== undefined) params.append("passed_only", String(passedOnly));
+
+  return http<ArchivedStudentPerformance[]>(
+    `/streams/archived/${encodeURIComponent(streamId)}/students${params.toString() ? `?${params.toString()}` : ""}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+}
+
+// Получить расписание архивированного потока
+export async function apiGetArchivedStreamSchedule(token: string, streamId: string): Promise<any[]> {
+  return http<any[]>(`/streams/archived/${encodeURIComponent(streamId)}/schedule`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Архивировать поток вручную (только админ)
+export async function apiArchiveStream(token: string, streamId: string): Promise<{
+  stream_id: string;
+  stream_name: string;
+  archived_at: string;
+  class_count: number;
+  student_count: number;
+}> {
+  return http<{
+    stream_id: string;
+    stream_name: string;
+    archived_at: string;
+    class_count: number;
+    student_count: number;
+  }>(`/streams/${encodeURIComponent(streamId)}/archive`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Восстановить поток из архива (только админ)
+export async function apiRestoreStream(token: string, streamId: string): Promise<{
+  stream_id: string;
+  stream_name: string;
+  restored_at: string;
+  new_status: string;
+  message: string;
+}> {
+  return http<{
+    stream_id: string;
+    stream_name: string;
+    restored_at: string;
+    new_status: string;
+    message: string;
+  }>(`/streams/archived/${encodeURIComponent(streamId)}/restore`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Автоматическое архивирование (только админ, вызывается по расписанию)
+export async function apiAutoArchiveStreams(token: string): Promise<{
+  message: string;
+  archived_count: number;
+  archived_streams: Array<{ id: string; name: string; archived_at: string }>;
+}> {
+  return http<{
+    message: string;
+    archived_count: number;
+    archived_streams: Array<{ id: string; name: string; archived_at: string }>;
+  }>("/streams/auto-archive", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Получить общую статистику архива
+export async function apiGetArchiveSummary(token: string): Promise<ArchiveSummary> {
+  return http<ArchiveSummary>("/streams/archive/summary", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Принудительно заархивировать нагрузку за месяц (только админ)
+export async function apiArchiveTeacherWorkloadMonthly(token: string, year: number, month: number): Promise<{ message: string }> {
+  const params = new URLSearchParams({ year: String(year), month: String(month) });
+  return http<{ message: string }>(`/streams/archive/workload/monthly?${params.toString()}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
   });
 }

@@ -109,7 +109,7 @@ class CurriculumTemplateCreate(BaseModel):
 class CurriculumTemplateItemCreate(BaseModel):
     subject_id: UUID
     hours_per_week: float = Field(..., gt=0, le=40)
-    lesson_type: str = Field(default="lecture", pattern="^(lecture|credit)$")
+    lesson_type: str = Field(default="lecture", pattern="^(lecture|seminar|credit)$")
 
 
 class CurriculumTemplateResponse(BaseModel):
@@ -331,6 +331,11 @@ async def update_stream(
     existing = sb.table("streams").select("*").eq("id", str(stream_id)).execute()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Stream not found")
+    
+    # Prevent editing archived streams
+    stream = existing.data[0]
+    if stream["status"] == "archived":
+        raise HTTPException(status_code=400, detail="Cannot modify archived stream")
     
     # Build update dict
     update_data = {}
@@ -678,3 +683,343 @@ async def auto_generate_schedule(
     )
     
     return AutoScheduleResponse(**result)
+
+
+# ============================================================================
+# ARCHIVE SYSTEM
+# ============================================================================
+
+class ArchiveStreamResponse(BaseModel):
+    stream_id: UUID
+    stream_name: str
+    archived_at: datetime
+    class_count: int
+    student_count: int
+
+
+class ArchivedStreamStatsResponse(BaseModel):
+    stream_id: UUID
+    stream_name: str
+    start_date: date
+    end_date: date
+    archived_at: Optional[datetime]
+    direction_id: Optional[UUID]
+    direction_name: Optional[str]
+    total_classes: int
+    total_students: int
+    avg_attendance_percentage: Optional[float]
+    avg_lesson_grade: Optional[float]
+    total_lesson_grades: int
+    avg_subject_grade: Optional[float]
+    total_subject_grades: int
+    total_test_attempts: int
+    avg_test_score: Optional[float]
+    total_subject_test_attempts: int
+    avg_subject_test_score: Optional[float]
+    total_timetable_entries: int
+
+
+class ArchivedStudentPerformance(BaseModel):
+    student_id: UUID
+    student_name: str
+    class_id: UUID
+    class_name: str
+    total_lessons: int
+    lessons_attended: int
+    attendance_percentage: Optional[float]
+    avg_lesson_grade: Optional[float]
+    lesson_grades_count: int
+    avg_subject_grade: Optional[float]
+    subject_grades_count: int
+    test_attempts_count: int
+    tests_completed: int
+    avg_test_score: Optional[float]
+    subject_test_attempts_count: int
+    subject_tests_completed: int
+    avg_subject_test_score: Optional[float]
+    passed_course: bool
+
+
+@router.post("/{stream_id:uuid}/archive", response_model=ArchiveStreamResponse)
+async def archive_stream_manually(
+    stream_id: UUID,
+    user: dict = require_role("admin", "manager"),
+):
+    """Manually archive a stream
+    
+    This will:
+    - Change stream status to 'archived'
+    - Set archived_at timestamp
+    - Return statistics about the archived stream
+    """
+    
+    sb = get_supabase()
+    
+    # Call the database function
+    try:
+        result = sb.rpc("archive_stream", {"p_stream_id": str(stream_id)}).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to archive stream")
+        
+        data = result.data
+        
+        return ArchiveStreamResponse(
+            stream_id=data["stream_id"],
+            stream_name=data["stream_name"],
+            archived_at=data["archived_at"],
+            class_count=data["class_count"],
+            student_count=data["student_count"],
+        )
+    except APIError as e:
+        error_msg = str(e)
+        if "Stream not found" in error_msg:
+            raise HTTPException(status_code=404, detail="Stream not found")
+        elif "already archived" in error_msg:
+            raise HTTPException(status_code=400, detail="Stream is already archived")
+        else:
+            raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
+
+
+@router.get("/archived", response_model=List[ArchivedStreamStatsResponse])
+async def list_archived_streams(
+    direction_id: Optional[UUID] = None,
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """Get list of all archived streams with statistics
+    
+    Uses the archived_streams_stats view for comprehensive statistics.
+    """
+    
+    sb = get_supabase()
+    
+    try:
+        query = sb.table("archived_streams_stats").select("*")
+        
+        if direction_id:
+            query = query.eq("direction_id", str(direction_id))
+        
+        result = query.order("archived_at", desc=True).execute()
+        
+        return [ArchivedStreamStatsResponse(**stream) for stream in result.data or []]
+    except APIError as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch archived streams")
+
+
+@router.get("/archived/{stream_id:uuid}", response_model=ArchivedStreamStatsResponse)
+async def get_archived_stream_details(
+    stream_id: UUID,
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """Get detailed statistics for a specific archived stream"""
+    
+    sb = get_supabase()
+    
+    try:
+        result = sb.table("archived_streams_stats").select("*").eq("stream_id", str(stream_id)).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Archived stream not found")
+        
+        return ArchivedStreamStatsResponse(**result.data[0])
+    except APIError as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch archived stream details")
+
+
+@router.get("/archived/{stream_id:uuid}/students", response_model=List[ArchivedStudentPerformance])
+async def get_archived_stream_students(
+    stream_id: UUID,
+    class_id: Optional[UUID] = None,
+    passed_only: Optional[bool] = None,
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """Get student performance data for an archived stream
+    
+    Query parameters:
+    - class_id: Filter by specific class
+    - passed_only: Filter to show only students who passed (true) or failed (false)
+    """
+    
+    sb = get_supabase()
+    
+    try:
+        query = sb.table("archived_student_performance").select("*").eq("stream_id", str(stream_id))
+        
+        if class_id:
+            query = query.eq("class_id", str(class_id))
+        
+        if passed_only is not None:
+            query = query.eq("passed_course", passed_only)
+        
+        result = query.order("class_name").order("student_name").execute()
+        
+        return [ArchivedStudentPerformance(**student) for student in result.data or []]
+    except APIError as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch student performance data")
+
+
+@router.post("/auto-archive", status_code=status.HTTP_200_OK)
+async def auto_archive_streams(
+    user: dict = require_role("admin"),
+):
+    """Automatically archive completed streams that are 7 days past their end date
+    
+    This endpoint should be called by a cron job or scheduled task.
+    Only admin users can trigger auto-archiving.
+    """
+    
+    sb = get_supabase()
+    
+    try:
+        # 1. Archive streams
+        result = sb.rpc("auto_archive_completed_streams").execute()
+        archived_streams = result.data or []
+        
+        # 2. Archive teacher workload (previous month)
+        # This is safe to run daily, it will update stats if they changed
+        sb.rpc("auto_archive_teacher_workload").execute()
+        
+        return {
+            "message": f"Successfully archived {len(archived_streams)} streams and updated teacher workload stats",
+            "archived_count": len(archived_streams),
+            "archived_streams": [
+                {
+                    "id": stream["archived_stream_id"],
+                    "name": stream["archived_stream_name"],
+                    "archived_at": stream["archived_at"],
+                }
+                for stream in archived_streams
+            ],
+            "workload_archived": True
+        }
+    except APIError as e:
+        raise HTTPException(status_code=500, detail=f"Auto-archive failed: {str(e)}")
+
+
+@router.post("/archive/workload/monthly", status_code=status.HTTP_200_OK)
+async def manual_archive_teacher_workload(
+    year: int,
+    month: int,
+    user: dict = require_role("admin"),
+):
+    """Manually trigger teacher workload archive for a specific month"""
+    
+    sb = get_supabase()
+    try:
+        sb.rpc("archive_teacher_workload_monthly", {"p_year": year, "p_month": month}).execute()
+        return {"message": f"Successfully archived teacher workload for {year}-{month}"}
+    except APIError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to archive workload: {str(e)}")
+
+
+@router.get("/archived/{stream_id:uuid}/schedule", response_model=List[Dict[str, Any]])
+async def get_archived_stream_schedule(
+    stream_id: UUID,
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """Get the timetable/schedule for an archived stream (read-only)"""
+    
+    sb = get_supabase()
+    
+    try:
+        # First verify stream exists and is archived
+        stream_result = sb.table("streams").select("id, status").eq("id", str(stream_id)).execute()
+        if not stream_result.data:
+            raise HTTPException(status_code=404, detail="Stream not found")
+        
+        if stream_result.data[0]["status"] != "archived":
+            raise HTTPException(status_code=400, detail="Stream is not archived")
+        
+        # Get timetable entries
+        result = sb.table("timetable_entries").select(
+            "*, subjects(name), users(full_name)"
+        ).eq("stream_id", str(stream_id)).order("weekday").order("start_time").execute()
+        
+        schedule = []
+        for entry in result.data or []:
+            schedule.append({
+                "id": entry["id"],
+                "weekday": entry["weekday"],
+                "start_time": entry["start_time"],
+                "end_time": entry["end_time"],
+                "subject": entry.get("subject"),
+                "teacher_name": entry["users"]["full_name"] if entry.get("users") else None,
+                "room": entry.get("room"),
+                "duration_minutes": entry.get("duration_minutes"),
+            })
+        
+        return schedule
+    except APIError as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch schedule")
+
+
+@router.post("/archived/{stream_id:uuid}/restore", response_model=dict)
+async def restore_stream(
+    stream_id: UUID,
+    user: dict = require_role("admin"),
+):
+    """Restore a stream from archive back to completed status (admin only)
+    
+    This allows admins to restore accidentally archived streams.
+    """
+    
+    sb = get_supabase()
+    
+    try:
+        result = sb.rpc("restore_stream_from_archive", {"p_stream_id": str(stream_id)}).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to restore stream")
+        
+        data = result.data
+        
+        return {
+            "stream_id": data["stream_id"],
+            "stream_name": data["stream_name"],
+            "restored_at": data["restored_at"],
+            "new_status": data["new_status"],
+            "message": f"Stream '{data['stream_name']}' has been restored from archive",
+        }
+    except APIError as e:
+        error_msg = str(e)
+        if "Stream not found" in error_msg:
+            raise HTTPException(status_code=404, detail="Stream not found")
+        elif "not archived" in error_msg:
+            raise HTTPException(status_code=400, detail="Stream is not archived")
+        else:
+            raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
+
+
+@router.get("/archive/summary", response_model=dict)
+async def get_archive_summary(
+    user: dict = require_role("admin", "manager", "teacher"),
+):
+    """Get overall archive statistics across all archived streams
+    
+    Returns:
+    - Total number of archived streams
+    - Total students and classes in archive
+    - Overall average attendance and grades
+    - Oldest and newest archived dates
+    """
+    
+    sb = get_supabase()
+    
+    try:
+        result = sb.rpc("get_archive_summary").execute()
+        
+        if not result.data:
+            # Return empty stats if no archives
+            return {
+                "total_archived_streams": 0,
+                "total_students_in_archive": 0,
+                "total_classes_in_archive": 0,
+                "avg_attendance_overall": 0,
+                "avg_grade_overall": 0,
+                "oldest_archived": None,
+                "newest_archived": None,
+            }
+        
+        return result.data
+    except APIError as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch archive summary")

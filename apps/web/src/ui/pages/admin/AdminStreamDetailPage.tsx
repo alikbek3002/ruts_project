@@ -7,6 +7,7 @@ import {
   apiGetStream,
   apiListClasses,
   apiRemoveClassFromStream,
+  apiArchiveStream,
   type ClassItem,
   type CurriculumTemplate,
   type StreamDetail,
@@ -16,7 +17,7 @@ import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminStreamDetail.module.css";
-import { Layers, RefreshCw, Trash2, Wand2 } from "lucide-react";
+import { Layers, RefreshCw, Trash2, Wand2, Archive } from "lucide-react";
 
 export function AdminStreamDetailPage() {
   const { state } = useAuth();
@@ -103,6 +104,20 @@ export function AdminStreamDetailPage() {
     }
   }
 
+  async function handleArchive() {
+    if (!token || !streamId || !stream) return;
+    const ok = window.confirm(`Вы уверены, что хотите архивировать поток "${stream.name}"?\n\nПосле архивирования поток будет перемещен в архив, но все данные сохранятся.`);
+    if (!ok) return;
+    setErr(null);
+    try {
+      await apiArchiveStream(token, streamId);
+      alert("Поток успешно архивирован!");
+      window.location.href = base + "/streams";
+    } catch (e) {
+      setErr("Ошибка архивирования: " + String(e));
+    }
+  }
+
   async function handleGenerate() {
     if (!token || !streamId) return;
     if (!templateId) {
@@ -143,9 +158,16 @@ export function AdminStreamDetailPage() {
           <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Layers size={18} /> {stream?.name || t("admin.streamDetail.fallbackName")}
           </h2>
-          <button onClick={reload} disabled={loading} className={styles.btn}>
-            <RefreshCw size={16} /> {t("common.refresh")}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={reload} disabled={loading} className={styles.btn}>
+              <RefreshCw size={16} /> {t("common.refresh")}
+            </button>
+            {stream && stream.status !== "archived" && (user?.role === "admin" || user?.role === "manager") && (
+              <button onClick={handleArchive} className={styles.btn} style={{ color: "#f59e0b" }}>
+                <Archive size={16} /> Архивировать
+              </button>
+            )}
+          </div>
         </div>
 
         {err && <div className={styles.error}>{err}</div>}

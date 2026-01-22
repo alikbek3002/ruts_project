@@ -23,6 +23,8 @@ const AdminStreamsPage = React.lazy(() => import('./pages/admin/AdminStreamsPage
 const AdminStreamDetailPage = React.lazy(() => import('./pages/admin/AdminStreamDetailPage').then(m => ({ default: m.AdminStreamDetailPage })));
 const AdminWorkloadPage = React.lazy(() => import('./pages/admin/AdminWorkloadPage').then(m => ({ default: m.AdminWorkloadPage })));
 const AdminMeetingsPage = React.lazy(() => import('./pages/admin/AdminMeetingsPage').then(m => ({ default: m.AdminMeetingsPage })));
+const AdminArchivePage = React.lazy(() => import('./pages/admin/AdminArchivePage').then(m => ({ default: m.AdminArchivePage })));
+const AdminArchiveDetailPage = React.lazy(() => import('./pages/admin/AdminArchiveDetailPage').then(m => ({ default: m.AdminArchiveDetailPage })));
 
 // Teacher Pages
 const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
@@ -256,6 +258,56 @@ export function App() {
               element={
                 <RequireAuth>
                   <AdminClassJournalPage />
+                </RequireAuth>
+              }
+            />
+
+            {/* Archive Routes */}
+            <Route
+              path="/app/admin/archive"
+              element={
+                <RequireAuth>
+                  <AdminArchivePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/archive"
+              element={
+                <RequireAuth>
+                  <AdminArchivePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/archive"
+              element={
+                <RequireAuth>
+                  <AdminArchivePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/archive/:streamId"
+              element={
+                <RequireAuth>
+                  <AdminArchiveDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/archive/:streamId"
+              element={
+                <RequireAuth>
+                  <AdminArchiveDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/archive/:streamId"
+              element={
+                <RequireAuth>
+                  <AdminArchiveDetailPage />
                 </RequireAuth>
               }
             />

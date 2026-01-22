@@ -214,7 +214,7 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                                         <th>Название темы</th>
                                         <th style={{ width: 80 }}>Лекции</th>
                                         <th style={{ width: 80 }}>Сем.</th>
-                                        <th style={{ width: 80 }}>Прак.</th>
+                                        <th style={{ width: 80 }}>Сем.</th>
                                         <th style={{ width: 80 }}>СРСП</th>
                                         <th>Всего</th>
                                         <th>Материалы</th>

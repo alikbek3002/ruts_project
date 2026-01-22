@@ -397,7 +397,7 @@ class TimetableEntryIn(BaseModel):
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     room: str | None = None
-    lesson_type: str = "theoretical"  # theoretical, practical, credit
+    lesson_type: str = "lecture"  # lecture, seminar, credit
 
 
 @router.post("/entries")
@@ -1636,21 +1636,21 @@ def _create_lessons_from_plans(sb, lesson_plans: list) -> List[Lesson]:
             # Try to infer from teacher_subjects
             teacher_id = _infer_teacher_id_for_subject(sb, subject_id)
         
-        # Create theoretical lessons
+        # Create theoretical lessons (Lecture)
         for i in range(plan.get("theoretical_lessons_count", 0)):
             lessons.append(Lesson(
                 subject_id=subject_id,
                 subject_name=subject_name,
-                lesson_type="theoretical",
+                lesson_type="lecture",
                 teacher_id=teacher_id
             ))
         
-        # Create practical lessons
+        # Create practical lessons (Seminar)
         for i in range(plan.get("practical_lessons_count", 0)):
             lessons.append(Lesson(
                 subject_id=subject_id,
                 subject_name=subject_name,
-                lesson_type="practical",
+                lesson_type="seminar",
                 teacher_id=teacher_id
             ))
     

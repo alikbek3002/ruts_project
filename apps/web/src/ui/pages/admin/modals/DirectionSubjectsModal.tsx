@@ -178,7 +178,7 @@ export const DirectionSubjectsModal: React.FC<Props> = ({ direction, token, onCl
                                     <th>Предмет</th>
                                     <th style={{ width: 80 }}>Лекции</th>
                                     <th style={{ width: 80 }}>Сем.</th>
-                                    <th style={{ width: 80 }}>Прак.</th>
+                                    <th style={{ width: 80 }}>Сем.</th>
                                     <th style={{ width: 80 }}>СРСП</th>
                                     <th>Всего</th>
                                     <th style={{ width: 100 }}>Действия</th>

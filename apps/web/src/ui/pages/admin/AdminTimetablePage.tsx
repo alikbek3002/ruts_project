@@ -183,7 +183,7 @@ export function AdminTimetablePage() {
   const [selectedStreamId, setSelectedStreamId] = useState("");
   const [streamClasses, setStreamClasses] = useState<ClassItem[]>([]);
   const [allClasses, setAllClasses] = useState<ClassItem[]>([]);
-  
+
   const [teachers, setTeachers] = useState<AdminUser[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [classId, setClassId] = useState("");
@@ -209,12 +209,12 @@ export function AdminTimetablePage() {
   const [editEntry, setEditEntry] = useState<TimetableEntry | null>(null);
   const [modalDate, setModalDate] = useState<Date | null>(null);
   const [modalSlot, setModalSlot] = useState<number | null>(null);
-  
+
   // Form fields
   const [formSubjectId, setFormSubjectId] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formRoom, setFormRoom] = useState("");
-  const [formLessonType, setFormLessonType] = useState<"theoretical" | "practical" | "credit">("theoretical");
+  const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "credit">("lecture");
   const [formClassIds, setFormClassIds] = useState<string[]>([]);
 
   const weekDays = useMemo(() => {
@@ -238,7 +238,7 @@ export function AdminTimetablePage() {
       setTeachers(t.users);
       setSubjects(s.subjects || []);
       setRooms(rr.rooms || []);
-      
+
       if (classId) {
         const e = await apiListTimetableEntries(token, classId);
         setEntries(e.entries);
@@ -281,7 +281,7 @@ export function AdminTimetablePage() {
       setClassId("");
       return;
     }
-    
+
     setLoading(true);
     apiGetStream(token, selectedStreamId)
       .then((res) => {
@@ -297,7 +297,7 @@ export function AdminTimetablePage() {
           setClassId(classes[0].id);
         }
       })
-        .catch((e) => setErr(toUiError(e)))
+      .catch((e) => setErr(toUiError(e)))
       .finally(() => setLoading(false));
   }, [selectedStreamId, token]);
 
@@ -370,7 +370,7 @@ export function AdminTimetablePage() {
     setFormSubjectId("");
     setFormSubject("");
     setFormRoom("");
-    setFormLessonType("theoretical");
+    setFormLessonType("lecture");
     setFormClassIds(classId ? [classId] : []);
     setModalOpen(true);
   }
@@ -383,7 +383,7 @@ export function AdminTimetablePage() {
     setFormSubjectId(entry.subject_id || "");
     setFormSubject(entry.subject);
     setFormRoom(entry.room || "");
-    setFormLessonType((entry.lesson_type as any) || "theoretical");
+    setFormLessonType((entry.lesson_type as any) || "lecture");
     const ids = (Array.isArray((entry as any).class_ids) && (entry as any).class_ids.length
       ? ((entry as any).class_ids as string[])
       : [entry.class_id]
@@ -406,8 +406,8 @@ export function AdminTimetablePage() {
       const weekday = toDbWeekday(modalDate);
       const slotInfo = timeSlots[modalSlot - 1];
 
-      const effectiveClassIds = formLessonType === "theoretical" ? formClassIds : (classId ? [classId] : []);
-      if (formLessonType === "theoretical") {
+      const effectiveClassIds = formLessonType === "lecture" ? formClassIds : (classId ? [classId] : []);
+      if (formLessonType === "lecture") {
         if (effectiveClassIds.length === 0) throw new Error("Выберите хотя бы одну группу");
         if (effectiveClassIds.length > 4) throw new Error("Нельзя больше 4 групп на одной паре");
       }
@@ -418,13 +418,13 @@ export function AdminTimetablePage() {
           room: formRoom.trim() ? formRoom.trim() : null,
           lesson_type: formLessonType,
           stream_id: selectedStreamId || null,
-          class_ids: formLessonType === "theoretical" ? effectiveClassIds : null,
+          class_ids: formLessonType === "lecture" ? effectiveClassIds : null,
         });
       } else {
         await apiCreateTimetableEntry(token, {
           class_id: classId,
           stream_id: selectedStreamId || undefined,
-          class_ids: formLessonType === "theoretical" ? effectiveClassIds : undefined,
+          class_ids: formLessonType === "lecture" ? effectiveClassIds : undefined,
           subject: formSubject.trim(),
           subject_id: formSubjectId || undefined,
           weekday,
@@ -604,39 +604,39 @@ export function AdminTimetablePage() {
                           <div className={styles.entrySubject}>
                             {lesson.subject}
                             {lesson.lesson_type === "credit" && (
-                              <span style={{ 
-                                marginLeft: 4, 
-                                fontSize: 10, 
-                                background: "#f59e0b", 
-                                color: "#fff", 
-                                padding: "1px 4px", 
-                                borderRadius: 3 
+                              <span style={{
+                                marginLeft: 4,
+                                fontSize: 10,
+                                background: "#f59e0b",
+                                color: "#fff",
+                                padding: "1px 4px",
+                                borderRadius: 3
                               }}>
                                 ЗАЧЁТ
                               </span>
                             )}
-                            {lesson.lesson_type === "theoretical" && (
-                              <span style={{ 
-                                marginLeft: 4, 
-                                fontSize: 10, 
-                                background: "#3b82f6", 
-                                color: "#fff", 
-                                padding: "1px 4px", 
-                                borderRadius: 3 
+                            {lesson.lesson_type === "lecture" && (
+                              <span style={{
+                                marginLeft: 4,
+                                fontSize: 10,
+                                background: "#3b82f6",
+                                color: "#fff",
+                                padding: "1px 4px",
+                                borderRadius: 3
                               }}>
-                                ТЕОРИЯ
+                                ЛЕКЦИЯ
                               </span>
                             )}
-                            {lesson.lesson_type === "practical" && (
-                              <span style={{ 
-                                marginLeft: 4, 
-                                fontSize: 10, 
-                                background: "#10b981", 
-                                color: "#fff", 
-                                padding: "1px 4px", 
-                                borderRadius: 3 
+                            {lesson.lesson_type === "seminar" && (
+                              <span style={{
+                                marginLeft: 4,
+                                fontSize: 10,
+                                background: "#10b981",
+                                color: "#fff",
+                                padding: "1px 4px",
+                                borderRadius: 3
                               }}>
-                                ПРАКТИКА
+                                СЕМИНАР
                               </span>
                             )}
                           </div>
@@ -725,11 +725,11 @@ export function AdminTimetablePage() {
               <label className={styles.label}>Тип занятия</label>
               <select
                 value={formLessonType}
-                onChange={(e) => setFormLessonType(e.target.value as "theoretical" | "practical" | "credit")}
+                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "credit")}
                 className={styles.select}
               >
-                <option value="theoretical">Теоретическое (лекция)</option>
-                <option value="practical">Практическое</option>
+                <option value="lecture">Лекционное</option>
+                <option value="seminar">Семинарское</option>
                 <option value="credit">Зачёт</option>
               </select>
             </div>
@@ -746,7 +746,7 @@ export function AdminTimetablePage() {
               </select>
             </div>
 
-            {formLessonType === "theoretical" && (
+            {formLessonType === "lecture" && (
               <div className={styles.formGroup}>
                 <label className={styles.label}>Группы (до 4 на одной паре)</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>

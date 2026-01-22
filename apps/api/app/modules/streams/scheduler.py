@@ -592,6 +592,15 @@ async def generate_schedule(
     timetable_entries = []
     base_schedule = []  # [(subject_req, slot, teacher_id, room, group), ...]
     
+    # Sort requirements: prioritize LECTURE over SEMINAR to ensure logical order if possible
+    # And prioritize subjects with more hours to fill them first
+    priority_map = {'lecture': 1, 'seminar': 2, 'credit': 3}
+    
+    subject_requirements.sort(key=lambda x: (
+        priority_map.get(x.lesson_type, 999), 
+        -x.hours_per_week
+    ))
+
     for subject_req in subject_requirements:
         # Find teacher for this subject
         teacher_id = get_teacher_for_subject(sb, subject_req.subject_id)
