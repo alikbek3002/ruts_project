@@ -80,7 +80,7 @@ export function AdminArchiveDetailPage() {
     const failedCount = students.length - passedCount;
 
     return (
-        <AppShell titleKey="Архив потока" nav={getAdminNavItems(base)}>
+        <AppShell titleKey={"Архив потока" as any} nav={getAdminNavItems(base)}>
             <div className={styles.container}>
                 <div className={styles.header}>
                     <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>

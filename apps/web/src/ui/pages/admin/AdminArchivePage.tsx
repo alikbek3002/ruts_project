@@ -47,7 +47,7 @@ export function AdminArchivePage() {
 
     return (
         <AppShell
-            titleKey="Архив потоков"
+            titleKey={"Архив потоков" as any}
             nav={getAdminNavItems(base)}
         >
             <div className={styles.container}>
