@@ -13,6 +13,7 @@ from app.core.monitor import timed
 from app.core.provisioning import (
     full_name_from_parts,
     generate_numeric_password,
+    generate_teacher_password_from_name,
     password_fingerprint,
     username_base,
 )
@@ -130,18 +131,53 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
         if exists:
             raise HTTPException(status_code=409, detail="Password already exists")
     else:
-        temp_password = None
-        pw_fp = None
-        for _ in range(200):
-            cand = generate_numeric_password(12)
-            fp = password_fingerprint(cand)
-            exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
-            if not exists:
-                temp_password = cand
-                pw_fp = fp
-                break
-        if not temp_password or not pw_fp:
-            raise HTTPException(status_code=500, detail="Could not allocate unique password")
+        # Для учителей используем имя как пароль, для админов - случайные цифры
+        if role == "teacher":
+            try:
+                temp_password = generate_teacher_password_from_name(payload.first_name)
+                pw_fp = password_fingerprint(temp_password)
+                exists = sb.table("users").select("id").eq("password_fingerprint", pw_fp).limit(1).execute().data
+                if exists:
+                    # Если пароль уже занят, добавляем суффикс
+                    suffix = 2
+                    while suffix <= 20:
+                        candidate = f"{temp_password}{suffix}"
+                        pw_fp = password_fingerprint(candidate)
+                        exists = sb.table("users").select("id").eq("password_fingerprint", pw_fp).limit(1).execute().data
+                        if not exists:
+                            temp_password = candidate
+                            break
+                        suffix += 1
+                    if exists:
+                        raise HTTPException(status_code=500, detail="Could not allocate unique password")
+            except ValueError:
+                # Если не удалось сгенерировать пароль из имени, используем случайный
+                temp_password = None
+                pw_fp = None
+                for _ in range(200):
+                    cand = generate_numeric_password(12)
+                    fp = password_fingerprint(cand)
+                    exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+                    if not exists:
+                        temp_password = cand
+                        pw_fp = fp
+                        break
+                if not temp_password or not pw_fp:
+                    raise HTTPException(status_code=500, detail="Could not allocate unique password")
+        else:
+            # Для админов используем случайные пароли
+            temp_password = None
+            pw_fp = None
+            for _ in range(200):
+                cand = generate_numeric_password(12)
+                fp = password_fingerprint(cand)
+                exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+                if not exists:
+                    temp_password = cand
+                    pw_fp = fp
+                    break
+            if not temp_password or not pw_fp:
+                raise HTTPException(status_code=500, detail="Could not allocate unique password")
 
     full_name = full_name_from_parts(
         last_name=payload.last_name,
@@ -245,16 +281,49 @@ def generate_credentials(payload: CredentialsIn, actor: dict = require_role("adm
         if suffix > 5000:
             raise HTTPException(status_code=500, detail="Could not allocate unique username")
 
-    password = None
-    for _ in range(200):
-        cand = generate_numeric_password(12)
-        fp = password_fingerprint(cand)
-        exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
-        if not exists:
-            password = cand
-            break
-    if not password:
-        raise HTTPException(status_code=500, detail="Could not allocate unique password")
+    # Для учителей используем имя как пароль, для админов - случайные цифры
+    if role == "teacher":
+        try:
+            password = generate_teacher_password_from_name(payload.first_name)
+            fp = password_fingerprint(password)
+            exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+            if exists:
+                # Если пароль уже занят, добавляем суффикс
+                suffix = 2
+                while suffix <= 20:
+                    candidate = f"{password}{suffix}"
+                    fp = password_fingerprint(candidate)
+                    exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+                    if not exists:
+                        password = candidate
+                        break
+                    suffix += 1
+                if exists:
+                    raise HTTPException(status_code=500, detail="Could not allocate unique password")
+        except ValueError:
+            # Если не удалось сгенерировать пароль из имени, используем случайный
+            password = None
+            for _ in range(200):
+                cand = generate_numeric_password(12)
+                fp = password_fingerprint(cand)
+                exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+                if not exists:
+                    password = cand
+                    break
+            if not password:
+                raise HTTPException(status_code=500, detail="Could not allocate unique password")
+    else:
+        # Для админов используем случайные пароли
+        password = None
+        for _ in range(200):
+            cand = generate_numeric_password(12)
+            fp = password_fingerprint(cand)
+            exists = sb.table("users").select("id").eq("password_fingerprint", fp).limit(1).execute().data
+            if not exists:
+                password = cand
+                break
+        if not password:
+            raise HTTPException(status_code=500, detail="Could not allocate unique password")
 
     return {"username": username, "password": password}
 

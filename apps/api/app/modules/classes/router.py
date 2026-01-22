@@ -273,6 +273,7 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
                 "id": enr.get("id"),
                 "full_name": enr.get("student_full_name"),
                 "student_number": enr.get("student_number"),
+                "legacy_student_id": enr.get("legacy_student_id"),  # Нужно для проверки принадлежности к группе
             }
             students.append(student)
         

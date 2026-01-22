@@ -27,7 +27,7 @@ export function StudentSubjectViewPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
 
-  const isSharedStudent = false; // Disabled - all students see content directly
+  const isSharedStudent = user?.role === "student" && (user.username || "").toLowerCase() === "student";
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [classId, setClassId] = useState<string>("");
@@ -94,7 +94,11 @@ export function StudentSubjectViewPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiSubjectContentGetSubject(token, subjectId);
+      const res = await apiSubjectContentGetSubject(
+        token,
+        subjectId,
+        isSharedStudent && studentId && classId ? { student_id: studentId, class_id: classId } : undefined
+      );
       setTitle(res.subject?.name || "Предмет");
       setTopics(res.topics || []);
     } catch (e) {
@@ -107,7 +111,11 @@ export function StudentSubjectViewPage() {
   async function markRead(topicId: string) {
     if (!token) return;
     try {
-      await apiSubjectContentMarkRead(token, topicId);
+      await apiSubjectContentMarkRead(
+        token,
+        topicId,
+        isSharedStudent && studentId && classId ? { student_id: studentId, class_id: classId } : undefined
+      );
       await load();
     } catch (e) {
       setError(String(e));
@@ -123,7 +131,11 @@ export function StudentSubjectViewPage() {
     setResultAnswers([]);
     setActiveTestId(testId);
     try {
-      const res = await apiSubjectStartAttempt(token, testId);
+      const res = await apiSubjectStartAttempt(
+        token,
+        testId,
+        isSharedStudent && studentId && classId ? { student_id: studentId, class_id: classId } : undefined
+      );
       setAttemptId(res.attempt?.id || null);
       const qs = res.questions || (await apiSubjectListQuestions(token, testId)).questions;
       setQuestions(qs || []);
@@ -145,7 +157,12 @@ export function StudentSubjectViewPage() {
         question_id: questionId,
         selected_option_id: optionId || null,
       }));
-      await apiSubjectSubmitAttempt(token, attemptId, arr);
+      await apiSubjectSubmitAttempt(
+        token,
+        attemptId,
+        arr,
+        isSharedStudent && studentId && classId ? { student_id: studentId, class_id: classId } : undefined
+      );
       const details = await apiSubjectGetAttempt(token, attemptId);
       const qs = (
         await apiSubjectListQuestions(
@@ -339,6 +356,7 @@ export function StudentSubjectViewPage() {
                     <div className={styles.tests}>
                       {t.tests.map((test) => {
                         const locked = !test.can_start;
+                        const isPassed = test.passed;
                         return (
                           <div key={test.id} className={styles.testRow}>
                             <div className={styles.testInfo}>
@@ -356,11 +374,18 @@ export function StudentSubjectViewPage() {
                             <div>
                               <button
                                 className={styles.primaryButton}
-                                disabled={locked}
-                                onClick={() => startTest(test.id)}
-                                style={{ opacity: locked ? 0.6 : 1 }}
+                                disabled={locked || isPassed}
+                                onClick={() => {
+                                  if (isPassed) return; // Дополнительная защита
+                                  // Открываем тест в новой вкладке
+                                  const params = isSharedStudent && studentId && classId
+                                    ? `?studentId=${studentId}&classId=${classId}`
+                                    : '';
+                                  window.open(`/app/student/subjects/${subjectId}/test/${test.id}${params}`, '_blank');
+                                }}
+                                style={{ opacity: locked || isPassed ? 0.6 : 1 }}
                               >
-                                Начать
+                                {isPassed ? "Сдано ✓" : "Начать"}
                               </button>
                             </div>
                           </div>

@@ -63,11 +63,27 @@ export function StudentSubjectsPage() {
             <p>Пока нет предметов</p>
           </div>
         ) : (
-          <div className={styles.grid}>
+          <div className={styles.cardsGrid}>
             {subjects.map((s) => (
-              <Link key={s.id} to={`/app/student/subjects/${s.id}`} className={styles.card} title="Открыть предмет">
-                <div className={styles.cardHeader}>
-                  <h3>{s.name}</h3>
+              <Link key={s.id} to={`/app/student/subjects/${s.id}`} className={styles.card}>
+                <div className={styles.cardTop}>
+                  <img
+                    className={styles.photo}
+                    src={(s as any).photo_url || "/favicon.svg"}
+                    alt="Фото предмета"
+                    loading="lazy"
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      if (img.src.endsWith("/favicon.svg")) return;
+                      img.src = "/favicon.svg";
+                    }}
+                  />
+                  <div className={styles.cardInfo}>
+                    <div className={styles.title}>{s.name}</div>
+                    <div className={styles.meta}>
+                      <span>Нажмите чтобы открыть</span>
+                    </div>
+                  </div>
                 </div>
               </Link>
             ))}

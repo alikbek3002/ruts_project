@@ -16,9 +16,9 @@ class CurriculumItemInput(BaseModel):
     lecture_hours: float = 0
     seminar_hours: float = 0
     practical_hours: float = 0
-    has_credit: bool = False
-    has_exam: bool = False
-    has_test: bool = False
+    credit_hours: float = 0
+    exam_hours: float = 0
+    test_hours: float = 0
 
 
 @router.get("/{direction_id}/curriculum")
@@ -47,9 +47,9 @@ def list_curriculum(direction_id: str, user: dict = require_role("admin", "manag
             "lecture_hours": item.get("lecture_hours", 0),
             "seminar_hours": item.get("seminar_hours", 0),
             "practical_hours": item.get("practical_hours", 0),
-            "has_credit": item.get("has_credit", False),
-            "has_exam": item.get("has_exam", False),
-            "has_test": item.get("has_test", False),
+            "credit_hours": item.get("credit_hours", 0),
+            "exam_hours": item.get("exam_hours", 0),
+            "test_hours": item.get("test_hours", 0),
         })
     
     return {"items": results}
@@ -83,9 +83,9 @@ def add_curriculum_item(direction_id: str, payload: CurriculumItemInput, user: d
         "lecture_hours": payload.lecture_hours,
         "seminar_hours": payload.seminar_hours,
         "practical_hours": payload.practical_hours,
-        "has_credit": payload.has_credit,
-        "has_exam": payload.has_exam,
-        "has_test": payload.has_test,
+        "credit_hours": payload.credit_hours,
+        "exam_hours": payload.exam_hours,
+        "test_hours": payload.test_hours,
     }
     
     resp = sb.table("curriculum_plan").insert(data).execute()
@@ -108,9 +108,9 @@ def update_curriculum_item(direction_id: str, item_id: str, payload: CurriculumI
         "lecture_hours": payload.lecture_hours,
         "seminar_hours": payload.seminar_hours,
         "practical_hours": payload.practical_hours,
-        "has_credit": payload.has_credit,
-        "has_exam": payload.has_exam,
-        "has_test": payload.has_test,
+        "credit_hours": payload.credit_hours,
+        "exam_hours": payload.exam_hours,
+        "test_hours": payload.test_hours,
     }
     
     resp = sb.table("curriculum_plan").update(data).eq("id", item_id).execute()

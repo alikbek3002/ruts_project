@@ -95,6 +95,25 @@ def generate_numeric_password(max_len: int = 12) -> str:
     return first_digit + rest
 
 
+def generate_teacher_password_from_name(first_name: str) -> str:
+    """
+    Генерирует пароль из имени учителя.
+    Транслитерирует имя и делает первую букву заглавной.
+    Например: "Адилай" -> "Adilai"
+    """
+    # Транслитерируем имя
+    transliterated = translit_to_ascii(first_name)
+    
+    # Убираем всё кроме букв
+    clean = re.sub(r'[^a-z]', '', transliterated)
+    
+    if not clean:
+        raise ValueError("Cannot generate password from name - no valid characters")
+    
+    # Первая буква заглавная, остальные строчные
+    return clean.capitalize()
+
+
 def username_base(*, role: str, first_name: str, last_name: str, birth_date: date) -> str:
     year = birth_date.year
     first = slug_piece(first_name)

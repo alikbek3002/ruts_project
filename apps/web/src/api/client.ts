@@ -826,7 +826,7 @@ export async function apiDeleteClass(token: string, classId: string, actorPasswo
   });
 }
 
-export type ClassStudent = { id: string; username: string; full_name: string | null; student_number?: number | null };
+export type ClassStudent = { id: string; username: string; full_name: string | null; student_number?: number | null; legacy_student_id?: string | null };
 export async function apiGetClass(token: string, classId: string) {
   return apiGet<{ class: ClassItem | null; students: ClassStudent[] }>(`/classes/${classId}`, token);
 }
@@ -2199,9 +2199,9 @@ export type CurriculumItem = {
   lecture_hours: number;
   seminar_hours: number;
   practical_hours: number;
-  has_credit: boolean;
-  has_exam: boolean;
-  has_test: boolean;
+  credit_hours: number;
+  exam_hours: number;
+  test_hours: number;
 };
 
 export type CurriculumItemInput = {
@@ -2211,9 +2211,9 @@ export type CurriculumItemInput = {
   lecture_hours: number;
   seminar_hours: number;
   practical_hours: number;
-  has_credit: boolean;
-  has_exam: boolean;
-  has_test: boolean;
+  credit_hours: number;
+  exam_hours: number;
+  test_hours: number;
 };
 
 export async function apiListCurriculum(token: string, directionId: string): Promise<{ items: CurriculumItem[] }> {

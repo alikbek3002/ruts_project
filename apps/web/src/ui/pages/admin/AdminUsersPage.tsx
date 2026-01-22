@@ -162,6 +162,29 @@ export function AdminUsersPage() {
     }
   }
 
+  async function handleAutoGenerate(fname: string, lname: string, bdate: string) {
+    if (!token || !fname.trim() || !lname.trim() || !bdate) return;
+    if (!isIsoDate(bdate)) return;
+
+    setErr(null);
+    setGenerating(true);
+    try {
+      const resp = await apiAdminGenerateCredentials(token, {
+        role,
+        first_name: fname.trim(),
+        last_name: lname.trim(),
+        birth_date: bdate,
+      });
+      setGeneratedUsername(resp.username);
+      setGeneratedPassword(resp.password);
+    } catch (e) {
+      // Тихо игнорируем ошибки при автогенерации
+      console.error("Auto-generate failed:", e);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   async function openUserCard(u: AdminUser) {
     if (!token) return;
     setViewErr(null);
@@ -441,11 +464,21 @@ export function AdminUsersPage() {
 
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Фамилия</label>
-                    <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Фамилия" />
+                    <input value={lastName} onChange={(e) => {
+                      setLastName(e.target.value);
+                      if (role === "teacher" && firstName.trim() && e.target.value.trim() && birthDate) {
+                        handleAutoGenerate(firstName, e.target.value, birthDate);
+                      }
+                    }} placeholder="Фамилия" />
                   </div>
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Имя</label>
-                    <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Имя" />
+                    <input value={firstName} onChange={(e) => {
+                      setFirstName(e.target.value);
+                      if (role === "teacher" && e.target.value.trim() && lastName.trim() && birthDate) {
+                        handleAutoGenerate(e.target.value, lastName, birthDate);
+                      }
+                    }} placeholder="Имя" />
                   </div>
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Отчество</label>
@@ -469,8 +502,9 @@ export function AdminUsersPage() {
                       value={birthDate}
                       onChange={(e) => {
                         setBirthDate(e.target.value);
-                        setGeneratedUsername("");
-                        setGeneratedPassword("");
+                        if (role === "teacher" && firstName.trim() && lastName.trim() && e.target.value) {
+                          handleAutoGenerate(firstName, lastName, e.target.value);
+                        }
                       }}
                     />
                   </div>

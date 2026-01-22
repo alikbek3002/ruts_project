@@ -38,9 +38,9 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
         lecture_hours: 0,
         seminar_hours: 0,
         practical_hours: 0,
-        has_credit: false,
-        has_exam: false,
-        has_test: false,
+        credit_hours: 0,
+        exam_hours: 0,
+        test_hours: 0,
     });
 
     useEffect(() => {
@@ -86,9 +86,9 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                 lecture_hours: 0,
                 seminar_hours: 0,
                 practical_hours: 0,
-                has_credit: false,
-                has_exam: false,
-                has_test: false,
+                credit_hours: 0,
+                exam_hours: 0,
+                test_hours: 0,
             });
             await load();
         } catch (e) {
@@ -106,9 +106,9 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                 lecture_hours: item.lecture_hours,
                 seminar_hours: item.seminar_hours,
                 practical_hours: item.practical_hours,
-                has_credit: item.has_credit,
-                has_exam: item.has_exam,
-                has_test: item.has_test,
+                credit_hours: item.credit_hours,
+                exam_hours: item.exam_hours,
+                test_hours: item.test_hours,
             };
             await apiUpdateCurriculumItem(token, direction.id, item.id, payload);
             await load();
@@ -255,32 +255,35 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                                                         </td>
                                                         <td>
                                                             <input
-                                                                type="checkbox"
-                                                                checked={item.has_credit}
+                                                                type="number"
+                                                                value={item.credit_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, has_credit: e.target.checked };
+                                                                    const updated = { ...item, credit_hours: parseFloat(e.target.value) || 0 };
                                                                     handleUpdate(updated);
                                                                 }}
+                                                                className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
-                                                                type="checkbox"
-                                                                checked={item.has_exam}
+                                                                type="number"
+                                                                value={item.exam_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, has_exam: e.target.checked };
+                                                                    const updated = { ...item, exam_hours: parseFloat(e.target.value) || 0 };
                                                                     handleUpdate(updated);
                                                                 }}
+                                                                className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>
                                                             <input
-                                                                type="checkbox"
-                                                                checked={item.has_test}
+                                                                type="number"
+                                                                value={item.test_hours}
                                                                 onChange={(e) => {
-                                                                    const updated = { ...item, has_test: e.target.checked };
+                                                                    const updated = { ...item, test_hours: parseFloat(e.target.value) || 0 };
                                                                     handleUpdate(updated);
                                                                 }}
+                                                                className={styles.inputSmall}
                                                             />
                                                         </td>
                                                         <td>

@@ -38,6 +38,7 @@ const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTim
 const StudentSubjectsPage = React.lazy(() => import('./pages/student/StudentSubjectsPage').then(m => ({ default: m.StudentSubjectsPage })));
 const StudentSubjectViewPage = React.lazy(() => import('./pages/student/StudentSubjectViewPage').then(m => ({ default: m.StudentSubjectViewPage })));
 const StudentTeachersPage = React.lazy(() => import('./pages/student/StudentTeachersPage').then(m => ({ default: m.StudentTeachersPage })));
+const SubjectTestFullscreenPage = React.lazy(() => import('./pages/student/SubjectTestFullscreenPage').then(m => ({ default: m.SubjectTestFullscreenPage })));
 
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -65,335 +66,351 @@ export function App() {
             />
             <Route path="/" element={<Navigate to="/app" replace />} />
 
-          <Route
-            path="/app/admin"
-            element={
-              <RequireAuth>
-                <AdminHomePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/manager"
-            element={
-              <RequireAuth>
-                <AdminHomePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/admin/users"
-            element={
-              <RequireAuth>
-                <AdminUsersPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/manager/users"
-            element={
-              <RequireAuth>
-                <AdminUsersPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/admin/classes"
-            element={
-              <RequireAuth>
-                <AdminClassesPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/manager/classes"
-            element={
-              <RequireAuth>
-                <AdminClassesPage />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/app/admin"
+              element={
+                <RequireAuth>
+                  <AdminHomePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager"
+              element={
+                <RequireAuth>
+                  <AdminHomePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/users"
+              element={
+                <RequireAuth>
+                  <AdminUsersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/users"
+              element={
+                <RequireAuth>
+                  <AdminUsersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/classes"
+              element={
+                <RequireAuth>
+                  <AdminClassesPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/classes"
+              element={
+                <RequireAuth>
+                  <AdminClassesPage />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/app/admin/streams"
-            element={
-              <RequireAuth>
-                <AdminStreamsPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/manager/streams"
-            element={
-              <RequireAuth>
-                <AdminStreamsPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/admin/streams/:streamId"
-            element={
-              <RequireAuth>
-                <AdminStreamDetailPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/manager/streams/:streamId"
-            element={
-              <RequireAuth>
-                <AdminStreamDetailPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/app/admin/timetable"
-            element={
-            <RequireAuth>
-              <AdminTimetablePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/timetable"
-          element={
-            <RequireAuth>
-              <AdminTimetablePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/subjects"
-          element={
-            <RequireAuth>
-              <AdminSubjectsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/subjects"
-          element={
-            <RequireAuth>
-              <AdminSubjectsPage />
-            </RequireAuth>
-          }
-        />
+            <Route
+              path="/app/admin/streams"
+              element={
+                <RequireAuth>
+                  <AdminStreamsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/streams"
+              element={
+                <RequireAuth>
+                  <AdminStreamsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/streams/:streamId"
+              element={
+                <RequireAuth>
+                  <AdminStreamDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/streams/:streamId"
+              element={
+                <RequireAuth>
+                  <AdminStreamDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/timetable"
+              element={
+                <RequireAuth>
+                  <AdminTimetablePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/timetable"
+              element={
+                <RequireAuth>
+                  <AdminTimetablePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/subjects"
+              element={
+                <RequireAuth>
+                  <AdminSubjectsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/subjects"
+              element={
+                <RequireAuth>
+                  <AdminSubjectsPage />
+                </RequireAuth>
+              }
+            />
 
-        <Route
-          path="/app/admin/meetings"
-          element={
-            <RequireAuth>
-              <AdminMeetingsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/meetings"
-          element={
-            <RequireAuth>
-              <AdminMeetingsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/directions"
-          element={
-            <RequireAuth>
-              <AdminDirectionsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/directions"
-          element={
-            <RequireAuth>
-              <AdminDirectionsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/notifications"
-          element={
-            <RequireAuth>
-              <AdminNotificationsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/notifications"
-          element={
-            <RequireAuth>
-              <AdminNotificationsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/workload"
-          element={
-            <RequireAuth>
-              <AdminWorkloadPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/workload"
-          element={
-            <RequireAuth>
-              <AdminWorkloadPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/admin/classes/:classId/journal"
-          element={
-            <RequireAuth>
-              <AdminClassJournalPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/manager/classes/:classId/journal"
-          element={
-            <RequireAuth>
-              <AdminClassJournalPage />
-            </RequireAuth>
-          }
-        />
+            <Route
+              path="/app/admin/meetings"
+              element={
+                <RequireAuth>
+                  <AdminMeetingsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/meetings"
+              element={
+                <RequireAuth>
+                  <AdminMeetingsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/directions"
+              element={
+                <RequireAuth>
+                  <AdminDirectionsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/directions"
+              element={
+                <RequireAuth>
+                  <AdminDirectionsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/notifications"
+              element={
+                <RequireAuth>
+                  <AdminNotificationsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/notifications"
+              element={
+                <RequireAuth>
+                  <AdminNotificationsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/workload"
+              element={
+                <RequireAuth>
+                  <AdminWorkloadPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/workload"
+              element={
+                <RequireAuth>
+                  <AdminWorkloadPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/admin/classes/:classId/journal"
+              element={
+                <RequireAuth>
+                  <AdminClassJournalPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/classes/:classId/journal"
+              element={
+                <RequireAuth>
+                  <AdminClassJournalPage />
+                </RequireAuth>
+              }
+            />
 
-        <Route
-          path="/app/teacher"
-          element={
-            <RequireAuth>
-              <TeacherHomePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/timetable"
-          element={
-            <RequireAuth>
-              <TeacherTimetablePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/vzvody"
-          element={
-            <RequireAuth>
-              <TeacherMyVzvodyPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/journal"
-          element={
-            <RequireAuth>
-              <TeacherJournalPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/library"
-          element={
-            <RequireAuth>
-              <TeacherLibraryPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/workload"
-          element={
-            <RequireAuth>
-              <TeacherWorkloadPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/teacher/subjects"
-          element={
-            <RequireAuth>
-              <AdminSubjectsPage />
-            </RequireAuth>
-          }
-        />
+            <Route
+              path="/app/teacher"
+              element={
+                <RequireAuth>
+                  <TeacherHomePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/timetable"
+              element={
+                <RequireAuth>
+                  <TeacherTimetablePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/vzvody"
+              element={
+                <RequireAuth>
+                  <TeacherMyVzvodyPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/journal"
+              element={
+                <RequireAuth>
+                  <TeacherJournalPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/library"
+              element={
+                <RequireAuth>
+                  <TeacherLibraryPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/workload"
+              element={
+                <RequireAuth>
+                  <TeacherWorkloadPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/teacher/subjects"
+              element={
+                <RequireAuth>
+                  <AdminSubjectsPage />
+                </RequireAuth>
+              }
+            />
 
-        <Route
-          path="/app/student"
-          element={
-            <RequireAuth>
-              <StudentHomePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/timetable"
-          element={
-            <RequireAuth>
-              <StudentTimetablePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/grades"
-          element={
-            <RequireAuth>
-              <Navigate to="/app/student" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/library"
-          element={
-            <RequireAuth>
-              <Navigate to="/app/student" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/homework"
-          element={
-            <RequireAuth>
-              <Navigate to="/app/student" replace />
-            </RequireAuth>
-          }
-        />
+            <Route
+              path="/app/student"
+              element={
+                <RequireAuth>
+                  <StudentHomePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/timetable"
+              element={
+                <RequireAuth>
+                  <StudentTimetablePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/grades"
+              element={
+                <RequireAuth>
+                  <Navigate to="/app/student" replace />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/library"
+              element={
+                <RequireAuth>
+                  <Navigate to="/app/student" replace />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/homework"
+              element={
+                <RequireAuth>
+                  <Navigate to="/app/student" replace />
+                </RequireAuth>
+              }
+            />
 
-        <Route
-          path="/app/student/subjects"
-          element={
-            <RequireAuth>
-              <StudentSubjectsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/subjects/:subjectId"
-          element={
-            <RequireAuth>
-              <StudentSubjectViewPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/app/student/teachers"
-          element={
-            <RequireAuth>
-              <StudentTeachersPage />
-            </RequireAuth>
-          }
-        />
+            <Route
+              path="/app/student/subjects"
+              element={
+                <RequireAuth>
+                  <StudentSubjectsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/subjects/:subjectId"
+              element={
+                <RequireAuth>
+                  <StudentSubjectViewPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/teachers"
+              element={
+                <RequireAuth>
+                  <StudentTeachersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/test/:testId"
+              element={
+                <RequireAuth>
+                  <SubjectTestFullscreenPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/subjects/:subjectId/test/:testId"
+              element={
+                <RequireAuth>
+                  <SubjectTestFullscreenPage />
+                </RequireAuth>
+              }
+            />
 
-        {/* Profile page - available for all roles */}
-        <Route
-          path="/app/profile"
-          element={
-            <RequireAuth>
-              <ProfilePage />
-            </RequireAuth>
-          }
-        />
+            {/* Profile page - available for all roles */}
+            <Route
+              path="/app/profile"
+              element={
+                <RequireAuth>
+                  <ProfilePage />
+                </RequireAuth>
+              }
+            />
 
-        <Route path="*" element={<Navigate to="/app" replace />} />
+            <Route path="*" element={<Navigate to="/app" replace />} />
           </Routes>
         </Suspense>
       </AuthProvider>

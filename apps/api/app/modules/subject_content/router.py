@@ -34,25 +34,45 @@ def _is_shared_student_account(user: dict) -> bool:
 
 
 def _resolve_effective_student_id(user: dict, requested_student_id: str | None) -> str:
+    """
+    Возвращает ID студента для записи в базу данных.
+    Для shared student account возвращаем SHARED_STUDENT_USER_ID,
+    так как таблицы subject_topic_reads/attempts требуют FK на users.
+    requested_student_id (enrollment ID) используется только для проверки принадлежности к группе.
+    """
     if _is_shared_student_account(user):
         if not requested_student_id:
             raise HTTPException(status_code=400, detail="Требуется выбрать ученика")
-        return requested_student_id
+        # Возвращаем SHARED_STUDENT_USER_ID для записи в БД,
+        # enrollment ID будет проверен отдельно в _ensure_student_in_class
+        return SHARED_STUDENT_USER_ID
     return str(user.get("id"))
 
 
 def _ensure_student_in_class(sb, class_id: str, student_id: str):
     if not class_id:
         raise HTTPException(status_code=400, detail="Требуется выбрать группу")
+    # Ищем по enrollment id (первичный ключ) или по legacy_student_id для обратной совместимости
     enr = (
         sb.table("class_enrollments")
         .select("id")
         .eq("class_id", class_id)
-        .eq("legacy_student_id", student_id)
+        .eq("id", student_id)
         .limit(1)
         .execute()
         .data
     )
+    if not enr:
+        # Попробуем поиск по legacy_student_id для обратной совместимости
+        enr = (
+            sb.table("class_enrollments")
+            .select("id")
+            .eq("class_id", class_id)
+            .eq("legacy_student_id", student_id)
+            .limit(1)
+            .execute()
+            .data
+        )
     if not enr:
         raise HTTPException(status_code=400, detail="Выбранный ученик не найден в этой группе")
 
@@ -131,7 +151,8 @@ def get_subject_content(subject_id: str, student_id: str | None = None, class_id
 
     effective_student_id = _resolve_effective_student_id(user, student_id)
     if _is_shared_student_account(user):
-        _ensure_student_in_class(sb, str(class_id or ""), str(effective_student_id))
+        # Проверяем по enrollment ID (student_id из query params), а не по effective_student_id
+        _ensure_student_in_class(sb, str(class_id or ""), str(student_id or ""))
 
     subj = sb.table("subjects").select("id,name,photo_url").eq("id", subject_id).limit(1).execute().data
     if not subj:
@@ -298,7 +319,8 @@ def mark_topic_read(topic_id: str, payload: MarkReadIn, user: dict = require_rol
 
     effective_student_id = _resolve_effective_student_id(user, payload.student_id)
     if _is_shared_student_account(user):
-        _ensure_student_in_class(sb, str(payload.class_id or ""), str(effective_student_id))
+        # Проверяем по enrollment ID (payload.student_id), а не по effective_student_id
+        _ensure_student_in_class(sb, str(payload.class_id or ""), str(payload.student_id or ""))
 
     # Validate topic exists
     topic = sb.table("subject_topics").select("id").eq("id", topic_id).limit(1).execute().data
@@ -765,12 +787,17 @@ def delete_option(option_id: str, user: dict = require_role("teacher", "admin", 
 
 @router.post("/tests/{test_id}/start")
 def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_role("student")):
+    print(f"[START_ATTEMPT] Called with test_id={test_id}, payload={payload}")
     sb = get_supabase()
 
     effective_student_id = _resolve_effective_student_id(user, payload.student_id)
+    print(f"[START_ATTEMPT] effective_student_id={effective_student_id}")
+    
     if _is_shared_student_account(user):
-        _ensure_student_in_class(sb, str(payload.class_id or ""), str(effective_student_id))
+        # Проверяем по enrollment ID, а не по effective_student_id
+        _ensure_student_in_class(sb, str(payload.class_id or ""), str(payload.student_id or ""))
 
+    print(f"[START_ATTEMPT] Fetching test...")
     test = (
         sb.table("subject_tests")
         .select("id,test_type,time_limit_minutes,topic_id")
@@ -779,10 +806,12 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
         .execute()
         .data
     )
+    print(f"[START_ATTEMPT] Test fetched: {test}")
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
     # Must be read
+    print(f"[START_ATTEMPT] Checking if topic {test.get('topic_id')} is read by student {effective_student_id}...")
     read_row = (
         sb.table("subject_topic_reads")
         .select("id")
@@ -792,12 +821,14 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
         .execute()
         .data
     )
+    print(f"[START_ATTEMPT] Read check result: {read_row}")
     if not read_row:
         raise HTTPException(status_code=400, detail="Сначала нажмите «прочитал»")
 
+    print(f"[START_ATTEMPT] Checking for existing attempt...")
     existing = (
         sb.table("subject_test_attempts")
-        .select("id")
+        .select("id,time_limit_seconds")
         .eq("test_id", test_id)
         .eq("student_id", effective_student_id)
         .is_("submitted_at", "null")
@@ -805,8 +836,57 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
         .execute()
         .data
     )
+    
+    # If there's an existing attempt, return it instead of creating a new one
     if existing:
-        raise HTTPException(status_code=400, detail="You already have an active attempt for this test")
+        print(f"[START_ATTEMPT] Found existing attempt, returning it: {existing[0].get('id')}")
+        existing_attempt = existing[0]
+        existing_time_limit = existing_attempt.get("time_limit_seconds")
+        
+        # For quiz tests, fetch questions
+        if test.get("test_type") == "quiz":
+            print(f"[START_ATTEMPT] Fetching questions for existing attempt...")
+            questions = (
+                sb.table("subject_test_questions")
+                .select("id,question_text,order_index")
+                .eq("test_id", test_id)
+                .order("order_index")
+                .execute()
+                .data
+                or []
+            )
+            
+            question_ids = [str(q.get("id")) for q in questions if q.get("id")]
+            options_by_question: dict[str, list[dict]] = {qid: [] for qid in question_ids}
+            
+            if question_ids:
+                options = (
+                    sb.table("subject_test_question_options")
+                    .select("id,question_id,option_text,order_index")
+                    .in_("question_id", question_ids)
+                    .order("order_index")
+                    .execute()
+                    .data
+                    or []
+                )
+                for o in options:
+                    qid = str(o.get("question_id"))
+                    options_by_question.setdefault(qid, []).append(
+                        {
+                            "id": o.get("id"),
+                            "option_text": o.get("option_text"),
+                            "order_index": o.get("order_index"),
+                        }
+                    )
+            
+            for q in questions:
+                qid = str(q.get("id"))
+                q["options"] = options_by_question.get(qid, [])
+            
+            print(f"[START_ATTEMPT] Returning existing attempt with questions")
+            return {"attempt": existing_attempt, "questions": questions, "time_limit_seconds": existing_time_limit}
+        else:
+            return {"attempt": existing_attempt, "test": test}
 
     time_limit_seconds = None
     if test.get("test_type") == "quiz":
@@ -834,6 +914,7 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
     if test.get("test_type") != "quiz":
         return {"attempt": attempt, "test": test}
 
+    print(f"[START_ATTEMPT] Fetching questions for test_id={test_id}...")
     questions = (
         sb.table("subject_test_questions")
         .select("id,question_text,order_index")
@@ -843,11 +924,13 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
         .data
         or []
     )
+    print(f"[START_ATTEMPT] Found {len(questions)} questions")
 
     question_ids = [str(q.get("id")) for q in questions if q.get("id")]
     options_by_question: dict[str, list[dict]] = {qid: [] for qid in question_ids}
 
     if question_ids:
+        print(f"[START_ATTEMPT] Fetching options for {len(question_ids)} questions...")
         options = (
             sb.table("subject_test_question_options")
             .select("id,question_id,option_text,order_index")
@@ -857,6 +940,7 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
             .data
             or []
         )
+        print(f"[START_ATTEMPT] Found {len(options)} options")
         for o in options:
             qid = str(o.get("question_id"))
             options_by_question.setdefault(qid, []).append(
@@ -871,6 +955,7 @@ def start_attempt(test_id: str, payload: StartAttemptIn, user: dict = require_ro
         qid = str(q.get("id"))
         q["options"] = options_by_question.get(qid, [])
 
+    print(f"[START_ATTEMPT] Returning response...")
     return {"attempt": attempt, "questions": questions, "time_limit_seconds": time_limit_seconds}
 
 
@@ -894,7 +979,8 @@ def submit_attempt(attempt_id: str, payload: SubmitAttemptIn, user: dict = requi
         raise HTTPException(status_code=403, detail="This is not your attempt")
 
     if _is_shared_student_account(user):
-        _ensure_student_in_class(sb, str(payload.class_id or ""), str(effective_student_id))
+        # Проверяем по enrollment ID, а не по effective_student_id
+        _ensure_student_in_class(sb, str(payload.class_id or ""), str(payload.student_id or ""))
 
     if attempt.get("submitted_at"):
         raise HTTPException(status_code=400, detail="This attempt has already been submitted")
