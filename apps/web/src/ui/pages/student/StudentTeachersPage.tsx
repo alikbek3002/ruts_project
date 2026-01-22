@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Users, User, Search, Mail, Phone, BookOpen } from "lucide-react";
+import { User, Search, Phone, BookOpen } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
@@ -14,7 +14,6 @@ type Teacher = {
   photo_data_url?: string | null;
   teacher_subject?: string | null;
   phone?: string | null;
-  email?: string | null;
 };
 
 export function StudentTeachersPage() {
@@ -59,7 +58,6 @@ export function StudentTeachersPage() {
         console.log("[StudentTeachersPage] Sample teacher:", {
           username: data.teachers[0].username,
           has_photo_data_url: !!data.teachers[0].photo_data_url,
-          has_email: !!data.teachers[0].email,
           has_phone: !!data.teachers[0].phone
         });
       }
@@ -134,16 +132,11 @@ export function StudentTeachersPage() {
                                   <BookOpen size={14} /> {t.teacher_subject}
                               </div>
                           )}
-                          {(t.phone || t.email) && <div className={styles.divider} />}
+                          {t.phone && <div className={styles.divider} />}
                           <div className={styles.contacts}>
                               {t.phone && (
                                   <div className={styles.contactItem} title="Телефон">
                                       <Phone size={14} /> {t.phone}
-                                  </div>
-                              )}
-                              {t.email && (
-                                  <div className={styles.contactItem} title="Email">
-                                      <Mail size={14} /> {t.email}
                                   </div>
                               )}
                           </div>

@@ -21,7 +21,7 @@ def list_teachers(user: dict = require_role("admin", "manager", "teacher", "stud
         # Получаем только активных учителей с основной информацией
         resp = (
             sb.table("users")
-            .select("id,username,full_name,photo_data_url,teacher_subject,phone,email")
+            .select("id,username,full_name,photo_data_url,teacher_subject,phone")
             .eq("role", "teacher")
             .eq("is_active", True)
             .order("full_name")
@@ -34,7 +34,7 @@ def list_teachers(user: dict = require_role("admin", "manager", "teacher", "stud
         # Логируем первого учителя для отладки (если есть)
         if teachers:
             sample = teachers[0]
-            logger.info(f"[/api/users/teachers] Sample teacher: {sample.get('username')}, has photo: {bool(sample.get('photo_data_url'))}, has email: {bool(sample.get('email'))}")
+            logger.info(f"[/api/users/teachers] Sample teacher: {sample.get('username')}, has photo: {bool(sample.get('photo_data_url'))}, has phone: {bool(sample.get('phone'))}")
         
         return {"teachers": teachers}
     except Exception as e:
