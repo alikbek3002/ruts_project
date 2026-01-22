@@ -99,6 +99,8 @@ export function AdminUsersPage() {
   const [birthDate, setBirthDate] = useState("");
   const [classId, setClassId] = useState("");
   const [teacherSubjectIds, setTeacherSubjectIds] = useState<string[]>([]);
+  const [teacherSubjectToAddId, setTeacherSubjectToAddId] = useState<string>("");
+    const [viewTeacherSubjectToAddId, setViewTeacherSubjectToAddId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [generatedUsername, setGeneratedUsername] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
@@ -526,23 +528,72 @@ export function AdminUsersPage() {
                   {role === "teacher" && (
                     <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                       <label className={styles.label}>Предметы (необязательно)</label>
-                      <select
-                        multiple
-                        value={teacherSubjectIds}
-                        onChange={(e) => {
-                          const ids = Array.from(e.target.selectedOptions).map((o) => o.value).filter(Boolean);
-                          setTeacherSubjectIds(Array.from(new Set(ids)));
-                        }}
-                        style={{ minHeight: 140 }}
-                      >
-                        {subjects.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 6 }}>
-                        Можно выбрать несколько: ⌘/Ctrl + клик
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {teacherSubjectIds.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>
+                            Пока ничего не назначено.
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {teacherSubjectIds
+                              .map((id) => subjects.find((s) => s.id === id))
+                              .filter(Boolean)
+                              .map((s) => (
+                                <div
+                                  key={s!.id}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    border: "1px solid var(--color-border)",
+                                    background: "var(--color-bg-subtle)",
+                                    padding: "6px 10px",
+                                    borderRadius: 999,
+                                    fontSize: 13,
+                                  }}
+                                >
+                                  <span>{s!.name}</span>
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    style={{ padding: "2px 8px", lineHeight: 1.1 }}
+                                    onClick={() => setTeacherSubjectIds(teacherSubjectIds.filter((x) => x !== s!.id))}
+                                    title="Убрать предмет"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
+                          <select
+                            value={teacherSubjectToAddId}
+                            onChange={(e) => setTeacherSubjectToAddId(e.target.value)}
+                          >
+                            <option value="">— Выберите предмет —</option>
+                            {subjects
+                              .filter((s) => !teacherSubjectIds.includes(s.id))
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!teacherSubjectToAddId}
+                            onClick={() => {
+                              const id = teacherSubjectToAddId;
+                              if (!id) return;
+                              setTeacherSubjectIds(Array.from(new Set([...teacherSubjectIds, id])));
+                              setTeacherSubjectToAddId("");
+                            }}
+                          >
+                            Добавить
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -869,45 +920,95 @@ export function AdminUsersPage() {
                         background: "var(--color-bg-subtle)"
                       }}>
                         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя (необязательно)</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
-                          <select
-                            multiple
-                            value={viewTeacherSubjectIds}
-                            onChange={(e) => {
-                              const ids = Array.from(e.target.selectedOptions).map((o) => o.value).filter(Boolean);
-                              setViewTeacherSubjectIds(Array.from(new Set(ids)));
-                            }}
-                            style={{ minHeight: 140 }}
-                          >
-                            {subjects.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {viewTeacherSubjectIds.length === 0 ? (
+                            <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>
+                              Пока ничего не назначено.
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {viewTeacherSubjectIds
+                                .map((id) => subjects.find((s) => s.id === id))
+                                .filter(Boolean)
+                                .map((s) => (
+                                  <div
+                                    key={s!.id}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      border: "1px solid var(--color-border)",
+                                      background: "var(--color-bg-subtle)",
+                                      padding: "6px 10px",
+                                      borderRadius: 999,
+                                      fontSize: 13,
+                                    }}
+                                  >
+                                    <span>{s!.name}</span>
+                                    <button
+                                      type="button"
+                                      className="secondary"
+                                      style={{ padding: "2px 8px", lineHeight: 1.1 }}
+                                      onClick={() => setViewTeacherSubjectIds(viewTeacherSubjectIds.filter((x) => x !== s!.id))}
+                                      title="Убрать предмет"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
 
-                          <button
-                            disabled={viewTeacherSaving}
-                            onClick={async () => {
-                              if (!token || !viewUser) return;
-                              setViewErr(null);
-                              setViewTeacherSaving(true);
-                              try {
-                                await apiSetTeacherSubjects(token, viewUser.id, viewTeacherSubjectIds);
-                                const refreshed = await apiAdminGetUser(token, viewUser.id);
-                                setViewUser(refreshed.user);
-                              } catch (e) {
-                                setViewErr(String(e));
-                              } finally {
-                                setViewTeacherSaving(false);
-                              }
-                            }}
-                          >
-                            {viewTeacherSaving ? "..." : <Save size={16} />}
-                          </button>
-                        </div>
-                        <div style={{ marginTop: 6, fontSize: 12, color: "var(--color-text-light)" }}>
-                          Можно выбрать несколько: ⌘/Ctrl + клик
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
+                            <select
+                              value={viewTeacherSubjectToAddId}
+                              onChange={(e) => setViewTeacherSubjectToAddId(e.target.value)}
+                            >
+                              <option value="">— Выберите предмет —</option>
+                              {subjects
+                                .filter((s) => !viewTeacherSubjectIds.includes(s.id))
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={!viewTeacherSubjectToAddId}
+                              onClick={() => {
+                                const id = viewTeacherSubjectToAddId;
+                                if (!id) return;
+                                setViewTeacherSubjectIds(Array.from(new Set([...viewTeacherSubjectIds, id])));
+                                setViewTeacherSubjectToAddId("");
+                              }}
+                            >
+                              Добавить
+                            </button>
+                          </div>
+
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <button
+                              disabled={viewTeacherSaving}
+                              onClick={async () => {
+                                if (!token || !viewUser) return;
+                                setViewErr(null);
+                                setViewTeacherSaving(true);
+                                try {
+                                  await apiSetTeacherSubjects(token, viewUser.id, viewTeacherSubjectIds);
+                                  const refreshed = await apiAdminGetUser(token, viewUser.id);
+                                  setViewUser(refreshed.user);
+                                } catch (e) {
+                                  setViewErr(String(e));
+                                } finally {
+                                  setViewTeacherSaving(false);
+                                }
+                              }}
+                              title="Сохранить предметы"
+                            >
+                              {viewTeacherSaving ? "..." : <Save size={16} />}
+                            </button>
+                          </div>
                         </div>
                         <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
                           Сейчас: {viewUser.teacher_subject || "—"}
