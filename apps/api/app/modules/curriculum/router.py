@@ -123,3 +123,52 @@ def delete_curriculum_item(direction_id: str, item_id: str, user: dict = require
     sb = get_supabase()
     sb.table("curriculum_plan").delete().eq("id", item_id).execute()
     return {"ok": True}
+
+
+@router.post("/{direction_id}/curriculum/duplicate")
+def duplicate_curriculum(direction_id: str, target_direction_id: str, user: dict = require_role("admin", "manager")):
+    """Дублировать учебный план в другое направление"""
+    sb = get_supabase()
+    
+    # Get source curriculum
+    source = (
+        sb.table("curriculum_plan")
+        .select("*")
+        .eq("direction_id", direction_id)
+        .execute()
+    )
+    
+    if not source.data or len(source.data) == 0:
+        raise HTTPException(status_code=400, detail="Source curriculum is empty")
+    
+    # Check if target already has curriculum
+    existing = (
+        sb.table("curriculum_plan")
+        .select("id")
+        .eq("direction_id", target_direction_id)
+        .execute()
+    )
+    
+    if existing.data and len(existing.data) > 0:
+        raise HTTPException(status_code=400, detail="Target direction already has curriculum items. Please delete them first.")
+    
+    # Copy items
+    new_items = []
+    for item in source.data:
+        new_items.append({
+            "direction_id": target_direction_id,
+            "subject_id": item["subject_id"],
+            "section": item.get("section", "general"),
+            "total_hours": item.get("total_hours", 0),
+            "lecture_hours": item.get("lecture_hours", 0),
+            "seminar_hours": item.get("seminar_hours", 0),
+            "practical_hours": item.get("practical_hours", 0),
+            "credit_hours": item.get("credit_hours", 0),
+            "exam_hours": item.get("exam_hours", 0),
+            "test_hours": item.get("test_hours", 0),
+        })
+    
+    if new_items:
+        sb.table("curriculum_plan").insert(new_items).execute()
+    
+    return {"ok": True, "copied_count": len(new_items)}

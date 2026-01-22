@@ -2234,3 +2234,10 @@ export async function apiDeleteCurriculumItem(token: string, directionId: string
     headers: { Authorization: `Bearer ${token}` }
   });
 }
+
+export async function apiDuplicateCurriculum(token: string, sourceDirectionId: string, targetDirectionId: string): Promise<{ ok: boolean; copied_count: number }> {
+  return http<{ ok: boolean; copied_count: number }>(`/directions/${sourceDirectionId}/curriculum/duplicate?target_direction_id=${targetDirectionId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { X, Plus, Trash2, Edit2, Save } from "lucide-react";
+import { X, Plus, Trash2, Edit2, Save, Copy } from "lucide-react";
 import {
     apiListCurriculum,
     apiAddCurriculumItem,
     apiUpdateCurriculumItem,
     apiDeleteCurriculumItem,
+    apiDuplicateCurriculum,
     apiListSubjects,
+    apiListDirections,
     type CurriculumItem,
     type CurriculumItemInput,
     type Direction,
@@ -28,12 +30,18 @@ const SECTIONS = {
 export function CurriculumModal({ direction, token, onClose }: Props) {
     const [items, setItems] = useState<CurriculumItem[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [directions, setDirections] = useState<Direction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Editing state
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingItem, setEditingItem] = useState<CurriculumItem | null>(null);
+
+    // Duplicate state
+    const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+    const [targetDirectionId, setTargetDirectionId] = useState<string>("");
+    const [duplicating, setDuplicating] = useState(false);
 
     const [newItem, setNewItem] = useState<CurriculumItemInput>({
         subject_id: "",
@@ -50,6 +58,7 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
     useEffect(() => {
         load();
         loadSubjects();
+        loadDirections();
         // eslint-disable-next-line
     }, []);
 
@@ -70,6 +79,15 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
         try {
             const res = await apiListSubjects(token);
             setSubjects(res.subjects || []);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function loadDirections() {
+        try {
+            const res = await apiListDirections(token);
+            setDirections(res.directions || []);
         } catch (e) {
             console.error(e);
         }
@@ -150,6 +168,29 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
         }
     }
 
+    async function handleDuplicate() {
+        if (!targetDirectionId) {
+            setError("Выберите направление");
+            return;
+        }
+        
+        setError(null);
+        setDuplicating(true);
+        try {
+            const res = await apiDuplicateCurriculum(token, direction.id, targetDirectionId);
+            alert(`Успешно скопировано ${res.copied_count} предметов!`);
+            setShowDuplicateDialog(false);
+            setTargetDirectionId("");
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setDuplicating(false);
+        }
+    }
+
+    const canDuplicate = items.length > 0;
+    const otherDirections = directions.filter(d => d.id !== direction.id);
+
     // Group items by section
     const itemsBySection = {
         general: items.filter((i) => i.section === "general"),
@@ -162,9 +203,19 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                 <div className={styles.header}>
                     <h2>Учебный план: {direction.name}</h2>
-                    <button className={styles.closeBtn} onClick={onClose}>
-                        <X size={20} />
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button 
+                            className={styles.duplicateBtn} 
+                            onClick={() => setShowDuplicateDialog(true)}
+                            disabled={!canDuplicate}
+                            title={canDuplicate ? "Дублировать план в другое направление" : "План пуст, дублирование недоступно"}
+                        >
+                            <Copy size={16} /> Дублировать
+                        </button>
+                        <button className={styles.closeBtn} onClick={onClose}>
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {error && <div className={styles.error}>{error}</div>}
@@ -376,6 +427,53 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
                         </>
                     )}
                 </div>
+
+                {/* Duplicate Dialog */}
+                {showDuplicateDialog && (
+                    <div className={styles.backdrop} onClick={() => setShowDuplicateDialog(false)}>
+                        <div className={styles.modal} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+                            <div className={styles.header}>
+                                <h3>Дублировать учебный план</h3>
+                                <button className={styles.closeBtn} onClick={() => setShowDuplicateDialog(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className={styles.content}>
+                                <p>Выберите направление, в которое хотите скопировать план "{direction.name}":</p>
+                                <select 
+                                    value={targetDirectionId || ''} 
+                                    onChange={(e) => setTargetDirectionId(Number(e.target.value))}
+                                    className={styles.select}
+                                    style={{ width: '100%', padding: 8, marginTop: 12 }}
+                                >
+                                    <option value="">-- Выберите направление --</option>
+                                    {directions
+                                        .filter(d => d.id !== direction.id)
+                                        .map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))
+                                    }
+                                </select>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                                    <button 
+                                        className={styles.cancelBtn}
+                                        onClick={() => setShowDuplicateDialog(false)}
+                                        disabled={duplicating}
+                                    >
+                                        Отмена
+                                    </button>
+                                    <button 
+                                        className={styles.saveBtn}
+                                        onClick={handleDuplicate}
+                                        disabled={!targetDirectionId || duplicating}
+                                    >
+                                        {duplicating ? 'Копирование...' : 'Дублировать'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
