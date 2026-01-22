@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.core.deps import require_role
 from app.db.supabase_client import get_supabase
@@ -18,26 +18,38 @@ def list_teachers(user: dict = require_role("admin", "manager", "teacher", "stud
         logger.info(f"[/api/users/teachers] Request from user: {user.get('id')} (role: {user.get('role')})")
         sb = get_supabase()
         
-        # Получаем только активных учителей с основной информацией
+        # Сначала получаем только базовые поля (которые точно существуют)
         resp = (
             sb.table("users")
-            .select("id,username,full_name,photo_data_url,teacher_subject,phone")
+            .select("id,username,full_name")
             .eq("role", "teacher")
             .eq("is_active", True)
             .order("full_name")
             .execute()
         )
         
-        teachers = resp.data or []
-        logger.info(f"[/api/users/teachers] Found {len(teachers)} teachers")
+        base_teachers = resp.data or []
+        logger.info(f"[/api/users/teachers] Found {len(base_teachers)} teachers (base query)")
         
-        # Логируем первого учителя для отладки (если есть)
-        if teachers:
-            sample = teachers[0]
-            logger.info(f"[/api/users/teachers] Sample teacher: {sample.get('username')}, has photo: {bool(sample.get('photo_data_url'))}, has phone: {bool(sample.get('phone'))}")
+        # Теперь попробуем получить дополнительные поля
+        try:
+            resp_full = (
+                sb.table("users")
+                .select("id,username,full_name,photo_data_url,teacher_subject,phone")
+                .eq("role", "teacher")
+                .eq("is_active", True)
+                .order("full_name")
+                .execute()
+            )
+            teachers = resp_full.data or []
+            logger.info(f"[/api/users/teachers] Full query successful, {len(teachers)} teachers")
+        except Exception as e2:
+            logger.warning(f"[/api/users/teachers] Full query failed, using base: {str(e2)}")
+            # Если дополнительные поля не существуют, используем базовые
+            teachers = base_teachers
         
         return {"teachers": teachers}
     except Exception as e:
         logger.error(f"[/api/users/teachers] Error: {str(e)}", exc_info=True)
-        raise
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
