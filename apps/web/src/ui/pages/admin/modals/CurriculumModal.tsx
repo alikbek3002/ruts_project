@@ -180,7 +180,7 @@ export function CurriculumModal({ direction, token, onClose }: Props) {
             const res = await apiDuplicateCurriculum(token, direction.id, targetDirectionId);
             alert(`Успешно скопировано ${res.copied_count} предметов!`);
             setShowDuplicateDialog(false);
-            setTargetDirectionId("");
+            setTargetDirectionId(null);
         } catch (e) {
             setError(String(e));
         } finally {
