@@ -867,7 +867,7 @@ export type TimetableEntry = {
   start_time: string;
   end_time: string;
   room?: string;
-  lesson_type?: "lecture" | "seminar" | "credit";
+  lesson_type?: "lecture" | "seminar" | "exam";
 };
 
 export async function apiCreateTimetableEntry(

@@ -32,8 +32,7 @@ const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
   { slot: 2, start: "10:30", end: "11:50" },
   { slot: 3, start: "12:00", end: "13:20" },
-  { slot: 4, start: "13:20", end: "14:20", labelKey: "timetable.lunch" as const },
-  { slot: 5, start: "14:20", end: "15:40" },
+  { slot: 4, start: "14:20", end: "15:40" },
 ];
 
 function toDbWeekday(date: Date): number {
@@ -214,7 +213,7 @@ export function AdminTimetablePage() {
   const [formSubjectId, setFormSubjectId] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formRoom, setFormRoom] = useState("");
-  const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "credit">("lecture");
+  const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "exam">("lecture");
   const [formClassIds, setFormClassIds] = useState<string[]>([]);
 
   const weekDays = useMemo(() => {
@@ -603,16 +602,16 @@ export function AdminTimetablePage() {
                         <div className={styles.entry} onClick={() => openEditModal(day, ts.slot, lesson)}>
                           <div className={styles.entrySubject}>
                             {lesson.subject}
-                            {lesson.lesson_type === "credit" && (
+                            {lesson.lesson_type === "exam" && (
                               <span style={{
                                 marginLeft: 4,
                                 fontSize: 10,
-                                background: "#f59e0b",
+                                background: "#ef4444",
                                 color: "#fff",
                                 padding: "1px 4px",
                                 borderRadius: 3
                               }}>
-                                ЗАЧЁТ
+                                ЭКЗАМЕН
                               </span>
                             )}
                             {lesson.lesson_type === "lecture" && (
@@ -725,12 +724,12 @@ export function AdminTimetablePage() {
               <label className={styles.label}>Тип занятия</label>
               <select
                 value={formLessonType}
-                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "credit")}
+                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "exam")}
                 className={styles.select}
               >
                 <option value="lecture">Лекционное</option>
                 <option value="seminar">Семинарское</option>
-                <option value="credit">Зачёт</option>
+                <option value="exam">Экзамен</option>
               </select>
             </div>
 

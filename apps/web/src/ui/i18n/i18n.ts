@@ -51,6 +51,7 @@ export const ru = {
   "nav.classes": "Классы",
   "nav.groups": "Группы",
   "nav.logout": "Выйти",
+  "nav.archive": "Архив",
 
   "nav.meetings": "Конференции",
 
@@ -277,6 +278,7 @@ export const ky: Record<I18nKey, string> = {
   "nav.classes": "Класстар",
   "nav.groups": "Топтор",
   "nav.logout": "Чыгуу",
+  "nav.archive": "Архив",
 
   "nav.meetings": "Конференциялар",
 
@@ -303,6 +305,8 @@ export const ky: Record<I18nKey, string> = {
   "admin.menu.notificationsDesc": "Жарыяларды таратуу",
   "admin.menu.coursesDesc": "Курстардын тизмеси",
   "admin.menu.meetingsDesc": "Бардык Zoom конференциялар",
+
+
 
   "admin.directions.pageTitleAdmin": "Админ → Багыттар",
   "admin.directions.pageTitleManager": "Менеджер → Багыттар",

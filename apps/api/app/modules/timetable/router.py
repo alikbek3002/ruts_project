@@ -397,7 +397,7 @@ class TimetableEntryIn(BaseModel):
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     room: str | None = None
-    lesson_type: str = "lecture"  # lecture, seminar, credit
+    lesson_type: str = "lecture"  # lecture, seminar, exam
 
 
 @router.post("/entries")
@@ -414,10 +414,10 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
             class_ids=payload.class_ids,
         )
 
-        lesson_type = (payload.lesson_type or "theoretical").strip()
-        if len(class_ids) > 1 and lesson_type != "theoretical":
-            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции (ТЕОРИЯ)")
-        if lesson_type == "theoretical" and len(class_ids) > 4:
+        lesson_type = (payload.lesson_type or "lecture").strip()
+        if len(class_ids) > 1 and lesson_type != "lecture":
+            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции")
+        if lesson_type == "lecture" and len(class_ids) > 4:
             raise HTTPException(status_code=409, detail="Нельзя больше 4 групп на одной паре")
 
         # Persist multi-group fields
@@ -454,12 +454,12 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
         )
 
         # Try to merge into an existing lecture in the same stream/time/subject/teacher/room
-        if lesson_type == "theoretical" and len(class_ids) >= 1:
+        if lesson_type == "lecture" and len(class_ids) >= 1:
             new_subj_key = _subject_key(data)
             for e in overlapping:
                 if str(e.get("stream_id") or "") != str(stream_id):
                     continue
-                if (e.get("lesson_type") or "").strip() != "theoretical":
+                if (e.get("lesson_type") or "").strip() != "lecture":
                     continue
                 if int(e.get("weekday", -1)) != weekday:
                     continue
@@ -588,7 +588,7 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         result_end = _norm_time_str(update.get("end_time", existing.get("end_time")), "00:00")
         result_room = update.get("room", existing.get("room"))
         result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
-        result_lesson_type = (update.get("lesson_type", existing.get("lesson_type")) or "theoretical").strip()
+        result_lesson_type = (update.get("lesson_type", existing.get("lesson_type")) or "lecture").strip()
         
         # Validate stream/classes (if class_ids/stream_id are being changed)
         # If class_ids not explicitly provided, keep existing class_ids/class_id.
@@ -607,9 +607,9 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
             class_ids=proposed_class_ids,
         )
         
-        if len(class_ids) > 1 and result_lesson_type != "theoretical":
-            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции (ТЕОРИЯ)")
-        if result_lesson_type == "theoretical" and len(class_ids) > 4:
+        if len(class_ids) > 1 and result_lesson_type != "lecture":
+            raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции")
+        if result_lesson_type == "lecture" and len(class_ids) > 4:
             raise HTTPException(status_code=409, detail="Нельзя больше 4 групп на одной паре")
 
         # Ensure stored compatibility fields

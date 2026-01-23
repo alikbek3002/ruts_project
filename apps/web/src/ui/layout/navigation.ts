@@ -15,6 +15,7 @@ export function getAdminNavItems(base: string): NavItem[] {
         { to: `${base}/timetable`, labelKey: "nav.timetable" },
         { to: `${base}/workload`, labelKey: "nav.workload" },
         { to: `${base}/notifications`, labelKey: "nav.notifications" },
+        { to: `${base}/archive`, labelKey: "nav.archive" },
     ];
 }
 
