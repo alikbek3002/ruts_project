@@ -260,6 +260,10 @@ BEGIN
     updated_at = now()
   WHERE id = p_stream_id;
   
+  -- Remove all classes from the stream (classes themselves stay active)
+  DELETE FROM public.stream_classes
+  WHERE stream_id = p_stream_id;
+  
   -- Return result
   RETURN jsonb_build_object(
     'stream_id', p_stream_id,
@@ -495,6 +499,8 @@ COMMENT ON FUNCTION public.archive_teacher_workload_monthly(int, int) IS 'Snapsh
 -- Enable RLS
 ALTER TABLE public.teacher_workload_archive ENABLE ROW LEVEL SECURITY;
 
+
+DROP POLICY IF EXISTS teacher_workload_archive_view_policy ON public.teacher_workload_archive;
 CREATE POLICY teacher_workload_archive_view_policy ON public.teacher_workload_archive
   FOR SELECT
   USING (

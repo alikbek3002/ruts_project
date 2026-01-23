@@ -460,6 +460,26 @@ async def add_classes_to_stream(
     existing_result = sb.table("stream_classes").select("class_id").eq("stream_id", str(stream_id)).execute()
     existing_class_ids = {c["class_id"] for c in existing_result.data}
     
+    # Check if any classes are in other active streams
+    for class_id in data.class_ids:
+        if str(class_id) not in existing_class_ids:
+            # Check if this class is in another active stream
+            other_streams = sb.table("stream_classes") \
+                .select("stream_id, streams!inner(name, status)") \
+                .eq("class_id", str(class_id)) \
+                .execute()
+            
+            for entry in other_streams.data or []:
+                other_stream = entry.get("streams")
+                if other_stream and other_stream.get("status") != "archived":
+                    other_stream_id = entry.get("stream_id")
+                    if str(other_stream_id) != str(stream_id):
+                        stream_name = other_stream.get("name", "Unknown")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Класс уже привязан к активному потоку '{stream_name}'. Сначала удалите его оттуда."
+                        )
+    
     # Insert new associations
     new_associations = []
     skipped = []
@@ -506,7 +526,7 @@ async def remove_class_from_stream(
     if not result.data:
         raise HTTPException(status_code=404, detail="Class not in this stream")
     
-    return None
+    return {"ok": True}
 
 
 # ============================================================================

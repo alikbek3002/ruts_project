@@ -868,6 +868,7 @@ export type TimetableEntry = {
   end_time: string;
   room?: string;
   lesson_type?: "lecture" | "seminar" | "exam" | "practical";
+  lesson_number?: number;
 };
 
 export async function apiCreateTimetableEntry(
@@ -888,6 +889,7 @@ export async function apiUpdateTimetableEntry(
     lesson_type?: "lecture" | "seminar" | "exam" | "practical";
     stream_id?: string | null;
     class_ids?: string[] | null;
+    lesson_number?: number | null;
   }
 ) {
   return http<{ entry: TimetableEntry }>(`/timetable/entries/${encodeURIComponent(entryId)}`, {

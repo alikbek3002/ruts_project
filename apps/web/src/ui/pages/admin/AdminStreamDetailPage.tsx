@@ -7,6 +7,7 @@ import {
   apiGetStream,
   apiListClasses,
   apiRemoveClassFromStream,
+  apiDeleteStream,
   apiArchiveStream,
   type ClassItem,
   type CurriculumTemplate,
@@ -17,7 +18,7 @@ import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminStreamDetail.module.css";
-import { Layers, RefreshCw, Trash2, Wand2, Archive } from "lucide-react";
+import { Layers, RefreshCw, Trash2, Wand2, Archive, XCircle } from "lucide-react";
 
 export function AdminStreamDetailPage() {
   const { state } = useAuth();
@@ -118,6 +119,22 @@ export function AdminStreamDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!token || !streamId || !stream) return;
+    const ok = window.confirm(`Вы уверены, что хотите УДАЛИТЬ поток "${stream.name}"?\n\nЭто действие нельзя отменить! Все связи с группами будут удалены.`);
+    if (!ok) return;
+    const confirmAgain = window.confirm("ВНИМАНИЕ: Удаление потока безвозвратно. Продолжить?");
+    if (!confirmAgain) return;
+    setErr(null);
+    try {
+      await apiDeleteStream(token, streamId);
+      alert("Поток успешно удален!");
+      window.location.href = base + "/streams";
+    } catch (e) {
+      setErr("Ошибка удаления: " + String(e));
+    }
+  }
+
   async function handleGenerate() {
     if (!token || !streamId) return;
     if (!templateId) {
@@ -165,6 +182,11 @@ export function AdminStreamDetailPage() {
             {stream && stream.status !== "archived" && (user?.role === "admin" || user?.role === "manager") && (
               <button onClick={handleArchive} className={styles.btn} style={{ color: "#f59e0b" }}>
                 <Archive size={16} /> Архивировать
+              </button>
+            )}
+            {stream && stream.status !== "archived" && (user?.role === "admin" || user?.role === "manager") && (
+              <button onClick={handleDelete} className={styles.btn} style={{ color: "#ef4444" }}>
+                <XCircle size={16} /> Удалить
               </button>
             )}
           </div>

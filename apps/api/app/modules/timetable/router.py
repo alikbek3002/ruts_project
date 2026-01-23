@@ -398,6 +398,7 @@ class TimetableEntryIn(BaseModel):
     end_time: str  # HH:MM
     room: str | None = None
     lesson_type: str = "lecture"  # lecture, seminar, exam, practical
+    lesson_number: int | None = None  # Manual lesson number override
 
 
 @router.post("/entries")
@@ -545,6 +546,7 @@ class TimetableEntryUpdateIn(BaseModel):
     lesson_type: str | None = None
     stream_id: str | None = None
     class_ids: list[str] | None = None
+    lesson_number: int | None = None
 
 
 @router.put("/entries/{entry_id}")
@@ -570,6 +572,8 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         update["stream_id"] = payload.stream_id
     if payload.class_ids is not None:
         update["class_ids"] = payload.class_ids
+    if "lesson_number" in payload.model_fields_set:
+        update["lesson_number"] = payload.lesson_number
 
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")

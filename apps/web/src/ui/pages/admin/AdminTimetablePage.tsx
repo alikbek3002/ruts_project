@@ -215,6 +215,8 @@ export function AdminTimetablePage() {
   const [formRoom, setFormRoom] = useState("");
   const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "exam" | "practical">("lecture");
   const [formClassIds, setFormClassIds] = useState<string[]>([]);
+  const [formTeacherId, setFormTeacherId] = useState<string>("");
+  const [formLessonNumber, setFormLessonNumber] = useState<number | "">(1);
 
   // Duplication state
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
@@ -376,6 +378,8 @@ export function AdminTimetablePage() {
     setFormRoom("");
     setFormLessonType("lecture");
     setFormClassIds(classId ? [classId] : []);
+    setFormTeacherId("");
+    setFormLessonNumber(1);
     setModalOpen(true);
   }
 
@@ -393,6 +397,8 @@ export function AdminTimetablePage() {
       : [entry.class_id]
     ).filter(Boolean);
     setFormClassIds(ids);
+    setFormTeacherId(entry.teacher_id || "");
+    setFormLessonNumber((entry as any).lesson_number || 1);
     setModalOpen(true);
   }
 
@@ -421,8 +427,10 @@ export function AdminTimetablePage() {
           subject_id: formSubjectId || null,
           room: formRoom.trim() ? formRoom.trim() : null,
           lesson_type: formLessonType,
+          teacher_id: formTeacherId || null,
           stream_id: selectedStreamId || null,
           class_ids: formLessonType === "lecture" ? effectiveClassIds : null,
+          lesson_number: formLessonNumber && formLessonNumber > 0 ? formLessonNumber : null,
         });
       } else {
         await apiCreateTimetableEntry(token, {
@@ -436,6 +444,8 @@ export function AdminTimetablePage() {
           end_time: slotInfo.end,
           room: formRoom.trim() || undefined,
           lesson_type: formLessonType,
+          teacher_id: formTeacherId || undefined,
+          lesson_number: formLessonNumber && formLessonNumber > 0 ? formLessonNumber : undefined,
         });
       }
       const e = await apiListTimetableEntries(token, classId);
@@ -472,6 +482,29 @@ export function AdminTimetablePage() {
           hhmm(e.end_time) === slotInfo.end
       ) || null
     );
+  }
+
+  // Calculate lesson type number (e.g., 1st lecture, 2nd seminar for this subject)
+  function getLessonTypeNumber(targetEntry: TimetableEntry): number {
+    // Use manual lesson_number if set
+    if (targetEntry.lesson_number && targetEntry.lesson_number > 0) {
+      return targetEntry.lesson_number;
+    }
+
+    if (!targetEntry.subject_id || !targetEntry.lesson_type) return 1;
+
+    // Get all entries for this subject and lesson type, sorted by date
+    const sameTypeEntries = entries.filter(
+      e => e.subject_id === targetEntry.subject_id &&
+        e.lesson_type === targetEntry.lesson_type
+    ).sort((a, b) => {
+      if (a.weekday !== b.weekday) return a.weekday - b.weekday;
+      return a.start_time.localeCompare(b.start_time);
+    });
+
+    // Find the index of this entry + 1
+    const index = sameTypeEntries.findIndex(e => e.id === targetEntry.id);
+    return index >= 0 ? index + 1 : 1;
   }
 
   function getTeacherName(teacherId: string | null | undefined): string {
@@ -628,7 +661,7 @@ export function AdminTimetablePage() {
                                 padding: "1px 4px",
                                 borderRadius: 3
                               }}>
-                                ЛЕКЦИЯ
+                                ЛЕКЦИЯ {getLessonTypeNumber(lesson)}
                               </span>
                             )}
                             {lesson.lesson_type === "seminar" && (
@@ -640,7 +673,7 @@ export function AdminTimetablePage() {
                                 padding: "1px 4px",
                                 borderRadius: 3
                               }}>
-                                СЕМИНАР
+                                СЕМИНАР {getLessonTypeNumber(lesson)}
                               </span>
                             )}
                             {lesson.lesson_type === "practical" && (
@@ -652,7 +685,7 @@ export function AdminTimetablePage() {
                                 padding: "1px 4px",
                                 borderRadius: 3
                               }}>
-                                ПРАКТИКА
+                                ПРАКТИКА {getLessonTypeNumber(lesson)}
                               </span>
                             )}
                           </div>
@@ -761,6 +794,35 @@ export function AdminTimetablePage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Преподаватель</label>
+              <select
+                value={formTeacherId}
+                onChange={(e) => setFormTeacherId(e.target.value)}
+                className={styles.select}
+              >
+                <option value="">— Не выбрано —</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name || t.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Номер занятия</label>
+              <input
+                type="number"
+                min={1}
+                value={formLessonNumber}
+                onChange={(e) => setFormLessonNumber(e.target.value ? parseInt(e.target.value) : "")}
+                className={styles.input}
+                placeholder="1"
+                style={{ width: 80 }}
+              />
             </div>
 
             {formLessonType === "lecture" && (
