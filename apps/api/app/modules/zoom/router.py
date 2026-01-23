@@ -168,99 +168,119 @@ class ZoomMeetingCreateIn(BaseModel):
 @router.post("/meetings")
 def create_meeting(payload_in: ZoomMeetingCreateIn, user: dict = require_role("teacher", "admin", "manager")):
     """Create a Zoom meeting for a timetable entry or a custom meeting"""
-    # startsAt: local ISO datetime (e.g. 2025-12-22T09:00:00) interpreted in settings.app_timezone
-    access_token = _get_valid_access_token(user["id"])
+    logger.info(f"Create zoom meeting request from user {user.get('id')}")
+    try:
+        # startsAt: local ISO datetime (e.g. 2025-12-22T09:00:00) interpreted in settings.app_timezone
+        try:
+            access_token = _get_valid_access_token(user["id"])
+        except HTTPException as he:
+            logger.error(f"Zoom access token error: {he.detail}")
+            raise he
+        except Exception as e:
+            logger.exception("Failed to get zoom access token")
+            raise HTTPException(status_code=500, detail=f"Failed to get zoom token: {str(e)}")
 
-    timetableEntryId = payload_in.timetableEntryId
-    startsAt = payload_in.startsAt
-    targetAudience = payload_in.targetAudience or "class"
-    
-    sb = get_supabase()
-    topic = payload_in.title or "Meeting"
-    duration = 40 # default
-
-    if timetableEntryId:
-        entry = (
-            sb.table("timetable_entries")
-            .select("id,class_id,teacher_id,subject,start_time,end_time, classes(name)")
-            .eq("id", timetableEntryId)
-            .single()
-            .execute()
-            .data
-        )
-        if not entry:
-            raise HTTPException(status_code=404, detail="Timetable entry not found")
-        # Teacher can only create for their own entry, Admin for any
-        if user["role"] == "teacher" and entry.get("teacher_id") != user["id"]:
-            raise HTTPException(status_code=403, detail="Forbidden")
-
-        class_name = (entry.get("classes") or {}).get("name")
-        topic = f"{class_name} - {entry.get('subject')}" if class_name else str(entry.get("subject") or "Lesson")
-
-        # duration in minutes from start/end times
-        def _to_minutes(t: str) -> int:
-            hh, mm, *_ = t.split(":")
-            return int(hh) * 60 + int(mm)
-
-        duration = max(15, _to_minutes(entry["end_time"]) - _to_minutes(entry["start_time"]))
-    else:
-        # Custom meeting (Admin/Manager only, or Teacher for general?)
-        # For now let Admin/Manager create custom meetings
-        if user["role"] not in ["admin", "manager"]:
-             raise HTTPException(status_code=403, detail="Only admins can create custom meetings")
+        timetableEntryId = payload_in.timetableEntryId
+        startsAt = payload_in.startsAt
+        targetAudience = payload_in.targetAudience or "class"
         
-        if not payload_in.title:
-            topic = "General Meeting"
+        sb = get_supabase()
+        topic = payload_in.title or "Meeting"
+        duration = 40 # default
 
-    payload = {
-        "topic": topic,
-        "type": 2,
-        "start_time": startsAt,
-        "duration": duration,
-        "timezone": settings.app_timezone,
-        "settings": {
-            "join_before_host": False,
-            "waiting_room": True,
-        },
-    }
+        if timetableEntryId:
+            entry = (
+                sb.table("timetable_entries")
+                .select("id,class_id,teacher_id,subject,start_time,end_time, classes(name)")
+                .eq("id", timetableEntryId)
+                .single()
+                .execute()
+                .data
+            )
+            if not entry:
+                raise HTTPException(status_code=404, detail="Timetable entry not found")
+            # Teacher can only create for their own entry, Admin for any
+            if user["role"] == "teacher" and entry.get("teacher_id") != user["id"]:
+                raise HTTPException(status_code=403, detail="Forbidden")
 
-    with httpx.Client(timeout=20) as client:
-        resp = client.post(
-            f"{ZOOM_API_BASE}/users/me/meetings",
-            headers={"Authorization": f"Bearer {access_token}"},
-            json=payload,
-        )
+            class_name = (entry.get("classes") or {}).get("name")
+            topic = f"{class_name} - {entry.get('subject')}" if class_name else str(entry.get("subject") or "Lesson")
 
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=400, detail=f"Zoom meeting create failed: {resp.text}")
+            # duration in minutes from start/end times
+            def _to_minutes(t: str) -> int:
+                hh, mm, *_ = t.split(":")
+                return int(hh) * 60 + int(mm)
 
-    m = resp.json()
-    zoom_meeting_id = str(m.get("id"))
-    join_url = m.get("join_url")
+            try:
+                duration = max(15, _to_minutes(entry["end_time"]) - _to_minutes(entry["start_time"]))
+            except Exception:
+                duration = 40
+        else:
+            # Custom meeting (Admin/Manager only, or Teacher for general?)
+            # For now let Admin/Manager create custom meetings
+            if user["role"] not in ["admin", "manager"]:
+                 raise HTTPException(status_code=403, detail="Only admins can create custom meetings")
+            
+            if not payload_in.title:
+                topic = "General Meeting"
 
-    # Insert into DB
-    insert_data = {
-        "starts_at": startsAt,
-        "zoom_meeting_id": zoom_meeting_id,
-        "join_url": join_url,
-        "start_url": m.get("start_url"),
-        "created_by": user["id"],
-        "title": topic,
-        "target_audience": targetAudience,
-    }
-    
-    if timetableEntryId:
-        insert_data["timetable_entry_id"] = timetableEntryId
-        insert_data["target_audience"] = "class" # implied
-    
-    if payload_in.classId:
-        insert_data["class_id"] = payload_in.classId
-        insert_data["target_audience"] = "class"
+        payload = {
+            "topic": topic,
+            "type": 2,
+            "start_time": startsAt,
+            "duration": duration,
+            "timezone": settings.app_timezone,
+            "settings": {
+                "join_before_host": False,
+                "waiting_room": True,
+            },
+        }
 
-    db_resp = sb.table("zoom_meetings").insert(insert_data).execute()
+        logger.info(f"Sending request to Zoom API: {topic}, {startsAt}")
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(
+                f"{ZOOM_API_BASE}/users/me/meetings",
+                headers={"Authorization": f"Bearer {access_token}"},
+                json=payload,
+            )
 
-    meeting = db_resp.data[0] if isinstance(db_resp.data, list) and db_resp.data else db_resp.data
-    return {"meeting": meeting}
+        if resp.status_code >= 400:
+            logger.error(f"Zoom API error: {resp.status_code} {resp.text}")
+            raise HTTPException(status_code=400, detail=f"Zoom meeting create failed: {resp.text}")
+
+        m = resp.json()
+        zoom_meeting_id = str(m.get("id"))
+        join_url = m.get("join_url")
+
+        # Insert into DB
+        insert_data = {
+            "starts_at": startsAt,
+            "zoom_meeting_id": zoom_meeting_id,
+            "join_url": join_url,
+            "start_url": m.get("start_url"),
+            "created_by": user["id"],
+            "title": topic,
+            "target_audience": targetAudience,
+        }
+        
+        if timetableEntryId:
+            insert_data["timetable_entry_id"] = timetableEntryId
+            insert_data["target_audience"] = "class" # implied
+        
+        if payload_in.classId:
+            insert_data["class_id"] = payload_in.classId
+            insert_data["target_audience"] = "class"
+
+        db_resp = sb.table("zoom_meetings").insert(insert_data).execute()
+
+        meeting = db_resp.data[0] if isinstance(db_resp.data, list) and db_resp.data else db_resp.data
+        return {"meeting": meeting}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error in create_meeting")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/meetings")

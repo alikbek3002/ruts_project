@@ -41,7 +41,7 @@ class ReplaceTeacherSubjectsIn(BaseModel):
 def list_subjects(user: dict = require_role("admin", "manager", "teacher")):
     """Список всех предметов"""
     sb = get_supabase()
-    resp = sb.table("subjects").select("*").order("name").execute()
+    resp = sb.table("subjects").select("*").is_("archived_at", "null").order("name").execute()
     return {"subjects": resp.data or []}
 
 
@@ -53,7 +53,7 @@ def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "t
     """
     sb = get_supabase()
 
-    subjects = sb.table("subjects").select("*").order("name").execute().data or []
+    subjects = sb.table("subjects").select("*").is_("archived_at", "null").order("name").execute().data or []
 
     # For teacher cabinet, show only subjects that are either assigned to this teacher
     # or explicitly marked as open_to_all_teachers.

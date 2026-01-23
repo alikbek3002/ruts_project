@@ -136,7 +136,7 @@ def list_classes(user: dict = Depends(get_current_user)):
     try:
         if user["role"] in ("admin", "manager"):
             # Получаем классы с направлениями
-            resp = sb.table("classes").select("id,name,direction_id,curator_id,directions(id,name,code)").order("name").execute()
+            resp = sb.table("classes").select("id,name,direction_id,curator_id,directions(id,name,code)").is_("archived_at", "null").order("name").execute()
             classes = resp.data or []
             
             # Подсчитываем студентов для каждого класса

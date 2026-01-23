@@ -97,6 +97,12 @@ app.include_router(subject_content_router, prefix="/api/subject-content", tags=[
 app.include_router(users_router, prefix="/api/users", tags=["users"])
 app.include_router(curriculum_router, prefix="/api/directions", tags=["curriculum"])
 
+from app.modules.archive.router import router as archive_router
+app.include_router(archive_router, prefix="/api/archive", tags=["archive"])
+
+from app.modules.archive.router import router as archive_router
+app.include_router(archive_router, prefix="/api/archive", tags=["archive"])
+
 
 @app.get("/api/health")
 def health():

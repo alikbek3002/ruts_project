@@ -1,43 +1,25 @@
-import React, { useEffect, useState } from "react";
-import { Navigate, Link } from "react-router-dom";
-import {
-    apiGetArchivedStreams,
-    type ArchivedStreamStats,
-} from "../../../api/client";
+import React, { useState } from "react";
+import { Navigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { useI18n } from "../../i18n/I18nProvider";
-import styles from "./AdminStreams.module.css";
-import { Archive, RefreshCw, TrendingUp, Users, Calendar } from "lucide-react";
+import styles from "./AdminArchive.module.css";
+import { Archive, Layers, Users, Book, GraduationCap } from "lucide-react";
+
+import { AdminArchiveStreamsPage } from "./AdminArchiveStreamsPage"; // Need to rename old page or use inline
+import { AdminArchiveSubjectsPage } from "./AdminArchiveSubjectsPage";
+import { AdminArchiveTeachersPage } from "./AdminArchiveTeachersPage";
+import { AdminArchiveClassesPage } from "./AdminArchiveClassesPage";
+
+// We will inline the old Streams logic into a component or file. 
+// For now, let's assume we refactor the old content into AdminArchiveStreamsPage.tsx
 
 export function AdminArchivePage() {
     const { state } = useAuth();
     const { t } = useI18n();
     const user = state.user;
-    const token = state.accessToken;
-
-    const [archives, setArchives] = useState<ArchivedStreamStats[]>([]);
-    const [err, setErr] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-
-    async function reload() {
-        if (!token) return;
-        setLoading(true);
-        setErr(null);
-        try {
-            const data = await apiGetArchivedStreams(token);
-            setArchives(data || []);
-        } catch (e) {
-            setErr(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        if (token) reload();
-    }, [token]);
+    const location = useLocation();
 
     if (!user) return <Navigate to="/login" replace />;
     if (user.role !== "admin" && user.role !== "manager" && user.role !== "teacher")
@@ -45,56 +27,55 @@ export function AdminArchivePage() {
 
     const base = user.role === "manager" ? "/app/manager" : user.role === "admin" ? "/app/admin" : "/app/teacher";
 
+    // Simple state for tabs if not using sub-routes yet, or use query param?
+    // Let's use simple state for now to avoid creating 4 new routes in router configuration unless necessary.
+    // Ideally we should use sub-routes: /admin/archive/streams, /admin/archive/groups etc.
+    // But since I cannot edit App.tsx easily to add nested routes without seeing it, I'll use state switching here.
+
+    const [activeTab, setActiveTab] = useState<"streams" | "classes" | "subjects" | "teachers">("streams");
+
     return (
         <AppShell
-            titleKey={"Архив потоков" as any}
+            titleKey={"Архив" as any}
             nav={getAdminNavItems(base)}
         >
             <div className={styles.container}>
-                <div className={styles.header}>
-                    <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Archive size={18} /> Архив потоков
-                    </h2>
-                    <button onClick={reload} disabled={loading} className={styles.btn}>
-                        <RefreshCw size={16} /> {t("common.refresh") || "Обновить"}
-                    </button>
+                <div className={styles.tabs}>
+                    <div
+                        className={activeTab === "streams" ? styles.tabActive : styles.tab}
+                        onClick={() => setActiveTab("streams")}
+                    >
+                        <Layers size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "text-bottom" }} />
+                        Потоки
+                    </div>
+                    <div
+                        className={activeTab === "classes" ? styles.tabActive : styles.tab}
+                        onClick={() => setActiveTab("classes")}
+                    >
+                        <Users size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "text-bottom" }} />
+                        Группы (Взводы)
+                    </div>
+                    <div
+                        className={activeTab === "subjects" ? styles.tabActive : styles.tab}
+                        onClick={() => setActiveTab("subjects")}
+                    >
+                        <Book size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "text-bottom" }} />
+                        Предметы
+                    </div>
+                    <div
+                        className={activeTab === "teachers" ? activeTab === "teachers" ? styles.tabActive : styles.tab : styles.tab}
+                        onClick={() => setActiveTab("teachers")}
+                    >
+                        <GraduationCap size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "text-bottom" }} />
+                        Учителя
+                    </div>
                 </div>
 
-                {err && <div className={styles.error}>{err}</div>}
+                {activeTab === "streams" && <AdminArchiveStreamsPage />}
+                {activeTab === "classes" && <AdminArchiveClassesPage />}
+                {activeTab === "subjects" && <AdminArchiveSubjectsPage />}
+                {activeTab === "teachers" && <AdminArchiveTeachersPage />}
 
-                {archives.length === 0 ? (
-                    <div className={styles.empty}>Архивированных потоков пока нет</div>
-                ) : (
-                    <div className={styles.list}>
-                        {archives.map((archive) => (
-                            <Link
-                                key={archive.stream_id}
-                                to={`${base}/archive/${archive.stream_id}`}
-                                className={styles.card}
-                            >
-                                <div className={styles.cardTitle}>{archive.stream_name}</div>
-                                <div className={styles.cardMeta} style={{ marginBottom: 8 }}>
-                                    <Calendar size={12} style={{ display: "inline", marginRight: 4 }} />
-                                    {archive.start_date} → {archive.end_date}
-                                </div>
-                                <div className={styles.cardMeta} style={{ marginBottom: 4 }}>
-                                    <Users size={12} style={{ display: "inline", marginRight: 4 }} />
-                                    Групп: {archive.total_classes} • Студентов: {archive.total_students}
-                                </div>
-                                <div className={styles.cardMeta}>
-                                    <TrendingUp size={12} style={{ display: "inline", marginRight: 4 }} />
-                                    Посещаемость: {archive.avg_attendance_percentage?.toFixed(1) || "—"}% •
-                                    Средний балл: {archive.avg_lesson_grade?.toFixed(2) || "—"}
-                                </div>
-                                {archive.archived_at && (
-                                    <div className={styles.cardMeta} style={{ marginTop: 8, fontSize: 11, opacity: 0.6 }}>
-                                        Архивирован: {new Date(archive.archived_at).toLocaleDateString("ru-RU")}
-                                    </div>
-                                )}
-                            </Link>
-                        ))}
-                    </div>
-                )}
             </div>
         </AppShell>
     );

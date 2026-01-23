@@ -202,6 +202,10 @@ async def list_streams(
 
         if status_filter:
             query = query.eq("status", status_filter)
+        else:
+            # By default hide archived streams (they are in separate archive endpoints)
+            query = query.neq("status", "archived")
+
         if direction_id:
             query = query.eq("direction_id", str(direction_id))
 

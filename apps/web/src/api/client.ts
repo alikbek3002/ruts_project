@@ -1797,6 +1797,98 @@ export async function apiUpdateCourse(token: string, courseId: string, data: { t
     body: JSON.stringify(data),
   });
 }
+// --- Archive API ---
+
+export interface ArchivedItem {
+  id: string;
+  name: string;
+  archived_at: string;
+  metadata?: any;
+}
+
+export interface ArchivedListResponse {
+  items: ArchivedItem[];
+}
+
+export interface ArchiveActionResponse {
+  ok: boolean;
+  message: string;
+}
+
+export async function apiGetArchivedSubjects(token: string): Promise<ArchivedItem[]> {
+  const res = await fetch(`${API_BASE}/archive/subjects`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch archived subjects");
+  const data: ArchivedListResponse = await res.json();
+  return data.items;
+}
+
+export async function apiRestoreSubject(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/subjects/${id}/restore`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to restore subject");
+}
+
+export async function apiArchiveSubject(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/subjects/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to archive subject");
+}
+
+export async function apiGetArchivedTeachers(token: string): Promise<ArchivedItem[]> {
+  const res = await fetch(`${API_BASE}/archive/teachers`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch archived teachers");
+  const data: ArchivedListResponse = await res.json();
+  return data.items;
+}
+
+export async function apiRestoreTeacher(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/teachers/${id}/restore`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to restore teacher");
+}
+
+export async function apiArchiveTeacher(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/teachers/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to archive teacher");
+}
+
+export async function apiGetArchivedClasses(token: string): Promise<ArchivedItem[]> {
+  const res = await fetch(`${API_BASE}/archive/classes`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch archived classes");
+  const data: ArchivedListResponse = await res.json();
+  return data.items;
+}
+
+export async function apiRestoreClass(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/classes/${id}/restore`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to restore class");
+}
+
+export async function apiArchiveClass(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/archive/classes/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to archive class");
+}
 
 export async function apiDeleteCourse(token: string, courseId: string, password: string): Promise<{ ok: boolean }> {
   return http<{ ok: boolean }>(`/courses/${encodeURIComponent(courseId)}`, {
