@@ -210,6 +210,13 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
     console.error('[API] Error:', init?.method || 'GET', path, err);
     throw err;
   }
+  
+  // For 204 No Content, return void/undefined instead of trying to parse JSON
+  if (res.status === 204) {
+    console.log('[API] Success:', init?.method || 'GET', path, '(No Content)');
+    return undefined as T;
+  }
+  
   const result = (await res.json()) as T;
   console.log('[API] Success:', init?.method || 'GET', path, result);
   return result;
@@ -746,6 +753,7 @@ export async function apiAdminUpdateUser(
     birth_date?: string | null; // YYYY-MM-DD
     photo_data_url?: string | null;
     class_id?: string | null;
+    subject_ids?: string[] | null;
   }
 ) {
   return http<{ user: AdminUserDetails; class: { id: string; name: string | null } | null }>(

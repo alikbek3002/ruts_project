@@ -1078,6 +1078,7 @@ export function AdminUsersPage() {
                           birth_date: viewEditBirthDate || null,
                           photo_data_url: viewEditPhotoDataUrl,
                           class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
+                          subject_ids: viewUser.role === "teacher" ? viewTeacherSubjectIds : undefined,
                         });
                         setViewUser(resp.user);
                         setViewClass(resp.class);

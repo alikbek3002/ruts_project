@@ -70,6 +70,9 @@ class UpdateUserIn(BaseModel):
     # Student-only: allow moving a student between classes.
     # If provided as null/None -> unenroll from any class.
     class_id: str | None = None
+    
+    # Teacher-only: update assigned subjects
+    subject_ids: list[str] | None = None
 
 
 @router.post("/users")
@@ -120,37 +123,41 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
             if suffix > 5000:
                 raise HTTPException(status_code=500, detail="Could not allocate unique username")
 
-    # 2) Allocate numeric password (<= 12 digits), unique via fingerprint
+    # 2) Allocate password (for teachers - from name, for admins - numeric), unique via fingerprint
     if payload.temp_password:
         cand = payload.temp_password.strip()
-        if not cand.isdigit() or len(cand) > 12:
-            raise HTTPException(status_code=400, detail="temp_password must be digits and <= 12 length")
+        if len(cand) < 3:
+            raise HTTPException(status_code=400, detail="temp_password must be at least 3 characters")
         temp_password = cand
         pw_fp = password_fingerprint(cand)
         exists = sb.table("users").select("id").eq("password_fingerprint", pw_fp).limit(1).execute().data
         if exists:
             raise HTTPException(status_code=409, detail="Password already exists")
     else:
-        # Для учителей используем имя как пароль, для админов - случайные цифры
+        # Для учителей используем имя как пароль (с большой буквы), для админов - случайные цифры
         if role == "teacher":
             try:
+                # Генерируем пароль из имени (первая буква заглавная)
                 temp_password = generate_teacher_password_from_name(payload.first_name)
                 pw_fp = password_fingerprint(temp_password)
                 exists = sb.table("users").select("id").eq("password_fingerprint", pw_fp).limit(1).execute().data
+                
                 if exists:
-                    # Если пароль уже занят, добавляем суффикс
-                    suffix = 2
-                    while suffix <= 20:
-                        candidate = f"{temp_password}{suffix}"
+                    # Если пароль уже занят, добавляем цифровой суффикс
+                    base_password = temp_password
+                    found = False
+                    for suffix in range(2, 100):
+                        candidate = f"{base_password}{suffix}"
                         pw_fp = password_fingerprint(candidate)
                         exists = sb.table("users").select("id").eq("password_fingerprint", pw_fp).limit(1).execute().data
                         if not exists:
                             temp_password = candidate
+                            found = True
                             break
-                        suffix += 1
-                    if exists:
+                    
+                    if not found:
                         raise HTTPException(status_code=500, detail="Could not allocate unique password")
-            except ValueError:
+            except (ValueError, Exception) as e:
                 # Если не удалось сгенерировать пароль из имени, используем случайный
                 temp_password = None
                 pw_fp = None
@@ -165,7 +172,7 @@ def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin",
                 if not temp_password or not pw_fp:
                     raise HTTPException(status_code=500, detail="Could not allocate unique password")
         else:
-            # Для админов используем случайные пароли
+            # Для админов используем случайные цифровые пароли (минимум 12 символов)
             temp_password = None
             pw_fp = None
             for _ in range(200):
@@ -553,6 +560,16 @@ def admin_update_user(user_id: str, payload: UpdateUserIn, _: dict = require_rol
         sb.table("class_enrollments").delete().eq("legacy_student_id", user_id).execute()
         if payload.class_id:
             sb.table("class_enrollments").insert({"class_id": payload.class_id, "legacy_student_id": user_id}).execute()
+    
+    # Teacher subject assignment
+    if current.get("role") == "teacher" and "subject_ids" in payload.model_fields_set:
+        # Delete existing assignments
+        sb.table("teacher_subjects").delete().eq("teacher_id", user_id).execute()
+        # Add new assignments
+        if payload.subject_ids:
+            new_links = [{"teacher_id": user_id, "subject_id": sid} for sid in payload.subject_ids]
+            if new_links:
+                sb.table("teacher_subjects").insert(new_links).execute()
 
     # Return refreshed user
     refreshed = (
