@@ -885,7 +885,7 @@ export async function apiUpdateTimetableEntry(
     subject?: string;
     subject_id?: string | null;
     room?: string | null;
-    lesson_type?: "lecture" | "seminar" | "credit";
+    lesson_type?: "lecture" | "seminar" | "exam";
     stream_id?: string | null;
     class_ids?: string[] | null;
   }
