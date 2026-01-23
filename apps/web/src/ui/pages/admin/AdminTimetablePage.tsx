@@ -213,8 +213,13 @@ export function AdminTimetablePage() {
   const [formSubjectId, setFormSubjectId] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formRoom, setFormRoom] = useState("");
-  const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "exam">("lecture");
+  const [formLessonType, setFormLessonType] = useState<"lecture" | "seminar" | "exam" | "practical">("lecture");
   const [formClassIds, setFormClassIds] = useState<string[]>([]);
+
+  // Duplication state
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateTargetClassIds, setDuplicateTargetClassIds] = useState<string[]>([]);
+  const [duplicating, setDuplicating] = useState(false);
 
   const weekDays = useMemo(() => {
     // Admin timetable grid: Mon-Sat (6 days)
@@ -638,6 +643,18 @@ export function AdminTimetablePage() {
                                 СЕМИНАР
                               </span>
                             )}
+                            {lesson.lesson_type === "practical" && (
+                              <span style={{
+                                marginLeft: 4,
+                                fontSize: 10,
+                                background: "#8b5cf6",
+                                color: "#fff",
+                                padding: "1px 4px",
+                                borderRadius: 3
+                              }}>
+                                ПРАКТИКА
+                              </span>
+                            )}
                           </div>
                           <div className={styles.entryTeacher}>{getTeacherName(lesson.teacher_id)}</div>
                           {lesson.room && <div className={styles.entryRoom}>{lesson.room}</div>}
@@ -724,12 +741,13 @@ export function AdminTimetablePage() {
               <label className={styles.label}>Тип занятия</label>
               <select
                 value={formLessonType}
-                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "exam")}
+                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "exam" | "practical")}
                 className={styles.select}
               >
                 <option value="lecture">Лекционное</option>
                 <option value="seminar">Семинарское</option>
                 <option value="exam">Экзамен</option>
+                <option value="practical">Практическое</option>
               </select>
             </div>
 
@@ -789,6 +807,17 @@ export function AdminTimetablePage() {
                 <Save size={18} style={{ marginRight: 8 }} />
                 Сохранить
               </button>
+              {editEntry && (
+                <button
+                  onClick={() => {
+                    setDuplicateModalOpen(true);
+                    setDuplicateTargetClassIds([]);
+                  }}
+                  style={{ marginLeft: "auto", background: "#8b5cf6" }}
+                >
+                  Дублировать
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -832,6 +861,81 @@ export function AdminTimetablePage() {
               </button>
               <button onClick={createZoomMeeting} disabled={zoomCreating || !zoomEntryId || !zoomDay || !zoomTime}>
                 {zoomCreating ? "Создание..." : "Создать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateModalOpen && editEntry && (
+        <div className={styles.modalOverlay} onClick={() => setDuplicateModalOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalTitle}>Дублировать расписание</div>
+
+            <div style={{ marginBottom: 16, fontSize: 14, color: "var(--color-text-secondary)" }}>
+              Выберите группы для копирования этого занятия:
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Целевые группы</label>
+              <select
+                multiple
+                value={duplicateTargetClassIds}
+                onChange={(e) => {
+                  const opts = Array.from(e.target.selectedOptions, (o) => o.value);
+                  setDuplicateTargetClassIds(opts);
+                }}
+                className={styles.select}
+                style={{ height: "200px" }}
+              >
+                {allClasses
+                  .filter((c) => c.id !== classId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.id}
+                    </option>
+                  ))}
+              </select>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                Используйте Cmd (macOS) / Ctrl (Windows) для выбора нескольких групп
+              </div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button onClick={() => setDuplicateModalOpen(false)} disabled={duplicating}>
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  if (!token || !editEntry || duplicateTargetClassIds.length === 0) return;
+                  setDuplicating(true);
+                  try {
+                    for (const targetClassId of duplicateTargetClassIds) {
+                      await apiCreateTimetableEntry(token, {
+                        class_id: targetClassId,
+                        subject: editEntry.subject,
+                        subject_id: editEntry.subject_id || undefined,
+                        weekday: editEntry.weekday,
+                        start_time: editEntry.start_time,
+                        end_time: editEntry.end_time,
+                        room: editEntry.room || undefined,
+                        lesson_type: editEntry.lesson_type,
+                        teacher_id: editEntry.teacher_id,
+                        stream_id: editEntry.stream_id || undefined,
+                      });
+                    }
+                    setDuplicateModalOpen(false);
+                    setDuplicateTargetClassIds([]);
+                    reload();
+                  } catch (err: any) {
+                    alert("Ошибка дублирования: " + (err?.message || err));
+                  } finally {
+                    setDuplicating(false);
+                  }
+                }}
+                disabled={duplicating || duplicateTargetClassIds.length === 0}
+              >
+                {duplicating ? "Дублирование..." : "Дублировать"}
               </button>
             </div>
           </div>

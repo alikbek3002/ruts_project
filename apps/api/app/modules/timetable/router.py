@@ -397,7 +397,7 @@ class TimetableEntryIn(BaseModel):
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     room: str | None = None
-    lesson_type: str = "lecture"  # lecture, seminar, exam
+    lesson_type: str = "lecture"  # lecture, seminar, exam, practical
 
 
 @router.post("/entries")
