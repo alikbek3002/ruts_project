@@ -211,7 +211,7 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
             <div className={styles.modalOverlay} onClick={onClose}>
                 <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                     <div className={styles.modalHeader}>
-                        <h2>{subject.name} - {isTeacher ? "Материалы" : "Учебный план"}</h2>
+                        <h2>{subject.name}</h2>
                         <button className="secondary" onClick={onClose} title="Закрыть">
                             <X size={20} />
                         </button>
@@ -295,16 +295,16 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                                                     )}
                                                 </td>
                                                 <td>
-                                                    <input type="number" value={isEditing && !isTeacher ? data.lecture_hours : topic.lecture_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                                    {isEditing ? <input type="number" value={!isTeacher ? data.lecture_hours : topic.lecture_hours} onChange={!isTeacher ? e => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 }) : undefined} className={styles.hourInput} disabled={isTeacher} /> : topic.lecture_hours || "-"}
                                                 </td>
                                                 <td>
-                                                    <input type="number" value={isEditing && !isTeacher ? data.seminar_hours : topic.seminar_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                                    {isEditing ? <input type="number" value={!isTeacher ? data.seminar_hours : topic.seminar_hours} onChange={!isTeacher ? e => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 }) : undefined} className={styles.hourInput} disabled={isTeacher} /> : topic.seminar_hours || "-"}
                                                 </td>
                                                 <td>
-                                                    <input type="number" value={isEditing && !isTeacher ? data.practical_hours : topic.practical_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                                    {isEditing ? <input type="number" value={!isTeacher ? data.practical_hours : topic.practical_hours} onChange={!isTeacher ? e => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 }) : undefined} className={styles.hourInput} disabled={isTeacher} /> : topic.practical_hours || "-"}
                                                 </td>
                                                 <td>
-                                                    <input type="number" value={isEditing && !isTeacher ? data.exam_hours : topic.exam_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                                    {isEditing ? <input type="number" value={!isTeacher ? data.exam_hours : topic.exam_hours} onChange={!isTeacher ? e => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 }) : undefined} className={styles.hourInput} disabled={isTeacher} /> : topic.exam_hours || "-"}
                                                 </td>
                                                 <td style={{ fontWeight: 600 }}>{topic.total_hours}</td>
                                                 <td>
