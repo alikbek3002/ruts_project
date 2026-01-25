@@ -13,7 +13,6 @@ import {
   type AdminUser,
   type AdminUserDetails,
   type ClassItem,
-  type Subject,
   type UserRole,
   type TeacherWorkload,
 } from "../../../api/client";
@@ -65,7 +64,6 @@ export function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
@@ -73,7 +71,6 @@ export function AdminUsersPage() {
   const [viewClass, setViewClass] = useState<{ id: string; name: string | null } | null>(null);
   const [viewWorkload, setViewWorkload] = useState<TeacherWorkload | null>(null);
   const [viewErr, setViewErr] = useState<string | null>(null);
-  const [viewTeacherSubjectIds, setViewTeacherSubjectIds] = useState<string[]>([]);
   const [viewTeacherSaving, setViewTeacherSaving] = useState(false);
   const [viewEdit, setViewEdit] = useState(false);
   const [viewSaving, setViewSaving] = useState(false);
@@ -94,9 +91,6 @@ export function AdminUsersPage() {
   const [phone, setPhone] = useState("+996");
   const [birthDate, setBirthDate] = useState("");
   const [classId, setClassId] = useState("");
-  const [teacherSubjectIds, setTeacherSubjectIds] = useState<string[]>([]);
-  const [teacherSubjectToAddId, setTeacherSubjectToAddId] = useState<string>("");
-  const [viewTeacherSubjectToAddId, setViewTeacherSubjectToAddId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [generatedUsername, setGeneratedUsername] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
@@ -117,7 +111,6 @@ export function AdminUsersPage() {
     setPhone("+996");
     setBirthDate("");
     setClassId("");
-    setTeacherSubjectIds([]);
     setPhotoDataUrl(null);
     setGeneratedUsername("");
     setGeneratedPassword("");
@@ -183,7 +176,6 @@ export function AdminUsersPage() {
     setViewUser(null);
     setViewClass(null);
     setViewWorkload(null);
-    setViewTeacherSubjectIds([]);
     setViewEdit(false);
     setViewSaving(false);
     setViewEditFirstName("");
@@ -580,10 +572,6 @@ export function AdminUsersPage() {
 
                     setSaving(true);
                     try {
-                      const teacherSubjectNames = teacherSubjectIds
-                        .map((id) => subjects.find((s) => s.id === id)?.name)
-                        .filter(Boolean) as string[];
-
                       const resp = await apiAdminCreateUser(token, {
                         role,
                         first_name: fn,
@@ -782,88 +770,7 @@ export function AdminUsersPage() {
                       )}
                     </div>
 
-                    {viewUser.role === "teacher" && (
-                      <div style={{
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--spacing-md)",
-                        background: "var(--color-bg-subtle)"
-                      }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: "var(--spacing-md)" }}>Предметы учителя (необязательно)</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {viewTeacherSubjectIds.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>
-                              Пока ничего не назначено.
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                              {viewTeacherSubjectIds
-                                .map((id) => subjects.find((s) => s.id === id))
-                                .filter(Boolean)
-                                .map((s) => (
-                                  <div
-                                    key={s!.id}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 8,
-                                      border: "1px solid var(--color-border)",
-                                      background: "var(--color-bg-subtle)",
-                                      padding: "6px 10px",
-                                      borderRadius: 999,
-                                      fontSize: 13,
-                                    }}
-                                  >
-                                    <span>{s!.name}</span>
-                                    <button
-                                      type="button"
-                                      className="secondary"
-                                      style={{ padding: "2px 8px", lineHeight: 1.1 }}
-                                      onClick={() => setViewTeacherSubjectIds(viewTeacherSubjectIds.filter((x) => x !== s!.id))}
-                                      title="Убрать предмет"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
-                            </div>
-                          )}
 
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
-                            <select
-                              value={viewTeacherSubjectToAddId}
-                              onChange={(e) => setViewTeacherSubjectToAddId(e.target.value)}
-                            >
-                              <option value="">— Выберите предмет —</option>
-                              {subjects
-                                .filter((s) => !viewTeacherSubjectIds.includes(s.id))
-                                .map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                            </select>
-                            <button
-                              type="button"
-                              disabled={!viewTeacherSubjectToAddId}
-                              onClick={() => {
-                                const id = viewTeacherSubjectToAddId;
-                                if (!id) return;
-                                setViewTeacherSubjectIds(Array.from(new Set([...viewTeacherSubjectIds, id])));
-                                setViewTeacherSubjectToAddId("");
-                              }}
-                            >
-                              Добавить
-                            </button>
-                          </div>
-
-                          {/* The block to be removed was here */}
-                        </div>
-                        <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
-                          Сейчас: {viewUser.teacher_subject || "—"}
-                        </div>
-                      </div>
-                    )}
 
                     {viewUser.role === "teacher" && viewWorkload && (
                       <div style={{
@@ -927,7 +834,6 @@ export function AdminUsersPage() {
                           birth_date: viewEditBirthDate || null,
                           photo_data_url: viewEditPhotoDataUrl,
                           class_id: viewUser.role === "student" ? (viewEditClassId || null) : undefined,
-                          subject_ids: viewUser.role === "teacher" ? viewTeacherSubjectIds : undefined,
                         });
                         setViewUser(resp.user);
                         setViewClass(resp.class);
