@@ -10,9 +10,6 @@ import {
   apiAdminResetTeacherPassword,
   apiAdminListUsers,
   apiListClasses,
-  apiListSubjects,
-  apiGetTeacherSubjects,
-  apiSetTeacherSubjects,
   apiGetTeacherWorkload,
   type AdminUser,
   type AdminUserDetails,
@@ -27,6 +24,7 @@ import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./AdminUsers.module.css";
+// ... (icons) ...
 import {
   Search,
   Plus,
@@ -100,7 +98,7 @@ export function AdminUsersPage() {
   const [classId, setClassId] = useState("");
   const [teacherSubjectIds, setTeacherSubjectIds] = useState<string[]>([]);
   const [teacherSubjectToAddId, setTeacherSubjectToAddId] = useState<string>("");
-    const [viewTeacherSubjectToAddId, setViewTeacherSubjectToAddId] = useState<string>("");
+  const [viewTeacherSubjectToAddId, setViewTeacherSubjectToAddId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [generatedUsername, setGeneratedUsername] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
@@ -131,12 +129,6 @@ export function AdminUsersPage() {
     if (!token) return;
     const c = await apiListClasses(token);
     setClasses(c.classes);
-  }
-
-  async function loadSubjects() {
-    if (!token) return;
-    const s = await apiListSubjects(token);
-    setSubjects(s.subjects || []);
   }
 
   async function fileToDataUrl(file: File): Promise<string> {
@@ -221,9 +213,6 @@ export function AdminUsersPage() {
 
       if (resp.user.role === "teacher") {
         try {
-          const ts = await apiGetTeacherSubjects(token, resp.user.id);
-          const ids = (ts.subjects || []).map((s) => s.id).filter(Boolean);
-          setViewTeacherSubjectIds(ids);
           // Load teacher workload
           try {
             const workloadData = await apiGetTeacherWorkload(token, resp.user.id);
@@ -232,7 +221,7 @@ export function AdminUsersPage() {
             console.error("Failed to load workload:", err);
           }
         } catch {
-          setViewTeacherSubjectIds([]);
+          // ignore
         }
       }
     } catch (e) {
@@ -270,9 +259,6 @@ export function AdminUsersPage() {
     if (!can) return;
     loadClasses().catch(() => {
       // ignore; classes are only needed for student creation
-    });
-    loadSubjects().catch(() => {
-      // ignore; subjects needed for teacher creation
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can]);
@@ -396,12 +382,7 @@ export function AdminUsersPage() {
                       <span>{u.class.name}</span>
                     </div>
                   )}
-                  {u.role === "teacher" && u.teacher_subject && (
-                    <div className={styles.infoRow}>
-                      <BookOpen className={styles.infoIcon} />
-                      <span>{u.teacher_subject}</span>
-                    </div>
-                  )}
+
                 </div>
               </div>
             ))}
@@ -525,79 +506,6 @@ export function AdminUsersPage() {
                     </div>
                   )}
 
-                  {role === "teacher" && (
-                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                      <label className={styles.label}>Предметы (необязательно)</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {teacherSubjectIds.length === 0 ? (
-                          <div style={{ fontSize: 12, color: "var(--color-text-light)" }}>
-                            Пока ничего не назначено.
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {teacherSubjectIds
-                              .map((id) => subjects.find((s) => s.id === id))
-                              .filter(Boolean)
-                              .map((s) => (
-                                <div
-                                  key={s!.id}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    border: "1px solid var(--color-border)",
-                                    background: "var(--color-bg-subtle)",
-                                    padding: "6px 10px",
-                                    borderRadius: 999,
-                                    fontSize: 13,
-                                  }}
-                                >
-                                  <span>{s!.name}</span>
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    style={{ padding: "2px 8px", lineHeight: 1.1 }}
-                                    onClick={() => setTeacherSubjectIds(teacherSubjectIds.filter((x) => x !== s!.id))}
-                                    title="Убрать предмет"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
-                          <select
-                            value={teacherSubjectToAddId}
-                            onChange={(e) => setTeacherSubjectToAddId(e.target.value)}
-                          >
-                            <option value="">— Выберите предмет —</option>
-                            {subjects
-                              .filter((s) => !teacherSubjectIds.includes(s.id))
-                              .map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                          </select>
-                          <button
-                            type="button"
-                            disabled={!teacherSubjectToAddId}
-                            onClick={() => {
-                              const id = teacherSubjectToAddId;
-                              if (!id) return;
-                              setTeacherSubjectIds(Array.from(new Set([...teacherSubjectIds, id])));
-                              setTeacherSubjectToAddId("");
-                            }}
-                          >
-                            Добавить
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className={`${styles.fullWidth} ${styles.formGrid}`} style={{ alignItems: "end" }}>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>Логин</label>
@@ -688,8 +596,8 @@ export function AdminUsersPage() {
                         birth_date: birthDate,
                         photo_data_url: photoDataUrl,
                         class_id: (role === "student" && classId) ? classId : null,
-                        teacher_subject: role === "teacher" && teacherSubjectNames.length ? teacherSubjectNames.join(", ") : null,
-                        subject_ids: role === "teacher" ? teacherSubjectIds : null,
+                        teacher_subject: null,
+                        subject_ids: null,
                         username: generatedUsername,
                         temp_password: generatedPassword,
                       });
@@ -987,28 +895,7 @@ export function AdminUsersPage() {
                             </button>
                           </div>
 
-                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                            <button
-                              disabled={viewTeacherSaving}
-                              onClick={async () => {
-                                if (!token || !viewUser) return;
-                                setViewErr(null);
-                                setViewTeacherSaving(true);
-                                try {
-                                  await apiSetTeacherSubjects(token, viewUser.id, viewTeacherSubjectIds);
-                                  const refreshed = await apiAdminGetUser(token, viewUser.id);
-                                  setViewUser(refreshed.user);
-                                } catch (e) {
-                                  setViewErr(String(e));
-                                } finally {
-                                  setViewTeacherSaving(false);
-                                }
-                              }}
-                              title="Сохранить предметы"
-                            >
-                              {viewTeacherSaving ? "..." : <Save size={16} />}
-                            </button>
-                          </div>
+                          {/* The block to be removed was here */}
                         </div>
                         <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-light)" }}>
                           Сейчас: {viewUser.teacher_subject || "—"}
@@ -1098,6 +985,6 @@ export function AdminUsersPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </AppShell >
   );
 }

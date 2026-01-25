@@ -877,33 +877,35 @@ export type TimetableEntry = {
   room?: string;
   lesson_type?: "lecture" | "seminar" | "exam" | "practical";
   lesson_number?: number;
+  meet_url?: string | null;
 };
 
 export async function apiCreateTimetableEntry(
   token: string,
-  body: Omit<TimetableEntry, "id" | "teacher_id"> & { teacher_id?: string | null }
+  data: Omit<TimetableEntry, "id" | "teacher_id"> & { teacher_id?: string | null; meet_url?: string }
 ) {
-  return apiPost<{ entry: TimetableEntry }>("/timetable/entries", body, token);
+  return apiPost<{ entry: TimetableEntry }>("/timetable/entries", data, token);
 }
 
 export async function apiUpdateTimetableEntry(
   token: string,
   entryId: string,
-  body: {
-    teacher_id?: string | null;
-    subject?: string;
-    subject_id?: string | null;
-    room?: string | null;
-    lesson_type?: "lecture" | "seminar" | "exam" | "practical";
-    stream_id?: string | null;
-    class_ids?: string[] | null;
-    lesson_number?: number | null;
-  }
+  data: Partial<{
+    teacher_id: string | null;
+    subject: string;
+    subject_id: string | null;
+    room: string | null;
+    lesson_type: "lecture" | "seminar" | "exam" | "practical";
+    stream_id: string | null;
+    class_ids: string[] | null;
+    lesson_number: number | null;
+    meet_url: string | null;
+  }>
 ) {
   return http<{ entry: TimetableEntry }>(`/timetable/entries/${encodeURIComponent(entryId)}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
+    body: JSON.stringify(data),
   });
 }
 
@@ -2624,13 +2626,16 @@ export type MeetingLink = {
   id: string;
   meet_url: string;
   title?: string | null;
+  created_by: string;
   starts_at?: string | null;
   timetable_entry_id?: string | null;
   class_id?: string | null;
+  class_name?: string | null;
   stream_id?: string | null;
-  created_by?: string | null;
+  audience?: "class" | "teachers" | "all" | string | null;
   created_at?: string;
 };
+
 
 export async function apiCreateMeetingLink(
   token: string,
@@ -2641,16 +2646,18 @@ export async function apiCreateMeetingLink(
     timetable_entry_id?: string | null;
     class_id?: string | null;
     stream_id?: string | null;
+    audience?: "class" | "teachers" | "all" | null;
   }
 ) {
   return apiPost<{ link: MeetingLink }>("/meetings/links", body, token);
 }
 
-export async function apiListMeetingLinks(token: string, classId?: string, streamId?: string) {
-  const params = new URLSearchParams();
-  if (classId) params.set("class_id", classId);
-  if (streamId) params.set("stream_id", streamId);
-  const suffix = params.toString() ? `?${params.toString()}` : "";
+export async function apiListMeetingLinks(token: string, params?: { classId?: string; streamId?: string; audience?: string }) {
+  const p = new URLSearchParams();
+  if (params?.classId) p.set("class_id", params.classId);
+  if (params?.streamId) p.set("stream_id", params.streamId);
+  if (params?.audience) p.set("audience", params.audience);
+  const suffix = p.toString() ? `?${p.toString()}` : "";
   return apiGet<{ links: MeetingLink[] }>(`/meetings/links${suffix}`, token);
 }
 
@@ -2660,3 +2667,4 @@ export async function apiDeleteMeetingLink(token: string, linkId: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+

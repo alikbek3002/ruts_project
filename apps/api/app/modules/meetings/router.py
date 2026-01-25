@@ -69,6 +69,7 @@ def create_meeting_link(payload: CreateMeetingLinkIn, user: dict = require_role(
         "meet_url": meet_url,
         "title": (payload.title or "").strip() or None,
         "created_by": user.get("id"),
+        "audience": payload.audience,
     }
     
     if payload.starts_at:
@@ -92,23 +93,34 @@ def create_meeting_link(payload: CreateMeetingLinkIn, user: dict = require_role(
 def list_meeting_links(
     class_id: str | None = None,
     stream_id: str | None = None,
+    audience: str | None = None,
     user: dict = require_role("teacher", "admin", "manager", "student")
 ):
     """Список ссылок на конференции"""
     sb = get_supabase()
     
-    query = sb.table("meeting_links").select("*")
+    query = sb.table("meeting_links").select("*, classes(name)")
     
     if class_id:
         query = query.eq("class_id", class_id)
     
     if stream_id:
         query = query.eq("stream_id", stream_id)
+
+    if audience:
+        query = query.eq("audience", audience)
     
     query = query.order("created_at", desc=True).limit(50)
     resp = query.execute()
     
-    return {"links": resp.data or []}
+    links = []
+    for r in (resp.data or []):
+        if r.get("classes"):
+            r["class_name"] = r["classes"]["name"]
+            del r["classes"]
+        links.append(r)
+    
+    return {"links": links}
 
 
 @router.delete("/links/{link_id}")
