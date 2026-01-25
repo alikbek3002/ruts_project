@@ -12,13 +12,14 @@ import {
     apiAssignSubjectToCycle,
     apiAddTeacherToCycle,
     apiRemoveTeacherFromCycle,
+    apiListBusyTeachers,
     type Cycle,
     type SubjectWithTeachers,
 } from "../../../api/client";
 import styles from "./AdminCycles.module.css";
 import { BookOpen, Users, Plus, X, Trash2 } from "lucide-react";
 
-type Teacher = { id: string; name: string; photo_url?: string | null };
+type Teacher = { id: string; name: string; photo_url?: string | null; cycle_ids?: string[] };
 type CycleSubject = { id: string; name: string; photo_url?: string | null };
 
 export function AdminCyclesPage() {
@@ -77,16 +78,8 @@ export function AdminCyclesPage() {
             const subjectsResp = await apiListSubjectsWithTeachers(token);
             setAllSubjects(subjectsResp.subjects || []);
 
-            // Extract unique teachers
-            const teachersMap = new Map<string, Teacher>();
-            for (const s of subjectsResp.subjects || []) {
-                for (const t of s.teachers || []) {
-                    if (!teachersMap.has(t.id)) {
-                        teachersMap.set(t.id, { id: t.id, name: t.name });
-                    }
-                }
-            }
-            setAllTeachers(Array.from(teachersMap.values()));
+            const teachersResp = await apiListBusyTeachers(token);
+            setAllTeachers(teachersResp.teachers || []);
         } catch (e) {
             console.error("Failed to load subjects/teachers:", e);
         }
@@ -174,9 +167,16 @@ export function AdminCyclesPage() {
     const availableSubjects = allSubjects.filter(
         (s) => !cycleSubjects.some((cs) => cs.id === s.id)
     );
-    const availableTeachers = allTeachers.filter(
-        (t) => !cycleTeachers.some((ct) => ct.id === t.id)
-    );
+    // Filter teachers: not already in THIS cycle AND not in ANY OTHER cycle
+    // (Wait, actually they should not be in THIS cycle. What about others? 
+    // User requested: "if in another cycle, should not be displayed")
+    const availableTeachers = allTeachers.filter((t) => {
+        // Not in current cycle
+        if (cycleTeachers.some((ct) => ct.id === t.id)) return false;
+        // Not in any other cycle (cycle_ids array)
+        if (t.cycle_ids && t.cycle_ids.length > 0) return false;
+        return true;
+    });
 
     const getCycleIcon = (code: string) => {
         switch (code) {

@@ -768,15 +768,6 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
     else:
         tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
 
-    # zoom meetings for this week (starts_at between)
-    zm = (
-        sb.table("zoom_meetings")
-        .select("timetable_entry_id, starts_at, join_url")
-        .gte("starts_at", datetime.combine(start, datetime.min.time()).isoformat())
-        .lt("starts_at", datetime.combine(end, datetime.min.time()).isoformat())
-        .execute()
-    )
-
     entries = tt.data or []
     
     # Filter by stream dates: only show entries for classes in active streams within their date range
@@ -821,7 +812,7 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
             if str(e.get("class_id") or "") == cid or cid in _entry_class_ids(e)
         ]
 
-    # Use a short-lived cache to avoid repeated lookups for classes/teachers and zooms
+    # Use a short-lived cache to avoid repeated lookups for classes/teachers
     # Include classId in cache key for student filtering
     cache_key = f"timetable_week:{weekStart}:{user['role']}:{user.get('id') or ''}:{classId or 'all'}"
     from app.core.cache import cache
@@ -842,18 +833,9 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
         t_rows = sb.table("users").select("id,full_name,username").in_("id", teacher_ids).execute().data or []
         teachers = {t["id"]: t for t in t_rows}
 
-    zoom_rows = zm.data or []
-    zoom_by_key: dict[str, dict] = {}
-    for r in zoom_rows:
-        zoom_by_key[f"{r.get('timetable_entry_id')}|{r.get('starts_at')}"] = r
-
     enriched = []
     for e in entries:
         weekday = int(e.get("weekday", 0))
-        occ_date = start + timedelta(days=weekday)
-        start_time = str(e.get("start_time"))[:5]
-        starts_at = f"{occ_date.isoformat()}T{start_time}:00"
-        z = zoom_by_key.get(f"{e.get('id')}|{starts_at}")
         cls = classes.get(e.get("class_id")) or {}
         tch = teachers.get(e.get("teacher_id")) or {}
 
@@ -870,13 +852,13 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
                 "teacher_name": teacher_name,
                 "subject": e.get("subject"),
                 "weekday": weekday,
-                "start_time": start_time,
+                "start_time": str(e.get("start_time"))[:5],
                 "end_time": str(e.get("end_time"))[:5],
                 "room": e.get("room"),
-                "zoom": ({"join_url": z.get("join_url"), "starts_at": z.get("starts_at")} if z else None),
                 "meet_url": e.get("meet_url"),
             }
         )
+
 
     enriched.sort(key=lambda r: (r.get("weekday") or 0, r.get("start_time") or ""))
 

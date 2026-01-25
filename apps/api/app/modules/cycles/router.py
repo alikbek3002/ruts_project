@@ -214,3 +214,44 @@ def remove_teacher_from_cycle(cycle_id: str, teacher_id: str, user: dict = requi
     sb = get_supabase()
     sb.table("teacher_cycles").delete().eq("teacher_id", teacher_id).eq("cycle_id", cycle_id).execute()
     return {"ok": True}
+
+
+@router.get("/teachers/busy")
+def list_busy_teachers(user: dict = require_role("admin", "manager")):
+    """Возвращает список всех учителей с их циклами"""
+    sb = get_supabase()
+    
+    # Get all active teachers
+    teachers_resp = (
+        sb.table("users")
+        .select("id,full_name,username,photo_data_url")
+        .eq("role", "teacher")
+        .eq("is_active", True)
+        .is_("archived_at", "null")
+        .order("full_name")
+        .execute()
+    )
+    all_teachers = teachers_resp.data or []
+    
+    # Get all assignments
+    assignments = sb.table("teacher_cycles").select("teacher_id,cycle_id").execute().data or []
+    busy_map = {} # teacher_id -> [cycle_id]
+    for a in assignments:
+        tid = a.get("teacher_id")
+        cid = a.get("cycle_id")
+        if tid and cid:
+            if tid not in busy_map:
+                busy_map[tid] = []
+            busy_map[tid].append(cid)
+            
+    result = []
+    for t in all_teachers:
+        busy_cycles = busy_map.get(t["id"], [])
+        result.append({
+            "id": t["id"],
+            "name": _teacher_display_name(t),
+            "photo_url": t.get("photo_data_url"),
+            "cycle_ids": busy_cycles
+        })
+        
+    return {"teachers": result}

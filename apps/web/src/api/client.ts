@@ -2594,6 +2594,11 @@ export async function apiAddTeacherToCycle(token: string, cycleId: string, teach
   });
 }
 
+
+export async function apiListBusyTeachers(token: string) {
+  return apiGet<{ teachers: { id: string; name: string; photo_url?: string | null; cycle_ids: string[] }[] }>("/cycles/teachers/busy", token);
+}
+
 export async function apiRemoveTeacherFromCycle(token: string, cycleId: string, teacherId: string) {
   return http<{ ok: boolean }>(`/cycles/cycles/${encodeURIComponent(cycleId)}/teachers/${encodeURIComponent(teacherId)}`, {
     method: "DELETE",
