@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { 
-  BookOpen, 
-  Calendar, 
-  Users, 
-  Library, 
-  Clock, 
+import {
+  BookOpen,
+  Calendar,
+  Users,
+  Library,
+  Clock,
   MapPin,
   ArrowRight
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
-import { ZoomMeetingsWidget } from "../../components/ZoomMeetingsWidget";
+
 import { trackedFetch } from "../../../api/client";
 import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -53,7 +53,7 @@ export function TeacherHomePage() {
       if (res.ok) {
         const data = await res.json();
         // Sort by start time
-        const sorted = (data.lessons || []).sort((a: Lesson, b: Lesson) => 
+        const sorted = (data.lessons || []).sort((a: Lesson, b: Lesson) =>
           a.start_time.localeCompare(b.start_time)
         );
         setTodayLessons(sorted);
@@ -110,7 +110,7 @@ export function TeacherHomePage() {
               <Calendar size={20} />
               {t("teacher.scheduleToday")}
             </h2>
-            
+
             <div className={styles.scheduleCard}>
               {loading ? (
                 <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
@@ -140,8 +140,8 @@ export function TeacherHomePage() {
                           )}
                         </div>
                       </div>
-                      <Link 
-                        to={`/app/teacher/journal`} 
+                      <Link
+                        to={`/app/teacher/journal`}
                         className="btn-icon"
                         title={t("teacher.goToJournal")}
                       >
@@ -165,7 +165,7 @@ export function TeacherHomePage() {
               <Clock size={20} />
               {t("admin.quickAccess")}
             </h2>
-            
+
             <div className={styles.quickLinksGrid}>
               <Link to="/app/teacher/journal" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.blue}`}>
@@ -173,21 +173,21 @@ export function TeacherHomePage() {
                 </div>
                 <span className={styles.linkTitle}>{t("nav.journal")}</span>
               </Link>
-              
+
               <Link to="/app/teacher/timetable" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.green}`}>
                   <Calendar size={24} />
                 </div>
                 <span className={styles.linkTitle}>{t("nav.timetable")}</span>
               </Link>
-              
+
               <Link to="/app/teacher/vzvody" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.purple}`}>
                   <Users size={24} />
                 </div>
                 <span className={styles.linkTitle}>{t("nav.myVzvody")}</span>
               </Link>
-              
+
               <Link to="/app/teacher/subjects" className={styles.quickLinkCard}>
                 <div className={`${styles.iconBox} ${styles.orange}`}>
                   <BookOpen size={24} />
@@ -196,12 +196,6 @@ export function TeacherHomePage() {
               </Link>
             </div>
 
-            <h2 className={styles.sectionTitle} style={{ marginTop: 32 }}>
-              {t("teacher.zoom")}
-            </h2>
-            <div className={styles.zoomWrapper}>
-              {token && <ZoomMeetingsWidget token={token} userRole={user.role} />}
-            </div>
           </div>
         </div>
       </div>

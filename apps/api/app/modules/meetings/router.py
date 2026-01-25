@@ -14,13 +14,16 @@ class SetMeetLinkIn(BaseModel):
     meet_url: str | None = None
 
 
+
 class CreateMeetingLinkIn(BaseModel):
     meet_url: str
     title: str | None = None
     starts_at: str | None = None
     timetable_entry_id: str | None = None
     class_id: str | None = None
+    class_ids: list[str] | None = None
     stream_id: str | None = None
+    audience: str | None = None
 
 
 @router.put("/timetable/{entry_id}/meet")
@@ -85,8 +88,14 @@ def create_meeting_link(payload: CreateMeetingLinkIn, user: dict = require_role(
         insert_data["stream_id"] = payload.stream_id
     
     resp = sb.table("meeting_links").insert(insert_data).execute()
+    link = resp.data[0] if resp.data else None
     
-    return {"link": resp.data[0] if resp.data else None}
+    if link and payload.class_ids:
+        audience_data = [{"meeting_link_id": link["id"], "class_id": cid} for cid in payload.class_ids]
+        if audience_data:
+            sb.table("meeting_link_audiences").insert(audience_data).execute()
+            
+    return {"link": link}
 
 
 @router.get("/links")
@@ -99,25 +108,62 @@ def list_meeting_links(
     """Список ссылок на конференции"""
     sb = get_supabase()
     
-    query = sb.table("meeting_links").select("*, classes(name)")
+    query = sb.table("meeting_links").select("*, classes(name), meeting_link_audiences(class_id, classes(name))")
     
     if class_id:
-        query = query.eq("class_id", class_id)
+        # Find links directly assigned to class OR assigned via audience table
+        # Because 'or' filter syntax with joins is tricky, we'll fetch IDs first
+        
+        # 1. Get IDs from audience table Make sure to select meeting_link_id
+        audience_matches = sb.table("meeting_link_audiences").select("meeting_link_id").eq("class_id", class_id).execute()
+        matched_ids = [row["meeting_link_id"] for row in (audience_matches.data or [])]
+        
+        if matched_ids:
+            # query = query.or_(f"class_id.eq.{class_id},id.in.({','.join(matched_ids)})")
+            # Supabase postgrest filter for IN is `id.in.(x,y,z)`
+            # OR syntax: `or=(class_id.eq.X,id.in.(...))`
+            ids_str = ",".join(matched_ids)
+            query = query.or_(f"class_id.eq.{class_id},id.in.({ids_str})")
+        else:
+            query = query.eq("class_id", class_id)
     
     if stream_id:
         query = query.eq("stream_id", stream_id)
 
     if audience:
         query = query.eq("audience", audience)
+        
+    # If teacher, maybe they want to see only created by them?
+    # The requirement says "teacher assigns... list...". 
+    # Usually teachers see what they created. 
+    # But if they are viewing for a specific group, they might want to see all links for that group.
+    # Current logic lists all links matching filter.
+    if user.get("role") == "teacher" and not class_id and not stream_id:
+         query = query.eq("created_by", user.get("id"))
     
     query = query.order("created_at", desc=True).limit(50)
     resp = query.execute()
     
     links = []
     for r in (resp.data or []):
+        # Flatten classes from single join
         if r.get("classes"):
             r["class_name"] = r["classes"]["name"]
-            del r["classes"]
+            
+        # Add class names from audience join
+        audience_groups = []
+        if r.get("meeting_link_audiences"):
+            for aud in r["meeting_link_audiences"]:
+                if aud.get("classes"):
+                    audience_groups.append(aud["classes"]["name"])
+        
+        if audience_groups:
+             r["audience_names"] = audience_groups
+             
+        # Cleanup
+        if "classes" in r: del r["classes"]
+        if "meeting_link_audiences" in r: del r["meeting_link_audiences"]
+            
         links.append(r)
     
     return {"links": links}
@@ -140,3 +186,4 @@ def delete_meeting_link(link_id: str, user: dict = require_role("teacher", "admi
     sb.table("meeting_links").delete().eq("id", link_id).execute()
     
     return {"ok": True}
+

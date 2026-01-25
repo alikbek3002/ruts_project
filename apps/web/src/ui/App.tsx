@@ -35,6 +35,7 @@ const TeacherMyVzvodyPage = React.lazy(() => import('./pages/teacher/TeacherMyVz
 const TeacherTimetablePage = React.lazy(() => import('./pages/teacher/TeacherTimetablePage').then(m => ({ default: m.TeacherTimetablePage })));
 const TeacherLibraryPage = React.lazy(() => import('./pages/teacher/TeacherLibraryPage').then(m => ({ default: m.TeacherLibraryPage })));
 const TeacherWorkloadPage = React.lazy(() => import('./pages/teacher/TeacherWorkloadPage').then(m => ({ default: m.TeacherWorkloadPage })));
+const TeacherConferencesPage = React.lazy(() => import('./pages/teacher/TeacherConferencesPage').then(m => ({ default: m.TeacherConferencesPage })));
 
 // Student Pages
 const StudentHomePage = React.lazy(() => import('./pages/student/StudentHomePage').then(m => ({ default: m.StudentHomePage })));
@@ -42,6 +43,7 @@ const StudentTimetablePage = React.lazy(() => import('./pages/student/StudentTim
 const StudentSubjectsPage = React.lazy(() => import('./pages/student/StudentSubjectsPage').then(m => ({ default: m.StudentSubjectsPage })));
 const StudentSubjectViewPage = React.lazy(() => import('./pages/student/StudentSubjectViewPage').then(m => ({ default: m.StudentSubjectViewPage })));
 const SubjectTestFullscreenPage = React.lazy(() => import('./pages/student/SubjectTestFullscreenPage').then(m => ({ default: m.SubjectTestFullscreenPage })));
+const StudentConferencesPage = React.lazy(() => import('./pages/student/StudentConferencesPage').then(m => ({ default: m.StudentConferencesPage })));
 
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -398,6 +400,14 @@ export function App() {
               }
             />
             <Route
+              path="/app/teacher/conferences"
+              element={
+                <RequireAuth>
+                  <TeacherConferencesPage />
+                </RequireAuth>
+              }
+            />
+            <Route
               path="/app/teacher/subjects"
               element={
                 <RequireAuth>
@@ -452,6 +462,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <StudentSubjectsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/student/conferences"
+              element={
+                <RequireAuth>
+                  <StudentConferencesPage />
                 </RequireAuth>
               }
             />

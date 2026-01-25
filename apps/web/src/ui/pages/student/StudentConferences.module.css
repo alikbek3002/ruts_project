@@ -1,0 +1,82 @@
+.container {
+    padding: 24px;
+}
+
+.header {
+    margin-bottom: 24px;
+}
+
+.title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.controls {
+    margin-bottom: 24px;
+    max-width: 400px;
+}
+
+.label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+    font-size: 16px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+.cardTitle {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: #111827;
+}
+
+.cardLink {
+    color: #2563eb;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardLink:hover {
+    text-decoration: underline;
+}
+
+.emptyState {
+    color: #6b7280;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+}

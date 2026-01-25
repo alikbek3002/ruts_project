@@ -2634,6 +2634,7 @@ export type MeetingLink = {
   stream_id?: string | null;
   audience?: "class" | "teachers" | "all" | string | null;
   created_at?: string;
+  audience_names?: string[];
 };
 
 
@@ -2645,8 +2646,9 @@ export async function apiCreateMeetingLink(
     starts_at?: string | null;
     timetable_entry_id?: string | null;
     class_id?: string | null;
+    class_ids?: string[] | null;
     stream_id?: string | null;
-    audience?: "class" | "teachers" | "all" | null;
+    audience?: "class" | "teachers" | "all" | string | null;
   }
 ) {
   return apiPost<{ link: MeetingLink }>("/meetings/links", body, token);
@@ -2668,3 +2670,10 @@ export async function apiDeleteMeetingLink(token: string, linkId: string) {
   });
 }
 
+export async function apiListAllClasses(token: string) {
+  return apiGet<{ classes: { id: string; name: string }[] }>("/classes", token);
+}
+
+export async function apiListTeacherClasses(token: string) {
+  return apiGet<{ classes: { id: string; name: string }[] }>("/journal/teacher/classes", token);
+}
