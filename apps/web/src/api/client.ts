@@ -2610,6 +2610,14 @@ export async function apiRemoveTeacherFromCycle(token: string, cycleId: string, 
 
 // ============ Google Meet Links API ============
 
+
+export async function apiGetClassSubjects(token: string, classId: string) {
+  return apiGet<{ subjects: Array<{ id: string; name: string; is_mine: boolean }> }>(
+    `/journal/classes/${encodeURIComponent(classId)}/subjects`,
+    token
+  );
+}
+
 export async function apiSetTimetableMeetLink(token: string, entryId: string, meetUrl: string | null) {
   return http<{ ok: boolean; meet_url: string | null }>(`/meetings/timetable/${encodeURIComponent(entryId)}/meet`, {
     method: "PUT",
