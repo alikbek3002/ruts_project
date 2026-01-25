@@ -7,7 +7,6 @@ import {
   apiAdminGetUser,
   apiAdminUpdateUser,
   apiAdminResetStudentPassword,
-  apiAdminResetTeacherPassword,
   apiAdminListUsers,
   apiListClasses,
   apiGetTeacherWorkload,
@@ -74,7 +73,6 @@ export function AdminUsersPage() {
   const [viewClass, setViewClass] = useState<{ id: string; name: string | null } | null>(null);
   const [viewWorkload, setViewWorkload] = useState<TeacherWorkload | null>(null);
   const [viewErr, setViewErr] = useState<string | null>(null);
-  const [viewTempPassword, setViewTempPassword] = useState<string | null>(null);
   const [viewTeacherSubjectIds, setViewTeacherSubjectIds] = useState<string[]>([]);
   const [viewTeacherSaving, setViewTeacherSaving] = useState(false);
   const [viewEdit, setViewEdit] = useState(false);
@@ -185,7 +183,6 @@ export function AdminUsersPage() {
     setViewUser(null);
     setViewClass(null);
     setViewWorkload(null);
-    setViewTempPassword(null);
     setViewTeacherSubjectIds([]);
     setViewEdit(false);
     setViewSaving(false);
@@ -720,42 +717,7 @@ export function AdminUsersPage() {
                           </span>
                         </div>
 
-                        {/* Password Reset Section */}
-                        <div style={{ marginTop: "var(--spacing-md)", padding: "var(--spacing-md)", background: "var(--color-bg-subtle)", borderRadius: "var(--radius-md)" }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Сброс пароля</div>
-                          {viewTempPassword ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-card)", padding: 8, borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)" }}>
-                              <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 600 }}>{viewTempPassword}</span>
-                              <button className="secondary" style={{ padding: 4, height: "auto" }} onClick={() => navigator.clipboard.writeText(viewTempPassword)}>
-                                Копировать
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              className="secondary"
-                              style={{ fontSize: 13 }}
-                              onClick={async () => {
-                                if (!token) return;
-                                const pwd = window.prompt("Введите ваш пароль администратора для подтверждения:");
-                                if (!pwd) return;
-                                setViewErr(null);
-                                try {
-                                  let resp;
-                                  if (viewUser.role === "student") {
-                                    resp = await apiAdminResetStudentPassword(token, viewUser.id, pwd);
-                                  } else {
-                                    resp = await apiAdminResetTeacherPassword(token, viewUser.id, pwd);
-                                  }
-                                  setViewTempPassword(resp.tempPassword);
-                                } catch (e) {
-                                  setViewErr(String(e));
-                                }
-                              }}
-                            >
-                              Сбросить пароль
-                            </button>
-                          )}
-                        </div>
+
                       </div>
                     </div>
 

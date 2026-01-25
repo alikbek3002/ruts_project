@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
-  apiListSubjectsWithTeachers,
+  apiListSubjects,
   apiCreateSubject,
   apiUpdateSubject,
   apiDeleteSubject,
-  type SubjectWithTeachers,
+  type Subject,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminSubjects.module.css";
-import { BookOpen, Trash2, Plus, Image as ImageIcon, User, Save, X, Edit2 } from "lucide-react";
+import { BookOpen, Trash2, Plus, Image as ImageIcon, Save, X, Edit2 } from "lucide-react";
 import { SubjectTopicsModal } from "./modals/SubjectTopicsModal";
 
 export function AdminSubjectsPage() {
@@ -21,10 +21,9 @@ export function AdminSubjectsPage() {
   const token = state.accessToken;
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager" || user.role === "teacher") && !!token, [user, token]);
 
-  const [subjects, setSubjects] = useState<SubjectWithTeachers[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectPhotoUrl, setNewSubjectPhotoUrl] = useState("");
-  const [newSubjectOpenToAllTeachers, setNewSubjectOpenToAllTeachers] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,25 +31,19 @@ export function AdminSubjectsPage() {
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editSubjectName, setEditSubjectName] = useState("");
   const [editSubjectPhotoUrl, setEditSubjectPhotoUrl] = useState("");
-  const [editSubjectOpenToAllTeachers, setEditSubjectOpenToAllTeachers] = useState(false);
 
   // Modal state
-  const [selectedSubject, setSelectedSubject] = useState<SubjectWithTeachers | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
   async function reloadAll() {
     if (!token) return;
     setLoading(true);
     try {
-      const s = await apiListSubjectsWithTeachers(token);
+      const s = await apiListSubjects(token);
       setSubjects(s.subjects || []);
     } finally {
       setLoading(false);
     }
-  }
-
-  function teacherLine(s: SubjectWithTeachers): string {
-    const names = (s.teachers || []).map((t) => t.name).filter(Boolean);
-    return names.length ? names.join(", ") : "---";
   }
 
   useEffect(() => {
@@ -79,10 +72,9 @@ export function AdminSubjectsPage() {
     setErr(null);
     setLoading(true);
     try {
-      await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null, newSubjectOpenToAllTeachers);
+      await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null, false);
       setNewSubjectName("");
       setNewSubjectPhotoUrl("");
-      setNewSubjectOpenToAllTeachers(false);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
@@ -91,18 +83,16 @@ export function AdminSubjectsPage() {
     }
   };
 
-  const startEditSubject = (subject: SubjectWithTeachers) => {
+  const startEditSubject = (subject: Subject) => {
     setEditingSubjectId(subject.id);
     setEditSubjectName(subject.name);
     setEditSubjectPhotoUrl(subject.photo_url || "");
-    setEditSubjectOpenToAllTeachers(!!(subject as any).open_to_all_teachers);
   };
 
   const cancelEditSubject = () => {
     setEditingSubjectId(null);
     setEditSubjectName("");
     setEditSubjectPhotoUrl("");
-    setEditSubjectOpenToAllTeachers(false);
   };
 
   const saveEditSubject = async () => {
@@ -115,12 +105,11 @@ export function AdminSubjectsPage() {
         editingSubjectId,
         editSubjectName.trim(),
         editSubjectPhotoUrl.trim() || null,
-        editSubjectOpenToAllTeachers,
+        false,
       );
       setEditingSubjectId(null);
       setEditSubjectName("");
       setEditSubjectPhotoUrl("");
-      setEditSubjectOpenToAllTeachers(false);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
@@ -131,7 +120,7 @@ export function AdminSubjectsPage() {
 
   const handleDeleteSubject = async (subjectId: string) => {
     if (!token) return;
-    if (!window.confirm("Удалить предмет? Это также удалит все связи с учителями.")) return;
+    if (!window.confirm("Удалить предмет?")) return;
     setErr(null);
     setLoading(true);
     try {
@@ -154,18 +143,7 @@ export function AdminSubjectsPage() {
         { to: "/app/teacher/timetable", labelKey: "nav.timetable" },
         { to: "/app/teacher/workload", labelKey: "nav.workload" },
         { to: "/app/teacher/subjects", labelKey: "nav.subjects" },
-      ] : [
-        { to: base, labelKey: "nav.home" },
-        { to: `${base}/users`, labelKey: "nav.users" },
-        { to: `${base}/classes`, labelKey: "nav.groups" },
-        { to: `${base}/streams`, labelKey: "nav.streams" },
-        { to: `${base}/subjects`, labelKey: "nav.subjects" },
-        { to: `${base}/meetings`, labelKey: "nav.meetings" },
-        { to: `${base}/directions`, labelKey: "nav.directions" },
-        { to: `${base}/timetable`, labelKey: "nav.timetable" },
-        { to: `${base}/workload`, labelKey: "nav.workload" },
-        { to: `${base}/notifications`, labelKey: "nav.notifications" },
-      ]}
+      ] : getAdminNavItems(base)}
     >
       <div className={styles.container}>
         <div className={styles.header}>
@@ -203,15 +181,6 @@ export function AdminSubjectsPage() {
                 <Plus size={18} />
                 Создать предмет
               </button>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)" }}>
-                <input
-                  type="checkbox"
-                  checked={newSubjectOpenToAllTeachers}
-                  onChange={(e) => setNewSubjectOpenToAllTeachers(e.target.checked)}
-                />
-                Доступен всем учителям (без присвоения)
-              </label>
             </>
           )}
         </div>
@@ -244,14 +213,6 @@ export function AdminSubjectsPage() {
                       />
                     </div>
 
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)" }}>
-                      <input
-                        type="checkbox"
-                        checked={editSubjectOpenToAllTeachers}
-                        onChange={(e) => setEditSubjectOpenToAllTeachers(e.target.checked)}
-                      />
-                      Доступен всем учителям (без присвоения)
-                    </label>
                     <div style={{ display: "flex", gap: 8, width: "100%" }}>
                       <button
                         className={styles.secondaryBtn}
@@ -288,10 +249,6 @@ export function AdminSubjectsPage() {
                     />
                     <div className={styles.cardInfo}>
                       <div className={styles.title}>{s.name}</div>
-                      <div className={styles.meta}>
-                        <User size={14} />
-                        {teacherLine(s)}
-                      </div>
                     </div>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
@@ -320,13 +277,6 @@ export function AdminSubjectsPage() {
           })}
 
           {subjects.length === 0 && !loading && <div className={styles.empty}>Предметы не созданы</div>}
-        </div>
-
-        <div style={{ background: "var(--color-bg-subtle)", padding: 24, borderRadius: 12 }}>
-          <h3>👨‍🏫 Предметы учителям</h3>
-          <p style={{ marginTop: 8, opacity: 0.7 }}>
-            Предметы назначаются при создании учителя в разделе “Пользователи”.
-          </p>
         </div>
       </div>
 
