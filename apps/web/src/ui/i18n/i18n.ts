@@ -52,6 +52,7 @@ export const ru = {
   "nav.groups": "Группы",
   "nav.logout": "Выйти",
   "nav.archive": "Архив",
+  "nav.cycles": "Циклы",
 
   "nav.meetings": "Конференции",
 
@@ -78,6 +79,7 @@ export const ru = {
   "admin.menu.notificationsDesc": "Рассылка объявлений",
   "admin.menu.coursesDesc": "Список курсов",
   "admin.menu.meetingsDesc": "Все Zoom конференции",
+  "admin.menu.cyclesDesc": "Группировка предметов и учителей",
 
   "admin.directions.pageTitleAdmin": "Админ → Направления",
   "admin.directions.pageTitleManager": "Менеджер → Направления",
@@ -279,6 +281,7 @@ export const ky: Record<I18nKey, string> = {
   "nav.groups": "Топтор",
   "nav.logout": "Чыгуу",
   "nav.archive": "Архив",
+  "nav.cycles": "Циклдар",
 
   "nav.meetings": "Конференциялар",
 
@@ -305,6 +308,7 @@ export const ky: Record<I18nKey, string> = {
   "admin.menu.notificationsDesc": "Жарыяларды таратуу",
   "admin.menu.coursesDesc": "Курстардын тизмеси",
   "admin.menu.meetingsDesc": "Бардык Zoom конференциялар",
+  "admin.menu.cyclesDesc": "Предметтерди жана мугалимдерди топтоо",
 
 
 

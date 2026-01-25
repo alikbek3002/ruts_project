@@ -210,13 +210,13 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
     console.error('[API] Error:', init?.method || 'GET', path, err);
     throw err;
   }
-  
+
   // For 204 No Content, return void/undefined instead of trying to parse JSON
   if (res.status === 204) {
     console.log('[API] Success:', init?.method || 'GET', path, '(No Content)');
     return undefined as T;
   }
-  
+
   const result = (await res.json()) as T;
   console.log('[API] Success:', init?.method || 'GET', path, result);
   return result;
@@ -2540,3 +2540,65 @@ export async function apiArchiveTeacherWorkloadMonthly(token: string, year: numb
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// ============ Cycles API ============
+
+export type Cycle = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+};
+
+export type CycleWithDetails = Cycle & {
+  subjects?: Array<{ id: string; name: string; photo_url?: string | null }>;
+  teachers?: Array<{ id: string; name: string; photo_url?: string | null }>;
+};
+
+export async function apiListCycles(token: string) {
+  return apiGet<{ cycles: Cycle[] }>("/cycles/cycles", token);
+}
+
+export async function apiGetCycleDetail(token: string, cycleId: string) {
+  return apiGet<{
+    cycle: Cycle;
+    subjects: Array<{ id: string; name: string; photo_url?: string | null }>;
+    teachers: Array<{ id: string; name: string; photo_url?: string | null }>;
+  }>(`/cycles/cycles/${encodeURIComponent(cycleId)}`, token);
+}
+
+export async function apiAssignSubjectToCycle(token: string, subjectId: string, cycleId: string | null) {
+  return http<{ ok: boolean }>(`/cycles/subjects/${encodeURIComponent(subjectId)}/cycle`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ cycle_id: cycleId }),
+  });
+}
+
+export async function apiGetTeacherCycles(token: string, teacherId: string) {
+  return apiGet<{ cycles: Cycle[] }>(`/cycles/teachers/${encodeURIComponent(teacherId)}/cycles`, token);
+}
+
+export async function apiSetTeacherCycles(token: string, teacherId: string, cycleIds: string[]) {
+  return http<{ ok: boolean; cycle_ids?: string[] }>(`/cycles/teachers/${encodeURIComponent(teacherId)}/cycles`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ cycle_ids: cycleIds }),
+  });
+}
+
+export async function apiAddTeacherToCycle(token: string, cycleId: string, teacherId: string) {
+  return http<{ ok: boolean }>(`/cycles/cycles/${encodeURIComponent(cycleId)}/teachers/${encodeURIComponent(teacherId)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function apiRemoveTeacherFromCycle(token: string, cycleId: string, teacherId: string) {
+  return http<{ ok: boolean }>(`/cycles/cycles/${encodeURIComponent(cycleId)}/teachers/${encodeURIComponent(teacherId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+

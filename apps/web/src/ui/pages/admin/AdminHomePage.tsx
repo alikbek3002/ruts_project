@@ -18,7 +18,8 @@ import {
   Cake,
   Briefcase,
   User,
-  Clock
+  Clock,
+  RefreshCw
 } from "lucide-react";
 
 export function AdminHomePage() {
@@ -41,6 +42,7 @@ export function AdminHomePage() {
     { to: `${base}/timetable`, labelKey: "nav.timetable" as const, icon: Calendar, color: "blue" as const, descKey: "admin.menu.timetableDesc" as const },
     { to: `${base}/workload`, labelKey: "nav.workload" as const, icon: Clock, color: "green" as const, descKey: "admin.menu.workloadDesc" as const },
     { to: `${base}/notifications`, labelKey: "nav.notifications" as const, icon: Bell, color: "green" as const, descKey: "admin.menu.notificationsDesc" as const },
+    { to: `${base}/cycles`, labelKey: "nav.cycles" as const, icon: RefreshCw, color: "orange" as const, descKey: "admin.menu.cyclesDesc" as const },
   ];
 
   const formattedDate = new Date().toLocaleDateString(lang === "ky" ? "ky-KG" : "ru-RU", {

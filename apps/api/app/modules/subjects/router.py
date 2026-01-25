@@ -55,26 +55,53 @@ def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "t
 
     subjects = sb.table("subjects").select("*").is_("archived_at", "null").order("name").execute().data or []
 
-    # For teacher cabinet, show only subjects that are either assigned to this teacher
-    # or explicitly marked as open_to_all_teachers.
+    # For teacher cabinet, show only subjects that are either:
+    # 1. Assigned to this teacher directly (via teacher_subjects)
+    # 2. Explicitly marked as open_to_all_teachers
+    # 3. In a cycle that teacher is assigned to (via teacher_cycles)
     if user.get("role") == "teacher":
+        teacher_id = user.get("id")
+        
+        # Get directly assigned subjects
         assigned_rows = (
             sb.table("teacher_subjects")
             .select("subject_id")
-            .eq("teacher_id", user.get("id"))
+            .eq("teacher_id", teacher_id)
             .execute()
             .data
             or []
         )
         assigned_ids = {str(r.get("subject_id")) for r in assigned_rows if r.get("subject_id")}
 
+        # Get teacher's cycles
+        teacher_cycle_rows = (
+            sb.table("teacher_cycles")
+            .select("cycle_id")
+            .eq("teacher_id", teacher_id)
+            .execute()
+            .data
+            or []
+        )
+        teacher_cycle_ids = {str(r.get("cycle_id")) for r in teacher_cycle_rows if r.get("cycle_id")}
+
         filtered: list[dict] = []
         for s in subjects:
             sid = str(s.get("id")) if s.get("id") else ""
             if not sid:
                 continue
-            if bool(s.get("open_to_all_teachers")) or sid in assigned_ids:
+            # Check if subject is open to all teachers
+            if bool(s.get("open_to_all_teachers")):
                 filtered.append(s)
+                continue
+            # Check if directly assigned
+            if sid in assigned_ids:
+                filtered.append(s)
+                continue
+            # Check if subject's cycle is in teacher's cycles
+            subject_cycle_id = str(s.get("cycle_id")) if s.get("cycle_id") else ""
+            if subject_cycle_id and subject_cycle_id in teacher_cycle_ids:
+                filtered.append(s)
+                continue
         subjects = filtered
     links = sb.table("teacher_subjects").select("teacher_id,subject_id").execute().data or []
 

@@ -26,6 +26,7 @@ const AdminMeetingsPage = React.lazy(() => import('./pages/admin/AdminMeetingsPa
 const AdminArchivePage = React.lazy(() => import('./pages/admin/AdminArchivePage').then(m => ({ default: m.AdminArchivePage })));
 const AdminArchiveDetailPage = React.lazy(() => import('./pages/admin/AdminArchiveDetailPage').then(m => ({ default: m.AdminArchiveDetailPage })));
 const AdminArchiveClassDetailPage = React.lazy(() => import('./pages/admin/AdminArchiveClassDetailPage').then(m => ({ default: m.AdminArchiveClassDetailPage })));
+const AdminCyclesPage = React.lazy(() => import('./pages/admin/AdminCyclesPage').then(m => ({ default: m.AdminCyclesPage })));
 
 // Teacher Pages
 const TeacherHomePage = React.lazy(() => import('./pages/teacher/TeacherHomePage').then(m => ({ default: m.TeacherHomePage })));
@@ -259,6 +260,24 @@ export function App() {
               element={
                 <RequireAuth>
                   <AdminClassJournalPage />
+                </RequireAuth>
+              }
+            />
+
+            {/* Cycles Routes */}
+            <Route
+              path="/app/admin/cycles"
+              element={
+                <RequireAuth>
+                  <AdminCyclesPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/manager/cycles"
+              element={
+                <RequireAuth>
+                  <AdminCyclesPage />
                 </RequireAuth>
               }
             />

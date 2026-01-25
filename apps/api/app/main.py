@@ -31,6 +31,7 @@ from app.modules.syllabus.router import router as syllabus_router
 from app.modules.subject_content.router import router as subject_content_router
 from app.modules.users.router import router as users_router
 from app.modules.curriculum.router import router as curriculum_router
+from app.modules.cycles.router import router as cycles_router
 
 app = FastAPI(title="RUTS Journal API", version="0.1.0")
 
@@ -96,6 +97,7 @@ app.include_router(syllabus_router, prefix="/api/syllabus", tags=["syllabus"])
 app.include_router(subject_content_router, prefix="/api/subject-content", tags=["subject-content"])
 app.include_router(users_router, prefix="/api/users", tags=["users"])
 app.include_router(curriculum_router, prefix="/api/directions", tags=["curriculum"])
+app.include_router(cycles_router, prefix="/api/cycles", tags=["cycles"])
 
 from app.modules.archive.router import router as archive_router
 app.include_router(archive_router, prefix="/api/archive", tags=["archive"])
