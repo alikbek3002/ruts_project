@@ -26,6 +26,9 @@ import {
     apiUpdateSubjectTopic,
     apiCreateSubjectTopic,
     apiDeleteSubjectTopic,
+    apiTeacherCreateSubjectTopic,
+    apiTeacherUpdateSubjectTopic,
+    apiTeacherDeleteSubjectTopic,
     apiSubjectContentUploadFile,
     apiSubjectContentCreateLink,
     apiSubjectContentDeleteMaterial,
@@ -85,6 +88,11 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
     const reloadTopics = async () => {
         setLoading(true);
         try {
+            // For teachers, we load via apiTeacherGetSubject (which returns just topics/materials for now)
+            // But apiGetSubjectTopics returns syllabus + hours.
+            // If Teacher -> both work?
+            // apiGetSubjectTopics checks "admin, manager, teacher". So it works.
+
             const [syllabusData, contentData] = await Promise.all([
                 apiGetSubjectTopics(token, subject.id),
                 apiTeacherGetSubject(token, subject.id).catch(() => ({ topics: [] }))
@@ -129,7 +137,15 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
         if (!editingTopicId || !editingTopic) return;
         setLoading(true);
         try {
-            await apiUpdateSubjectTopic(token, subject.id, editingTopicId, editingTopic);
+            if (isTeacher) {
+                await apiTeacherUpdateSubjectTopic(token, editingTopicId, {
+                    topic_number: editingTopic.topic_number,
+                    topic_name: editingTopic.topic_name,
+                    description: editingTopic.description || undefined
+                });
+            } else {
+                await apiUpdateSubjectTopic(token, subject.id, editingTopicId, editingTopic);
+            }
             setEditingTopicId(null);
             setEditingTopic(null);
             await reloadTopics();
@@ -150,7 +166,15 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
         if (!newTopic.topic_name.trim()) return;
         setLoading(true);
         try {
-            await apiCreateSubjectTopic(token, subject.id, newTopic);
+            if (isTeacher) {
+                await apiTeacherCreateSubjectTopic(token, subject.id, {
+                    topic_number: newTopic.topic_number,
+                    topic_name: newTopic.topic_name,
+                    description: newTopic.description || undefined
+                });
+            } else {
+                await apiCreateSubjectTopic(token, subject.id, newTopic);
+            }
             setIsAddingNew(false);
             await reloadTopics();
         } catch (e) {
@@ -164,7 +188,11 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
         if (!window.confirm("Удалить тему?")) return;
         setLoading(true);
         try {
-            await apiDeleteSubjectTopic(token, subject.id, topicId);
+            if (isTeacher) {
+                await apiTeacherDeleteSubjectTopic(token, topicId);
+            } else {
+                await apiDeleteSubjectTopic(token, subject.id, topicId);
+            }
             await reloadTopics();
         } catch (e) {
             setErr(String(e));
@@ -194,12 +222,11 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
 
                     <div className={styles.modalBody}>
                         <div className={styles.syllabusActions}>
-                            {!isTeacher && (
-                                <button onClick={startAddNew} disabled={loading || isAddingNew} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <Plus size={18} />
-                                    Добавить тему
-                                </button>
-                            )}
+                            {/* Always allow adding topic now (Teacher or Admin) */}
+                            <button onClick={startAddNew} disabled={loading || isAddingNew} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <Plus size={18} />
+                                Добавить тему
+                            </button>
                             <button onClick={handleDownloadExcel} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <FileDown size={18} />
                                 Скачать Excel
@@ -268,16 +295,16 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                                                     )}
                                                 </td>
                                                 <td>
-                                                    {isEditing && !isTeacher ? <input type="number" value={data.lecture_hours} onChange={e => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /> : topic.lecture_hours || "-"}
+                                                    <input type="number" value={isEditing && !isTeacher ? data.lecture_hours : topic.lecture_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, lecture_hours: parseFloat(e.target.value) || 0 }) : undefined} />
                                                 </td>
                                                 <td>
-                                                    {isEditing && !isTeacher ? <input type="number" value={data.seminar_hours} onChange={e => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /> : topic.seminar_hours || "-"}
+                                                    <input type="number" value={isEditing && !isTeacher ? data.seminar_hours : topic.seminar_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, seminar_hours: parseFloat(e.target.value) || 0 }) : undefined} />
                                                 </td>
                                                 <td>
-                                                    {isEditing && !isTeacher ? <input type="number" value={data.practical_hours} onChange={e => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /> : topic.practical_hours || "-"}
+                                                    <input type="number" value={isEditing && !isTeacher ? data.practical_hours : topic.practical_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, practical_hours: parseFloat(e.target.value) || 0 }) : undefined} />
                                                 </td>
                                                 <td>
-                                                    {isEditing && !isTeacher ? <input type="number" value={data.exam_hours} onChange={e => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /> : topic.exam_hours || "-"}
+                                                    <input type="number" value={isEditing && !isTeacher ? data.exam_hours : topic.exam_hours} className={styles.hourInput} disabled={!isEditing || isTeacher} onChange={isEditing && !isTeacher ? e => setEditingTopic({ ...data, exam_hours: parseFloat(e.target.value) || 0 }) : undefined} />
                                                 </td>
                                                 <td style={{ fontWeight: 600 }}>{topic.total_hours}</td>
                                                 <td>
@@ -300,7 +327,8 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                                                         ) : (
                                                             <>
                                                                 <button className={styles.iconBtn} onClick={() => startEditTopic(topic)}><FileText size={16} /></button>
-                                                                {!isTeacher && <button className={styles.iconBtnDanger} onClick={() => deleteTopic(topic.id)}><Trash2 size={16} /></button>}
+                                                                {/* Allow deleting for teachers too */}
+                                                                <button className={styles.iconBtnDanger} onClick={() => deleteTopic(topic.id)}><Trash2 size={16} /></button>
                                                             </>
                                                         )}
                                                     </div>
@@ -316,10 +344,18 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                                                 <input type="text" placeholder="Название темы" value={newTopic.topic_name} onChange={e => setNewTopic({ ...newTopic, topic_name: e.target.value })} className={styles.textInput} autoFocus />
                                                 <input type="text" placeholder="Описание (необязательно)" value={newTopic.description || ""} onChange={e => setNewTopic({ ...newTopic, description: e.target.value })} className={styles.textInput} style={{ marginTop: 6, fontSize: 13 }} />
                                             </td>
-                                            <td><input type="number" value={newTopic.lecture_hours} onChange={e => setNewTopic({ ...newTopic, lecture_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /></td>
-                                            <td><input type="number" value={newTopic.seminar_hours} onChange={e => setNewTopic({ ...newTopic, seminar_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /></td>
-                                            <td><input type="number" value={newTopic.practical_hours} onChange={e => setNewTopic({ ...newTopic, practical_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /></td>
-                                            <td><input type="number" value={newTopic.exam_hours} onChange={e => setNewTopic({ ...newTopic, exam_hours: parseFloat(e.target.value) || 0 })} className={styles.hourInput} /></td>
+                                            <td>
+                                                <input type="number" value={newTopic.lecture_hours} className={styles.hourInput} disabled={isTeacher} onChange={!isTeacher ? e => setNewTopic({ ...newTopic, lecture_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                            </td>
+                                            <td>
+                                                <input type="number" value={newTopic.seminar_hours} className={styles.hourInput} disabled={isTeacher} onChange={!isTeacher ? e => setNewTopic({ ...newTopic, seminar_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                            </td>
+                                            <td>
+                                                <input type="number" value={newTopic.practical_hours} className={styles.hourInput} disabled={isTeacher} onChange={!isTeacher ? e => setNewTopic({ ...newTopic, practical_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                            </td>
+                                            <td>
+                                                <input type="number" value={newTopic.exam_hours} className={styles.hourInput} disabled={isTeacher} onChange={!isTeacher ? e => setNewTopic({ ...newTopic, exam_hours: parseFloat(e.target.value) || 0 }) : undefined} />
+                                            </td>
                                             <td>-</td>
                                             <td></td>
                                             <td>
@@ -357,3 +393,4 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
         </>
     );
 };
+

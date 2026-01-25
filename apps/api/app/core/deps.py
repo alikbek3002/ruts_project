@@ -21,6 +21,10 @@ def _get_bearer_token(request: Request) -> str | None:
 def get_current_user(request: Request) -> dict:
     token = _get_bearer_token(request)
     if not token:
+        # Check query param (for file downloads)
+        token = request.query_params.get("token")
+    
+    if not token:
         raise HTTPException(status_code=401, detail="Отсутствует токен доступа")
 
     try:

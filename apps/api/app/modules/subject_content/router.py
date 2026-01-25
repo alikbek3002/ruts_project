@@ -489,6 +489,20 @@ def update_subject_topic(topic_id: str, payload: UpdateTopicIn, user: dict = req
     return {"topic": topic}
 
 
+@router.delete("/teacher/topics/{topic_id}")
+def delete_subject_topic(topic_id: str, user: dict = require_role("teacher", "admin", "manager")):
+    sb = get_supabase()
+    
+    # Check existence
+    existing = sb.table("subject_topics").select("id,subject_id").eq("id", topic_id).limit(1).execute().data
+    if not existing:
+        raise HTTPException(status_code=404, detail="Topic not found")
+        
+    sb.table("subject_topics").delete().eq("id", topic_id).execute()
+    
+    return {"ok": True}
+
+
 @router.post("/topics/{topic_id}/materials/link")
 def create_link_material(topic_id: str, payload: CreateLinkMaterialIn, user: dict = require_role("teacher", "admin", "manager")):
     sb = get_supabase()

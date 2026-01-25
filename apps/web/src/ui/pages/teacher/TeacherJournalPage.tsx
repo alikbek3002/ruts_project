@@ -221,7 +221,7 @@ export function TeacherJournalPage() {
   //    Clicking a cell allows quick grade entry? Clicking column header opens "Lesson Details"?
 
   const [gridData, setGridData] = useState<{
-    students: { id: string, name: string }[],
+    students: { id: string, name: string, student_number?: number }[],
     lessons: { timetable_entry_id: string, date: string, subject_name: string }[],
     grades: Record<string, Record<string, { grades: { grade: number, comment?: string }[], present?: boolean }>>
   } | null>(null);
@@ -335,77 +335,66 @@ export function TeacherJournalPage() {
           <h1 className={styles.title}><BookOpen size={28} /> Классный журнал</h1>
         </div>
 
-        {/* Level 1: Pick Class */}
-        {!selectedClassId && (
-          <div>
-            <div className={styles.controlsRight} style={{ marginBottom: 16 }}>
-              <input
-                className={styles.commentInput}
-                placeholder="Поиск взвода..."
-                value={classSearch}
-                onChange={e => setClassSearch(e.target.value)}
-                style={{ maxWidth: 300, border: '1px solid #d1d5db', background: 'white' }}
-              />
-            </div>
-            {loadingClasses ? <Loader /> : (
-              <div className={styles.classesGrid}>
-                {displayedClasses.map(cls => (
-                  <div key={cls.id} className={styles.classCard} onClick={() => setSelectedClassId(cls.id)}>
-                    <div className={styles.classCardTitle}>{cls.name}</div>
-                    <div className={styles.classCardMeta}>Нажмите, чтобы открыть</div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Filter Bar */}
+        <div style={{
+          display: 'flex',
+          gap: 16,
+          marginBottom: 24,
+          background: 'white',
+          padding: 16,
+          borderRadius: 12,
+          border: '1px solid #e5e7eb',
+          alignItems: 'end',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#374151' }}>
+              Взвод (Класс)
+            </label>
+            <select
+              value={selectedClassId}
+              onChange={e => setSelectedClassId(e.target.value)}
+              className={styles.textInput}
+              style={{ width: '100%', height: 42 }}
+              disabled={loadingClasses}
+            >
+              <option value="">-- Выберите взвод --</option>
+              {allClasses.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
-        )}
 
-        {/* Level 2: Pick Subject (inside Class) */}
-        {selectedClassId && !selectedSubjectId && (
-          <div>
-            <button className={styles.backBtn} onClick={() => setSelectedClassId("")} style={{ marginBottom: 16 }}>
-              <ChevronLeft size={16} /> Вернуться к списку
-            </button>
-            <h2 className={styles.sectionTitle}>Предметы взвода {selectedClass?.name}</h2>
-
-            {loadingSubjects ? <Loader /> : classSubjects.length === 0 ? (
-              <div className={styles.emptyState}>Нет доступных предметов (нет расписания)</div>
-            ) : (
-              <div className={styles.classesGrid}>
-                {classSubjects.map(sub => (
-                  <div
-                    key={sub.id}
-                    className={`${styles.classCard} ${sub.is_mine ? styles.active : ''}`}
-                    onClick={() => setSelectedSubjectId(sub.id)}
-                    style={sub.is_mine ? { borderColor: '#4f46e5', backgroundColor: '#eef2ff' } : {}}
-                  >
-                    <div className={styles.classCardTitle}>{sub.name}</div>
-                    {sub.is_mine && <div className={styles.statusTag + ' ' + styles.statusDone}>Мой предмет</div>}
-                  </div>
-                ))}
-              </div>
-            )}
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#374151' }}>
+              Предмет
+            </label>
+            <select
+              value={selectedSubjectId}
+              onChange={e => setSelectedSubjectId(e.target.value)}
+              className={styles.textInput}
+              style={{ width: '100%', height: 42 }}
+              disabled={!selectedClassId || loadingSubjects}
+            >
+              <option value="">-- Выберите предмет --</option>
+              {classSubjects.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.is_mine ? "(Мой предмет)" : ""}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+        </div>
 
         {/* Level 3: Journal Grid */}
         {selectedClassId && selectedSubjectId && (
           <div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-              <button className={styles.backBtn} onClick={() => setSelectedSubjectId("")}>
-                <ChevronLeft size={16} /> К предметам
-              </button>
-              <div className={styles.classTopTitle}>
-                {selectedClass?.name} / {classSubjects.find(s => s.id === selectedSubjectId)?.name}
-              </div>
-            </div>
-
-            {loadingLessons || !gridData ? <Loader /> : (
+            {loadingLessons || !gridData ? <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}><Loader /></div> : (
               <div style={{ overflowX: 'auto', background: 'white', borderRadius: 12, border: '1px solid #e5e7eb' }}>
                 <table className={styles.table} style={{ minWidth: 800 }}>
                   <thead>
                     <tr>
-                      <th style={{ position: 'sticky', left: 0, background: '#f9fafb', zIndex: 10, width: 200 }}>Ученик</th>
+                      <th style={{ position: 'sticky', left: 0, background: '#f9fafb', zIndex: 10, width: 250, borderRight: '1px solid #e5e7eb' }}>Ученик</th>
                       <th style={{ width: 60, textAlign: 'center', background: '#f3f4f6' }}>Ср.</th>
                       {gridData.lessons.map(l => (
                         <th
@@ -437,7 +426,10 @@ export function TeacherJournalPage() {
                       return (
                         <tr key={s.id}>
                           <td style={{ position: 'sticky', left: 0, background: 'white', borderRight: '1px solid #e5e7eb', fontWeight: 500 }}>
-                            {s.name}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ width: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>{s.student_number || "-"}</div>
+                              {s.name}
+                            </div>
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: 'bold', background: '#fafafa', borderRight: '1px solid #eee' }}>{avg}</td>
                           {gridData.lessons.map(l => {
@@ -449,7 +441,7 @@ export function TeacherJournalPage() {
                             return (
                               <td key={key} style={{ textAlign: 'center' }}>
                                 {present === false && <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Н</span>}
-                                {gradesText && <span style={{ fontWeight: 600, marginLeft: 4 }}>{gradesText}</span>}
+                                {gradesText && <span style={{ fontWeight: 600, marginLeft: present === false ? 4 : 0 }}>{gradesText}</span>}
                               </td>
                             );
                           })}
@@ -464,6 +456,15 @@ export function TeacherJournalPage() {
 
             <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280' }}>
               * Нажмите на дату урока в шапке таблицы, чтобы выставить оценки и пропуски.
+            </div>
+
+            <div style={{ marginTop: 40 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Обозначения:</h3>
+              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: '#4b5563' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 'bold', color: '#ef4444' }}>Н</span> — Отсутствие
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -2685,3 +2685,18 @@ export async function apiListAllClasses(token: string) {
 export async function apiListTeacherClasses(token: string) {
   return apiGet<{ classes: { id: string; name: string }[] }>("/journal/teacher/classes", token);
 }
+
+export async function apiTeacherCreateSubjectTopic(token: string, subjectId: string, topic: { topic_number: number; topic_name: string; description?: string }) {
+  return apiPost<{ topic: SubjectTopic }>(`/subject-content/teacher/subjects/${encodeURIComponent(subjectId)}/topics`, topic, token);
+}
+
+export async function apiTeacherUpdateSubjectTopic(token: string, topicId: string, topic: { topic_number?: number; topic_name?: string; description?: string }) {
+  return apiPut<{ topic: SubjectTopic }>(`/subject-content/teacher/topics/${encodeURIComponent(topicId)}`, topic, token);
+}
+
+export async function apiTeacherDeleteSubjectTopic(token: string, topicId: string) {
+  return http<{ ok: boolean }>(`/subject-content/teacher/topics/${encodeURIComponent(topicId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
