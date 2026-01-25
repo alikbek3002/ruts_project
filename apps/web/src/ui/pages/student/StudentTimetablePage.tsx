@@ -53,6 +53,8 @@ function getDayName(date: Date): string {
   return date.toLocaleDateString("ru-RU", { weekday: "short" }).toUpperCase();
 }
 
+import { getStudentNavItems } from "../../layout/navigation";
+
 export function StudentTimetablePage() {
   const { state } = useAuth();
   const { t } = useI18n();
@@ -101,11 +103,7 @@ export function StudentTimetablePage() {
   return (
     <AppShell
       title="Расписание"
-      nav={[
-        { to: "/app/student", labelKey: "nav.home" },
-        { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/subjects", labelKey: "nav.subjects" },
-      ]}
+      nav={getStudentNavItems()}
     >
       <div className={styles.container}>
         <div className={styles.header}>

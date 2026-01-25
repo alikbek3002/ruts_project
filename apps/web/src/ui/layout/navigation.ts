@@ -36,6 +36,6 @@ export function getStudentNavItems(): NavItem[] {
         { to: "/app/student", labelKey: "nav.home" },
         { to: "/app/student/subjects", labelKey: "nav.subjects" },
         { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/teachers", labelKey: "nav.teachers" },
+        { to: "/app/student/conferences", labelKey: "nav.meetings" },
     ];
 }

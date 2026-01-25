@@ -9,6 +9,7 @@ import {
     apiListMeetingLinks,
     MeetingLink
 } from "../../../api/client";
+import { getStudentNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./StudentConferences.module.css";
 
@@ -59,15 +60,8 @@ export function StudentConferencesPage() {
     if (!user) return <Navigate to="/login" replace />;
     if (user.role !== "student") return <Navigate to="/app" replace />;
 
-    const nav: any = [
-        { to: "/app/student", labelKey: "nav.home" },
-        { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/subjects", labelKey: "nav.subjects" },
-        { to: "/app/student/conferences", label: "Конференции" },
-    ];
-
     return (
-        <AppShell title="Конференции" nav={nav}>
+        <AppShell title="Конференции" nav={getStudentNavItems()}>
             <div className={styles.container}>
                 <div className={styles.header}>
                     <div className={styles.controls}>

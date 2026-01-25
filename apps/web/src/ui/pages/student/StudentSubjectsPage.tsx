@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
 import { apiSubjectContentListSubjects, type SubjectContentSubject } from "../../../api/client";
+import { getStudentNavItems } from "../../layout/navigation";
 import styles from "./StudentSubjects.module.css";
 
 export function StudentSubjectsPage() {
@@ -41,11 +42,7 @@ export function StudentSubjectsPage() {
   return (
     <AppShell
       title="Предметы"
-      nav={[
-        { to: "/app/student", labelKey: "nav.home" },
-        { to: "/app/student/timetable", labelKey: "nav.timetable" },
-        { to: "/app/student/subjects", labelKey: "nav.subjects" },
-      ]}
+      nav={getStudentNavItems()}
     >
       <div className={styles.container}>
         <div className={styles.header}>
