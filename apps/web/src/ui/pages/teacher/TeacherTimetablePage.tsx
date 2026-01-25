@@ -5,7 +5,7 @@ import {
   apiTeacherLessonJournalGet,
   apiTeacherLessonJournalSave,
   apiTimetableWeek,
-  apiCreateZoomMeetingNew,
+  apiSetTimetableMeetLink,
   type LessonJournalStudentRow,
   type WeekTimetableItem,
 } from "../../../api/client";
@@ -87,14 +87,13 @@ export function TeacherTimetablePage() {
   } | null>(null);
   const [journalRows, setJournalRows] = useState<LessonJournalStudentRow[]>([]);
 
-  // Zoom meeting states
-  const [zoomModalOpen, setZoomModalOpen] = useState(false);
-  const [zoomLesson, setZoomLesson] = useState<WeekTimetableItem | null>(null);
-  const [zoomDay, setZoomDay] = useState<Date | null>(null);
-  const [zoomTime, setZoomTime] = useState("");
-  const [zoomCreating, setZoomCreating] = useState(false);
-  const [zoomErr, setZoomErr] = useState<string | null>(null);
-  const [zoomSuccess, setZoomSuccess] = useState<string | null>(null);
+  // Google Meet modal states
+  const [meetModalOpen, setMeetModalOpen] = useState(false);
+  const [meetLesson, setMeetLesson] = useState<WeekTimetableItem | null>(null);
+  const [meetUrl, setMeetUrl] = useState("");
+  const [meetSaving, setMeetSaving] = useState(false);
+  const [meetErr, setMeetErr] = useState<string | null>(null);
+  const [meetSuccess, setMeetSuccess] = useState<string | null>(null);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => addDays(weekStart, i)); // Show Mon-Sat (6 days)
@@ -162,34 +161,32 @@ export function TeacherTimetablePage() {
     }
   }
 
-  async function openZoomModal(e: React.MouseEvent, lesson: WeekTimetableItem, day: Date) {
+  function openMeetModal(e: React.MouseEvent, lesson: WeekTimetableItem) {
     e.stopPropagation();
-    const timeStr = `${lesson.start_time.slice(0, 5)}`;
-    setZoomLesson(lesson);
-    setZoomDay(day);
-    setZoomTime(timeStr);
-    setZoomErr(null);
-    setZoomSuccess(null);
-    setZoomModalOpen(true);
+    setMeetLesson(lesson);
+    setMeetUrl(lesson.meet_url || "");
+    setMeetErr(null);
+    setMeetSuccess(null);
+    setMeetModalOpen(true);
   }
 
-  async function createZoomMeeting() {
-    if (!token || !zoomLesson || !zoomDay || !zoomTime) return;
-    
-    setZoomCreating(true);
-    setZoomErr(null);
-    setZoomSuccess(null);
+  async function saveMeetLink() {
+    if (!token || !meetLesson) return;
+
+    setMeetSaving(true);
+    setMeetErr(null);
+    setMeetSuccess(null);
 
     try {
-      const startsAtISO = `${ymd(zoomDay)}T${zoomTime}:00`;
-      await apiCreateZoomMeetingNew(token, zoomLesson.id, startsAtISO);
-      setZoomSuccess("Zoom встреча создана!");
-      await reload(); // Refresh to show zoom link
-      setTimeout(() => setZoomModalOpen(false), 1500);
+      const url = meetUrl.trim() || null;
+      await apiSetTimetableMeetLink(token, meetLesson.id, url);
+      setMeetSuccess(url ? "Ссылка сохранена!" : "Ссылка удалена!");
+      await reload();
+      setTimeout(() => setMeetModalOpen(false), 1500);
     } catch (e) {
-      setZoomErr(`Ошибка создания встречи: ${String(e)}`);
+      setMeetErr(`Ошибка сохранения: ${String(e)}`);
     } finally {
-      setZoomCreating(false);
+      setMeetSaving(false);
     }
   }
 
@@ -227,7 +224,7 @@ export function TeacherTimetablePage() {
               →
             </button>
           </div>
-          
+
           {!isCurrentWeek && (
             <button className={styles.todayButton} onClick={() => setWeekStart(getMonday(new Date()))}>
               Вернуться к сегодня
@@ -289,22 +286,22 @@ export function TeacherTimetablePage() {
                               {lesson.room}
                             </div>
                           )}
-                          
-                          {lesson.zoom ? (
+
+                          {lesson.meet_url ? (
                             <div className={styles.zoomBadge} onClick={(e) => e.stopPropagation()}>
                               <Video size={12} />
-                              <a href={lesson.zoom.join_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Zoom
+                              <a href={lesson.meet_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                                Meet
                               </a>
                             </div>
                           ) : (
-                            <div 
-                              className={styles.zoomBadge} 
+                            <div
+                              className={styles.zoomBadge}
                               style={{ color: '#9ca3af', cursor: 'pointer' }}
-                              onClick={(e) => openZoomModal(e, lesson, day)}
+                              onClick={(e) => openMeetModal(e, lesson)}
                             >
                               <Video size={12} />
-                              <span>+ Zoom</span>
+                              <span>+ Meet</span>
                             </div>
                           )}
                         </div>
@@ -330,7 +327,7 @@ export function TeacherTimetablePage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className={styles.modalBody}>
               {journalLesson && (
                 <div style={{ marginBottom: 16, padding: 12, background: '#f3f4f6', borderRadius: 8 }}>
@@ -353,7 +350,7 @@ export function TeacherTimetablePage() {
                   {journalRows.map((s) => (
                     <div key={s.id} className={styles.studentRow}>
                       <div className={styles.studentName}>{s.full_name || s.username}</div>
-                      
+
                       <div className={styles.studentActions}>
                         <label className={styles.checkboxLabel}>
                           <input
@@ -394,9 +391,9 @@ export function TeacherTimetablePage() {
               <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setJournalOpen(false)}>
                 Отмена
               </button>
-              <button 
-                className={`${styles.btn} ${styles.btnPrimary}`} 
-                onClick={saveJournal} 
+              <button
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={saveJournal}
                 disabled={journalLoading || !journalLesson}
               >
                 {journalLoading ? "Сохранение..." : "Сохранить"}
@@ -406,58 +403,62 @@ export function TeacherTimetablePage() {
         </div>
       )}
 
-      {/* Zoom Modal */}
-      {zoomModalOpen && (
-        <div className={styles.modalOverlay} onClick={() => !zoomCreating && setZoomModalOpen(false)}>
+      {/* Google Meet Modal */}
+      {meetModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => !meetSaving && setMeetModalOpen(false)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <div className={styles.modalTitle}>Создать Zoom встречу</div>
-              <button className={styles.closeButton} onClick={() => setZoomModalOpen(false)}>
+              <div className={styles.modalTitle}>Ссылка на Google Meet</div>
+              <button className={styles.closeButton} onClick={() => setMeetModalOpen(false)}>
                 <X size={20} />
               </button>
             </div>
 
             <div className={styles.modalBody}>
-              {zoomLesson && zoomDay && (
+              {meetLesson && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600 }}>{zoomLesson.subject}</div>
+                  <div style={{ fontWeight: 600 }}>{meetLesson.subject}</div>
                   <div style={{ fontSize: 14, color: '#6b7280' }}>
-                    {zoomLesson.class_name} • {formatDate(zoomDay)}
+                    {meetLesson.class_name}
                   </div>
                 </div>
               )}
 
-              {zoomErr && <div style={{ padding: 12, background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 12 }}>{zoomErr}</div>}
-              {zoomSuccess && <div style={{ padding: 12, background: "#ecfdf5", color: "#059669", borderRadius: 8, marginBottom: 12 }}>{zoomSuccess}</div>}
+              {meetErr && <div style={{ padding: 12, background: "#fee", color: "#c00", borderRadius: 8, marginBottom: 12 }}>{meetErr}</div>}
+              {meetSuccess && <div style={{ padding: 12, background: "#ecfdf5", color: "#059669", borderRadius: 8, marginBottom: 12 }}>{meetSuccess}</div>}
 
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: "block", marginBottom: 8, fontWeight: 500, fontSize: 14 }}>
-                  Время начала:
+                  Ссылка на Google Meet:
                 </label>
                 <input
-                  type="time"
-                  value={zoomTime}
-                  onChange={(e) => setZoomTime(e.target.value)}
-                  disabled={zoomCreating}
+                  type="url"
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  value={meetUrl}
+                  onChange={(e) => setMeetUrl(e.target.value)}
+                  disabled={meetSaving}
                   style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #d1d5db" }}
                 />
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                  Оставьте пустым, чтобы удалить ссылку
+                </div>
               </div>
             </div>
 
             <div className={styles.modalFooter}>
-              <button 
-                className={`${styles.btn} ${styles.btnSecondary}`} 
-                onClick={() => setZoomModalOpen(false)}
-                disabled={zoomCreating}
+              <button
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => setMeetModalOpen(false)}
+                disabled={meetSaving}
               >
                 Отмена
               </button>
-              <button 
-                className={`${styles.btn} ${styles.btnPrimary}`} 
-                onClick={createZoomMeeting} 
-                disabled={zoomCreating || !zoomTime}
+              <button
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={saveMeetLink}
+                disabled={meetSaving}
               >
-                {zoomCreating ? "Создание..." : "Создать встречу"}
+                {meetSaving ? "Сохранение..." : "Сохранить"}
               </button>
             </div>
           </div>

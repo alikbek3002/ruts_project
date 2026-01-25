@@ -211,17 +211,19 @@ export function AdminCyclesPage() {
                             <div className={styles.cycleIcon}>
                                 {getCycleIcon(cycle.code)}
                             </div>
-                            <div className={styles.cycleName}>{cycle.name}</div>
-                            <div className={styles.cycleDescription}>
-                                {cycle.description || "Нажмите для управления"}
-                            </div>
-                            <div className={styles.cycleStats}>
-                                <span className={styles.stat}>
-                                    <BookOpen size={16} /> Предметы
-                                </span>
-                                <span className={styles.stat}>
-                                    <Users size={16} /> Учителя
-                                </span>
+                            <div className={styles.cycleInfo}>
+                                <div className={styles.cycleName}>{cycle.name}</div>
+                                <div className={styles.cycleDescription}>
+                                    {cycle.description || "Нажмите для управления"}
+                                </div>
+                                <div className={styles.cycleStats}>
+                                    <span className={styles.stat}>
+                                        <BookOpen size={14} /> Предметы
+                                    </span>
+                                    <span className={styles.stat}>
+                                        <Users size={14} /> Учителя
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     ))}

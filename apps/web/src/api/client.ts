@@ -935,6 +935,7 @@ export type WeekTimetableItem = {
   end_time: string;
   room?: string;
   zoom?: { join_url: string; starts_at: string } | null;
+  meet_url?: string | null;
 };
 
 export async function apiTimetableWeek(token: string, weekStartISO: string, classId?: string) {
@@ -1826,78 +1827,76 @@ export interface ArchiveActionResponse {
 }
 
 export async function apiGetArchivedSubjects(token: string): Promise<ArchivedItem[]> {
-  const res = await fetch(`${API_BASE}/archive/subjects`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch archived subjects");
-  const data: ArchivedListResponse = await res.json();
-  return data.items;
+  try {
+    const data = await apiGet<ArchivedListResponse>("/archive/subjects", token);
+    return data.items || [];
+  } catch (e) {
+    // Return empty array on error (e.g., no archived items)
+    console.warn("Failed to fetch archived subjects:", e);
+    return [];
+  }
 }
 
 export async function apiRestoreSubject(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/subjects/${id}/restore`, {
+  await http<{ ok: boolean; message: string }>(`/archive/subjects/${id}/restore`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to restore subject");
 }
 
 export async function apiArchiveSubject(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/subjects/${id}`, {
+  await http<{ ok: boolean; message: string }>(`/archive/subjects/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to archive subject");
 }
 
 export async function apiGetArchivedTeachers(token: string): Promise<ArchivedItem[]> {
-  const res = await fetch(`${API_BASE}/archive/teachers`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch archived teachers");
-  const data: ArchivedListResponse = await res.json();
-  return data.items;
+  try {
+    const data = await apiGet<ArchivedListResponse>("/archive/teachers", token);
+    return data.items || [];
+  } catch (e) {
+    console.warn("Failed to fetch archived teachers:", e);
+    return [];
+  }
 }
 
 export async function apiRestoreTeacher(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/teachers/${id}/restore`, {
+  await http<{ ok: boolean; message: string }>(`/archive/teachers/${id}/restore`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to restore teacher");
 }
 
 export async function apiArchiveTeacher(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/teachers/${id}`, {
+  await http<{ ok: boolean; message: string }>(`/archive/teachers/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to archive teacher");
 }
 
 export async function apiGetArchivedClasses(token: string): Promise<ArchivedItem[]> {
-  const res = await fetch(`${API_BASE}/archive/classes`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch archived classes");
-  const data: ArchivedListResponse = await res.json();
-  return data.items;
+  try {
+    const data = await apiGet<ArchivedListResponse>("/archive/classes", token);
+    return data.items || [];
+  } catch (e) {
+    console.warn("Failed to fetch archived classes:", e);
+    return [];
+  }
 }
 
 export async function apiRestoreClass(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/classes/${id}/restore`, {
+  await http<{ ok: boolean; message: string }>(`/archive/classes/${id}/restore`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to restore class");
 }
 
 export async function apiArchiveClass(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/archive/classes/${id}`, {
+  await http<{ ok: boolean; message: string }>(`/archive/classes/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Failed to archive class");
 }
 
 export async function apiDeleteCourse(token: string, courseId: string, password: string): Promise<{ ok: boolean }> {
@@ -2602,3 +2601,57 @@ export async function apiRemoveTeacherFromCycle(token: string, cycleId: string, 
   });
 }
 
+// ============ Google Meet Links API ============
+
+export async function apiSetTimetableMeetLink(token: string, entryId: string, meetUrl: string | null) {
+  return http<{ ok: boolean; meet_url: string | null }>(`/meetings/timetable/${encodeURIComponent(entryId)}/meet`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ meet_url: meetUrl }),
+  });
+}
+
+export async function apiGetTimetableMeetLink(token: string, entryId: string) {
+  return apiGet<{ meet_url: string | null }>(`/meetings/timetable/${encodeURIComponent(entryId)}/meet`, token);
+}
+
+export type MeetingLink = {
+  id: string;
+  meet_url: string;
+  title?: string | null;
+  starts_at?: string | null;
+  timetable_entry_id?: string | null;
+  class_id?: string | null;
+  stream_id?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+};
+
+export async function apiCreateMeetingLink(
+  token: string,
+  body: {
+    meet_url: string;
+    title?: string | null;
+    starts_at?: string | null;
+    timetable_entry_id?: string | null;
+    class_id?: string | null;
+    stream_id?: string | null;
+  }
+) {
+  return apiPost<{ link: MeetingLink }>("/meetings/links", body, token);
+}
+
+export async function apiListMeetingLinks(token: string, classId?: string, streamId?: string) {
+  const params = new URLSearchParams();
+  if (classId) params.set("class_id", classId);
+  if (streamId) params.set("stream_id", streamId);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiGet<{ links: MeetingLink[] }>(`/meetings/links${suffix}`, token);
+}
+
+export async function apiDeleteMeetingLink(token: string, linkId: string) {
+  return http<{ ok: boolean }>(`/meetings/links/${encodeURIComponent(linkId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

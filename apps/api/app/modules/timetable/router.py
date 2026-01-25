@@ -745,7 +745,7 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
 
     sb = get_supabase()
 
-    select_fields = "id,class_id,class_ids,stream_id,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time"
+    select_fields = "id,class_id,class_ids,stream_id,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,meet_url"
     if _room_supported(sb):
         select_fields += ",room"
 
@@ -874,6 +874,7 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
                 "end_time": str(e.get("end_time"))[:5],
                 "room": e.get("room"),
                 "zoom": ({"join_url": z.get("join_url"), "starts_at": z.get("starts_at")} if z else None),
+                "meet_url": e.get("meet_url"),
             }
         )
 
