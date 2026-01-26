@@ -463,29 +463,30 @@ export function TeacherJournalPage() {
         {selectedClassId && selectedSubjectId && (
           <div>
             {loadingLessons || !gridData ? <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}><Loader /></div> : (
-              <div style={{ overflowX: 'auto', background: 'white', borderRadius: 12, border: '1px solid #e5e7eb' }}>
-                <table className={styles.table} style={{ minWidth: 800 }}>
+              <div className={styles.gridContainer}>
+                <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th style={{ position: 'sticky', left: 0, background: '#f9fafb', zIndex: 10, width: 250, borderRight: '1px solid #e5e7eb' }}>Ученик</th>
-                      <th style={{ width: 60, textAlign: 'center', background: '#f3f4f6' }}>Ср.</th>
+                      <th className={styles.colStudent}>Ученик / Окуучу</th>
+                      <th className={styles.cellAvg} title="Средний балл">Ср.</th>
                       {gridData.lessons.map(l => (
                         <th
                           key={`${l.date}_${l.timetable_entry_id}`}
-                          style={{ minWidth: 80, textAlign: 'center', cursor: 'pointer' }}
+                          className={styles.headerDate}
                           title="Нажмите, чтобы редактировать урок"
                           onClick={() => openLesson(l)}
-                          className={styles.headerHover}
                         >
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>
-                            {new Date(l.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 13, color: '#111' }}>
+                              {new Date(l.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                            </div>
                           </div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {gridData.students.map(s => {
+                    {gridData.students.map((s, idx) => {
                       const sGrades = gridData.grades[s.id] || {};
 
                       // Calculate average
@@ -495,16 +496,17 @@ export function TeacherJournalPage() {
                         g.grades.forEach(val => { total += val.grade; count++; });
                       });
                       const avg = count ? (total / count).toFixed(2) : "—";
+                      const rowClass = idx % 2 === 0 ? styles.rowEven : styles.rowOdd;
 
                       return (
-                        <tr key={s.id}>
-                          <td style={{ position: 'sticky', left: 0, background: 'white', borderRight: '1px solid #e5e7eb', fontWeight: 500 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div style={{ width: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>{s.student_number || "-"}</div>
-                              {s.name}
+                        <tr key={s.id} className={rowClass}>
+                          <td className={styles.colStudent}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 24, textAlign: 'center', color: '#9ca3af', fontWeight: 500 }}>{s.student_number || idx + 1}</div>
+                              <div style={{ fontWeight: 500, color: '#1f2937' }}>{s.name}</div>
                             </div>
                           </td>
-                          <td style={{ textAlign: 'center', fontWeight: 'bold', background: '#fafafa', borderRight: '1px solid #eee' }}>{avg}</td>
+                          <td className={styles.cellAvg} style={{ color: count ? '#111' : '#9ca3af' }}>{avg}</td>
                           {gridData.lessons.map(l => {
                             const key = `${l.date}_${l.timetable_entry_id}`;
                             const cell = sGrades[key];
@@ -513,19 +515,20 @@ export function TeacherJournalPage() {
                             let attendanceMark = null;
                             if (cell?.attendance_type) {
                               switch (cell.attendance_type) {
-                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 11 }} title="Келген жок">КЖ</span>; break;
-                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 11 }} title="Кезмет">К</span>; break;
-                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: 11 }} title="Арыз">А</span>; break;
-                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: 11 }} title="Оруу">О</span>; break;
+                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold' }}>КЖ</span>; break;
+                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>К</span>; break;
+                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>А</span>; break;
+                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold' }}>О</span>; break;
+                                default: attendanceMark = null;
                               }
                             } else if (cell?.present === false) {
-                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 11 }} title="Келген жок">КЖ</span>;
+                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold' }}>КЖ</span>;
                             }
 
                             return (
-                              <td key={key} style={{ textAlign: 'center' }}>
+                              <td key={key} className={styles.cellGrade} onClick={() => openLesson(l)} style={{ cursor: 'pointer' }}>
                                 {attendanceMark}
-                                {gradesText && <span style={{ fontWeight: 600, marginLeft: attendanceMark ? 4 : 0 }}>{gradesText}</span>}
+                                {gradesText && <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, marginLeft: attendanceMark ? 4 : 0 }}>{gradesText}</span>}
                               </td>
                             );
                           })}
@@ -536,67 +539,59 @@ export function TeacherJournalPage() {
                 </table>
                 {gridData.lessons.length === 0 && (
                   <div className={styles.emptyState}>
-                    <div style={{ fontSize: 18, marginBottom: 8 }}>📚</div>
-                    Расписание боюнча бул сабак жок
-                    <div style={{ fontSize: 12, marginTop: 4, color: '#9ca3af' }}>
-                      (По расписанию нет уроков по данному предмету)
+                    <div style={{ fontSize: 24, marginBottom: 12 }}>📅</div>
+                    <div style={{ fontWeight: 600, color: '#374151' }}>Сабактар табылган жок / Уроков не найдено</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>
+                      Бул предмет боюнча расписаниеде сабактар жок.
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280' }}>
-              * Нажмите на дату урока в шапке таблицы, чтобы выставить оценки и пропуски.
-            </div>
-
-            <div style={{ marginTop: 40 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Белгилөө / Обозначения:</h3>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: '#4b5563', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 'bold', color: '#ef4444' }}>КЖ</span> — Келген жок (Отсутствие)
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Белгилөө / Обозначения:</h3>
+              <div style={{ display: 'flex', gap: 24, padding: '16px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', marginTop: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: 4 }}>КЖ</span>
+                  <span style={{ fontSize: 13, color: '#4b5563' }}>Келген жок (Отсутствует)</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>К</span> — Кезмет (Дежурство)
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 'bold', color: '#f59e0b', background: '#fffbeb', padding: '2px 6px', borderRadius: 4 }}>К</span>
+                  <span style={{ fontSize: 13, color: '#4b5563' }}>Кезмет (Дежурство)</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 'bold', color: '#3b82f6' }}>А</span> — Арыз (Уважительная причина)
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 'bold', color: '#3b82f6', background: '#eff6ff', padding: '2px 6px', borderRadius: 4 }}>А</span>
+                  <span style={{ fontSize: 13, color: '#4b5563' }}>Арыз (По заявлению)</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 'bold', color: '#8b5cf6' }}>О</span> — Оруу (Болезнь)
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 'bold', color: '#8b5cf6', background: '#f5f3ff', padding: '2px 6px', borderRadius: 4 }}>О</span>
+                  <span style={{ fontSize: 13, color: '#4b5563' }}>Оруу (Болезнь)</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Lesson Detail Modal (Reusing existing component structure mostly) */}
+        {/* Lesson Detail Modal */}
         {selectedLesson && (
-          <div className={styles.detailsContainer} style={{ position: 'fixed', inset: 0, zIndex: 100, margin: 0, borderRadius: 0, overflowY: 'auto' }}>
-            <div style={{ maxWidth: 1000, margin: '40px auto', background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-              {/* Reuse headers */}
+          <div className={styles.detailsContainer}>
+            <div className={styles.detailsBackdrop} onClick={() => { setSelectedLesson(null); loadGrid(); }} />
+            <div className={styles.detailsModal}>
               <div className={styles.detailsHeader}>
                 <div className={styles.detailsTitle}>
                   <h2>{lessonDetails?.lesson.subject_name || "Редактирование урока"}</h2>
                   <div className={styles.detailsMeta}>
-                    {new Date(selectedLesson.date).toLocaleDateString()}
+                    {new Date(selectedLesson.date).toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </div>
                 </div>
                 <button className={styles.closeBtn} onClick={() => { setSelectedLesson(null); loadGrid(); }}>
-                  <XIcon />
+                  <XIcon size={20} />
                 </button>
               </div>
 
               <div className={styles.detailsContent}>
-                {saving && !lessonDetails ? <Loader /> : (
-                  // ... Copy existing editing UI logic here ...
-                  // Actually, since I have the `LessonDetails` component logic in the same file, 
-                  // I should extract it or just inline it again.
-                  // To save tokens/time, I will just reference the function.
-                  // But I can't reference rendered JSX easily.
-                  // I'll inline the table again.
-
-                  // Simplified for brevity in this single file solution:
+                {saving && !lessonDetails ? <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader /></div> : (
                   <LessonEditingView
                     lessonDetails={lessonDetails}
                     lessonTopic={lessonTopic}
@@ -611,7 +606,6 @@ export function TeacherJournalPage() {
                 )}
               </div>
             </div>
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: -1 }} onClick={() => { setSelectedLesson(null); loadGrid(); }} />
           </div>
         )}
       </div>

@@ -497,10 +497,27 @@ def get_class_journal(
              # Let's show everything active.
              pass
         
-    if subject_id:
-        query = query.eq("subject_id", subject_id)
-        
     timetable = query.execute().data or []
+
+    # Filter in memory to handle cases where subject_id is missing in timetable but name matches
+    if subject_id:
+        # 1. Get the target subject name
+        subj_data = sb.table("subjects").select("name").eq("id", subject_id).limit(1).execute().data
+        target_name = subj_data[0]["name"] if subj_data else ""
+        
+        # 2. Filter entries: match ID OR match Name
+        filtered = []
+        for t in timetable:
+            # Match by ID
+            if t.get("subject_id") == subject_id:
+                filtered.append(t)
+                continue
+            # Match by Name (loose match)
+            if target_name and t.get("subject") == target_name:
+                filtered.append(t)
+                continue
+        
+        timetable = filtered
     
     if not timetable:
         if user["role"] == "teacher":
