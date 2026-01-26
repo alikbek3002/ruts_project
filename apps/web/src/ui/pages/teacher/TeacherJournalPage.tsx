@@ -130,13 +130,19 @@ export function TeacherJournalPage() {
     if (!token || initialLoadDone) return;
 
     async function autoSelect() {
-      if (!token) return;
+      if (!token || allClasses.length === 0) return; // Wait for classes
       try {
         const today = new Date();
         const monday = getMonday(today);
+        console.log("TeacherJournal: Fetching timetable for week", ymd(monday));
         const w = await apiTimetableWeek(token, ymd(monday));
 
-        if (!w || !w.entries) return;
+        if (!w || !w.entries) {
+          console.log("TeacherJournal: Timetable empty", w);
+          return;
+        }
+
+        console.log("TeacherJournal: Loaded timetable entries", w.entries.length);
 
         // Find current or next lesson today
         const weekday = (today.getDay() + 6) % 7; // 0=Mon
@@ -162,20 +168,26 @@ export function TeacherJournalPage() {
         }
 
         if (target) {
+          console.log("TeacherJournal: Auto-selecting target", target);
           setSelectedClassId(target.class_id);
           if (target.subject_id) {
             setSelectedSubjectId(target.subject_id);
           }
+          setInitialLoadDone(true); // Only mark done if we found something? Or always?
+        } else {
+          console.log("TeacherJournal: No target lesson found for auto-select");
         }
       } catch (e) {
         console.error("Auto-select failed", e);
       } finally {
-        setInitialLoadDone(true);
+        // setInitialLoadDone(true); // Don't mark done here, wait for classes?
       }
     }
 
-    autoSelect();
-  }, [token, initialLoadDone]);
+    if (allClasses.length > 0 && !initialLoadDone) {
+      autoSelect();
+    }
+  }, [token, initialLoadDone, allClasses]);
 
   useEffect(() => {
     if (!token) return;
@@ -214,6 +226,7 @@ export function TeacherJournalPage() {
       });
       if (!resp.ok) throw new Error("Failed to load classes");
       const data = await resp.json();
+      console.log("TeacherJournal: Loaded classes", data.classes?.length);
       setAllClasses(data.classes || []);
     } catch (e) {
       console.error(e);

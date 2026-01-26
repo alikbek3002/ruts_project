@@ -46,7 +46,7 @@ class AddGradeIn(BaseModel):
 
 @router.get("/teacher/classes")
 @timed("get_teacher_classes")
-def get_teacher_classes(user: dict = require_role("teacher")):
+def get_teacher_classes(user: dict = require_role("teacher", "admin", "manager")):
     """Получить все классы (для выбора журнала)"""
     sb = get_supabase()
     
