@@ -65,38 +65,86 @@ def get_teacher_classes(user: dict = require_role("teacher", "admin", "manager")
 
 @router.get("/classes/{class_id}/subjects")
 def get_class_subjects(class_id: str, user: dict = require_role("teacher", "admin", "manager")):
-    """Получить предметы класса (на основе расписания)"""
+    """Получить предметы для этого класса - из циклов учителя + из расписания"""
     sb = get_supabase()
     
-    # Get unique subjects for this class from timetable
+    subjects_map = {}
+    
+    # 1. Для учителя - получаем предметы из его циклов
+    if user.get("role") == "teacher":
+        # Получаем циклы учителя
+        teacher_cycles_data = (
+            sb.table("teacher_cycles")
+            .select("cycle_id")
+            .eq("teacher_id", user["id"])
+            .execute()
+            .data or []
+        )
+        cycle_ids = [tc.get("cycle_id") for tc in teacher_cycles_data if tc.get("cycle_id")]
+        
+        if cycle_ids:
+            # Получаем предметы из этих циклов
+            cycle_subjects = (
+                sb.table("subjects")
+                .select("id,name,cycle_id")
+                .in_("cycle_id", cycle_ids)
+                .is_("archived_at", "null")
+                .order("name")
+                .execute()
+                .data or []
+            )
+            
+            for s in cycle_subjects:
+                key = s.get("id")
+                if key and key not in subjects_map:
+                    subjects_map[key] = {
+                        "id": s.get("id"),
+                        "name": s.get("name"),
+                        "is_mine": True  # Из цикла учителя = мой
+                    }
+    
+    # 2. Также добавляем предметы из расписания для этого класса
     q = sb.table("timetable_entries").select("subject_id,subject,teacher_id").eq("active", True).eq("class_id", class_id)
-    
-    # If we want to show ALL subjects defined in curriculum, we'd query direction_subjects.
-    # But usually journal is based on lessons.
-    
-    # However, if the schedule is empty, we might want subjects from curriculum?
-    # Let's start with timetable.
     rows = q.execute().data or []
     
-    subjects_map = {}
     for r in rows:
-        key = r.get("subject_id") or r.get("subject")
-        if not key: continue
+        key = r.get("subject_id")
+        if not key:
+            continue
         
         if key not in subjects_map:
+            # Получаем название предмета из таблицы subjects
+            subj = sb.table("subjects").select("id,name").eq("id", key).limit(1).execute().data
+            name = subj[0].get("name") if subj else r.get("subject")
+            
             subjects_map[key] = {
-                "id": r.get("subject_id"),
-                "name": r.get("subject"),
+                "id": key,
+                "name": name,
                 "is_mine": r.get("teacher_id") == user["id"]
             }
         else:
-             if r.get("teacher_id") == user["id"]:
-                 subjects_map[key]["is_mine"] = True
-                 
-    # Also fetch from teacher_subjects to see what I teach globally? 
-    # No, keep it simple.
+            # Если это мой урок в расписании - помечаем как мой
+            if r.get("teacher_id") == user["id"]:
+                subjects_map[key]["is_mine"] = True
     
-    sorted_subjects = sorted(subjects_map.values(), key=lambda x: x["name"])
+    # Для админа/менеджера - показываем ВСЕ предметы если из циклов ничего нет
+    if user.get("role") in ("admin", "manager") and not subjects_map:
+        all_subjects = (
+            sb.table("subjects")
+            .select("id,name")
+            .is_("archived_at", "null")
+            .order("name")
+            .execute()
+            .data or []
+        )
+        for s in all_subjects:
+            subjects_map[s["id"]] = {
+                "id": s["id"],
+                "name": s["name"],
+                "is_mine": False
+            }
+    
+    sorted_subjects = sorted(subjects_map.values(), key=lambda x: (not x.get("is_mine", False), x["name"] or ""))
     
     return {"subjects": sorted_subjects}
 

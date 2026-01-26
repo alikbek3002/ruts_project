@@ -14,7 +14,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiGetClassSubjects, apiTimetableWeek, trackedFetch } from "../../../api/client";
+import { apiGetClassSubjects, apiListTeacherClasses, apiTimetableWeek, trackedFetch } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
 type Lesson = {
@@ -221,15 +221,11 @@ export function TeacherJournalPage() {
     if (!token) return;
     setLoadingClasses(true);
     try {
-      const resp = await trackedFetch(`/api/journal/teacher/classes`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error("Failed to load classes");
-      const data = await resp.json();
+      const data = await apiListTeacherClasses(token);
       console.log("TeacherJournal: Loaded classes", data.classes?.length);
       setAllClasses(data.classes || []);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load classes:", e);
     } finally {
       setLoadingClasses(false);
     }
