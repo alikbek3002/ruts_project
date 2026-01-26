@@ -855,6 +855,7 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
                 "teacher_id": e.get("teacher_id"),
                 "teacher_name": teacher_name,
                 "subject": e.get("subject"),
+                "subject_id": e.get("subject_id"),
                 "weekday": weekday,
                 "start_time": str(e.get("start_time"))[:5],
                 "end_time": str(e.get("end_time"))[:5],

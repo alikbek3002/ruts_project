@@ -932,6 +932,7 @@ export type WeekTimetableItem = {
   teacher_id: string | null;
   teacher_name: string;
   subject: string;
+  subject_id: string;
   weekday: number;
   start_time: string;
   end_time: string;

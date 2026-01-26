@@ -14,7 +14,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiGetClassSubjects, trackedFetch } from "../../../api/client";
+import { apiGetClassSubjects, apiTimetableWeek, trackedFetch } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
 type Lesson = {
@@ -99,6 +99,83 @@ export function TeacherJournalPage() {
   const [saving, setSaving] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [editingComment, setEditingComment] = useState<{ id: string, value: string } | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Helper functions
+  function getMonday(date: Date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function ymd(date: Date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function hhmm(t: string): string {
+    // Format HH:MM from various string formats
+    if (!t) return "";
+    if (t.length >= 5) return t.slice(0, 5);
+    return t;
+  }
+
+  // Auto-select based on schedule
+  useEffect(() => {
+    if (!token || initialLoadDone) return;
+
+    async function autoSelect() {
+      if (!token) return;
+      try {
+        const today = new Date();
+        const monday = getMonday(today);
+        const w = await apiTimetableWeek(token, ymd(monday));
+
+        if (!w || !w.entries) return;
+
+        // Find current or next lesson today
+        const weekday = (today.getDay() + 6) % 7; // 0=Mon
+        const nowMinutes = today.getHours() * 60 + today.getMinutes();
+
+        // 1. Filter for today
+        const todayEntries = w.entries.filter(e => e.weekday === weekday);
+
+        // 2. Sort by start time
+        todayEntries.sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        // 3. Find active or next
+        let target = todayEntries.find(e => {
+          const [h, m] = hhmm(e.end_time).split(':').map(Number);
+          const endMins = h * 60 + m;
+          return endMins > nowMinutes; // Has not ended yet
+        });
+
+        // 4. If no lessons left today, maybe just pick the last one? Or first one?
+        // Let's stick to "active or next". If none, try first of today.
+        if (!target && todayEntries.length > 0) {
+          target = todayEntries[todayEntries.length - 1]; // Last one
+        }
+
+        if (target) {
+          setSelectedClassId(target.class_id);
+          if (target.subject_id) {
+            setSelectedSubjectId(target.subject_id);
+          }
+        }
+      } catch (e) {
+        console.error("Auto-select failed", e);
+      } finally {
+        setInitialLoadDone(true);
+      }
+    }
+
+    autoSelect();
+  }, [token, initialLoadDone]);
 
   useEffect(() => {
     if (!token) return;
