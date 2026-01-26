@@ -309,7 +309,7 @@ export function TeacherJournalPage() {
   const [gridData, setGridData] = useState<{
     students: { id: string, name: string, student_number?: number }[],
     lessons: { timetable_entry_id: string, date: string, subject_name: string }[],
-    grades: Record<string, Record<string, { grades: { grade: number, comment?: string }[], present?: boolean }>>
+    grades: Record<string, Record<string, { grades: { grade: number, comment?: string }[], present?: boolean, attendance_type?: string }>>
   } | null>(null);
 
   async function loadGrid() {
@@ -512,12 +512,23 @@ export function TeacherJournalPage() {
                             const key = `${l.date}_${l.timetable_entry_id}`;
                             const cell = sGrades[key];
                             const gradesText = cell?.grades?.map(g => g.grade).join(" ") || "";
-                            const present = cell?.present;
+
+                            let attendanceMark = null;
+                            if (cell?.attendance_type) {
+                              switch (cell.attendance_type) {
+                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 11 }} title="Келген жок">КЖ</span>; break;
+                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 11 }} title="Кезмет">К</span>; break;
+                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: 11 }} title="Арыз">А</span>; break;
+                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: 11 }} title="Оруу">О</span>; break;
+                              }
+                            } else if (cell?.present === false) {
+                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 11 }} title="Келген жок">КЖ</span>;
+                            }
 
                             return (
                               <td key={key} style={{ textAlign: 'center' }}>
-                                {present === false && <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Н</span>}
-                                {gradesText && <span style={{ fontWeight: 600, marginLeft: present === false ? 4 : 0 }}>{gradesText}</span>}
+                                {attendanceMark}
+                                {gradesText && <span style={{ fontWeight: 600, marginLeft: attendanceMark ? 4 : 0 }}>{gradesText}</span>}
                               </td>
                             );
                           })}
@@ -526,7 +537,15 @@ export function TeacherJournalPage() {
                     })}
                   </tbody>
                 </table>
-                {gridData.lessons.length === 0 && <div className={styles.emptyState}>В журнале пока нет уроков</div>}
+                {gridData.lessons.length === 0 && (
+                  <div className={styles.emptyState}>
+                    <div style={{ fontSize: 18, marginBottom: 8 }}>📚</div>
+                    Расписание боюнча бул сабак жок
+                    <div style={{ fontSize: 12, marginTop: 4, color: '#9ca3af' }}>
+                      (По расписанию нет уроков по данному предмету)
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -535,10 +554,19 @@ export function TeacherJournalPage() {
             </div>
 
             <div style={{ marginTop: 40 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Обозначения:</h3>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: '#4b5563' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Белгилөө / Обозначения:</h3>
+              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: '#4b5563', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 'bold', color: '#ef4444' }}>Н</span> — Отсутствие
+                  <span style={{ fontWeight: 'bold', color: '#ef4444' }}>КЖ</span> — Келген жок (Отсутствие)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>К</span> — Кезмет (Дежурство)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 'bold', color: '#3b82f6' }}>А</span> — Арыз (Уважительная причина)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 'bold', color: '#8b5cf6' }}>О</span> — Оруу (Болезнь)
                 </div>
               </div>
             </div>
@@ -599,8 +627,16 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [editingComment, setEditingComment] = useState<{ id: string, value: string } | null>(null);
 
-  // ... copy helpers ...
-  async function saveGrade(studentId: string, grade: number | null, present: boolean | null, comment?: string) {
+  // Отметки посещаемости на кыргызском
+  const attendanceOptions = [
+    { value: "present", label: "✓", color: "#22c55e", title: "Келди (Присутствует)" },
+    { value: "absent", label: "КЖ", color: "#ef4444", title: "Келген жок (Отсутствует)" },
+    { value: "duty", label: "К", color: "#f59e0b", title: "Кезмет (Дежурство)" },
+    { value: "excused", label: "А", color: "#3b82f6", title: "Арыз (Уважительная причина)" },
+    { value: "sick", label: "О", color: "#8b5cf6", title: "Оруу (Болезнь)" },
+  ];
+
+  async function saveGrade(studentId: string, grade: number | null, present: boolean | null, comment?: string, attendanceType?: string) {
     if (!lessonDetails) return;
     try {
       await trackedFetch(`/api/journal/classes/${lessonDetails.lesson.class_id}/grades`, {
@@ -609,20 +645,25 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
           student_id: studentId,
           timetable_entry_id: lessonDetails.lesson.timetable_entry_id,
           lesson_date: selectedDate,
-          grade, present: present ?? true, comment
+          grade,
+          present: present ?? (attendanceType === "present" || attendanceType === "duty"),
+          comment: comment,
+          attendance_type: attendanceType
         })
       });
       onSaveGrade();
     } catch (e) { console.error(e); }
   }
 
-  function handlePresentToggle(studentId: string, current: boolean | null) {
-    saveGrade(studentId, null, current === true ? false : true);
+  function handleAttendanceChange(studentId: string, value: string) {
+    const isPresent = value === "present" || value === "duty";
+    // Передаем value как attendance_type
+    saveGrade(studentId, null, isPresent, undefined, value);
   }
 
   function handleGradeInput(studentId: string, val: string) {
     const g = val ? parseInt(val) : null;
-    if (g !== null && (g < 1 || g > 5)) return;
+    if (g !== null && (g < 2 || g > 5)) return; // Оценки от 2 до 5
     saveGrade(studentId, g, null);
   }
 
@@ -632,44 +673,88 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
     <div>
       <div className={styles.infoGrid}>
         <div className={styles.inputGroup}>
-          <label>Тема</label>
+          <label>Тема / Темасы</label>
           <input className={styles.textInput} value={lessonTopic} onChange={e => setLessonTopic(e.target.value)} />
         </div>
         <div className={styles.inputGroup}>
-          <label>ДЗ</label>
+          <label>ДЗ / Үй тапшырмасы</label>
           <input className={styles.textInput} value={homework} onChange={e => setHomework(e.target.value)} />
         </div>
-        <button className={styles.saveBtn} onClick={saveLessonInfo}><Save size={16} /> Сохранить</button>
+        <button className={styles.saveBtn} onClick={saveLessonInfo}><Save size={16} /> Сактоо</button>
       </div>
 
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Ученик</th>
-            <th>Присутствие</th>
-            <th>Оценка</th>
+            <th>Окуучу / Ученик</th>
+            <th>Катышуу / Посещ.</th>
+            <th>Баа (2-5)</th>
             <th>Комментарий</th>
           </tr>
         </thead>
         <tbody>
-          {lessonDetails.students.map((s: any) => (
-            <tr key={s.id}>
-              <td>{s.name}</td>
-              <td>
-                <button onClick={() => handlePresentToggle(s.id, s.present)} className={styles.attendanceBtn} style={{ background: s.present === false ? '#fee2e2' : 'white' }}>
-                  {s.present === false ? 'Н' : '✔'}
-                </button>
-              </td>
-              <td>
-                <input className={styles.gradeInput} value={s.grade || ""} onChange={e => handleGradeInput(s.id, e.target.value)} />
-              </td>
-              <td>
-                <input className={styles.commentInput} placeholder="..." defaultValue={s.comment} onBlur={e => saveGrade(s.id, null, null, e.target.value)} />
-              </td>
-            </tr>
-          ))}
+          {lessonDetails.students.map((s: any) => {
+            // Определяем текущий статус посещаемости
+            let currentAttendance = "present";
+
+            if (s.attendance_type) {
+              currentAttendance = s.attendance_type;
+            } else if (s.present === false) {
+              // Fallback для старых данных
+              if (s.comment === "duty") currentAttendance = "duty";
+              else if (s.comment === "excused") currentAttendance = "excused";
+              else if (s.comment === "sick") currentAttendance = "sick";
+              else currentAttendance = "absent";
+            }
+
+            return (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td>
+                  <select
+                    value={currentAttendance}
+                    onChange={(e) => handleAttendanceChange(s.id, e.target.value)}
+                    className={styles.selectDropdown}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #d1d5db',
+                      fontWeight: 600,
+                      color: attendanceOptions.find(o => o.value === currentAttendance)?.color || '#111',
+                      minWidth: 90,
+                      fontSize: 13
+                    }}
+                  >
+                    {attendanceOptions.map(opt => (
+                      <option key={opt.value} value={opt.value} title={opt.title}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    value={s.grade || ""}
+                    onChange={(e) => handleGradeInput(s.id, e.target.value)}
+                    className={styles.gradeInput}
+                    style={{ minWidth: 60 }}
+                  >
+                    <option value="">-</option>
+                    <option value="5">5</option>
+                    <option value="4">4</option>
+                    <option value="3">3</option>
+                    <option value="2">2</option>
+                  </select>
+                </td>
+                <td>
+                  <input className={styles.commentInput} placeholder="..." defaultValue={s.comment} onBlur={e => saveGrade(s.id, null, null, e.target.value)} />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
+

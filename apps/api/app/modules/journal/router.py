@@ -39,9 +39,10 @@ class AddGradeIn(BaseModel):
     student_id: str
     timetable_entry_id: str
     lesson_date: str  # YYYY-MM-DD
-    grade: int | None = None  # None = отсутствие
+    grade: int | None = None  # None = no grade, 2-5 valid values
     present: bool = True  # False = отсутствие
     comment: str | None = None
+    attendance_type: str | None = None  # present, absent, duty (Кезмет), excused (Арыз), sick (Оруу)
 
 
 @router.get("/teacher/classes")
@@ -410,7 +411,7 @@ def get_lesson_details(
     # Получаем записи из журнала для этого урока
     journal_records = (
         sb.table("lesson_journal")
-        .select("student_id,grade,present,comment,lesson_topic,homework")
+        .select("student_id,grade,present,comment,lesson_topic,homework,attendance_type")
         .eq("timetable_entry_id", timetable_entry_id)
         .eq("lesson_date", lesson_date)
         .execute()
@@ -443,7 +444,8 @@ def get_lesson_details(
             "student_number": student_numbers.get(sid),
             "grade": journal.get("grade"),
             "present": journal.get("present"),
-            "comment": journal.get("comment")
+            "comment": journal.get("comment"),
+            "attendance_type": journal.get("attendance_type")
         })
     
     # Сортируем по номеру студента
@@ -540,7 +542,7 @@ def get_class_journal(
     
     journal_records = (
         sb.table("lesson_journal")
-        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment,lesson_topic,homework")
+        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment,lesson_topic,homework,attendance_type")
         .in_("timetable_entry_id", entry_ids)
         .order("lesson_date", desc=False)
         .execute()
@@ -644,14 +646,17 @@ def get_class_journal(
             
             # Определяем статус присутствия
             present = None
+            attendance_type = None
             for r in student_records:
                 if r.get("present") is not None:
                     present = r.get("present")
-                    break
-            
+                if r.get("attendance_type"):
+                    attendance_type = r.get("attendance_type")
+                    
             grades[sid][key] = {
                 "grades": lesson_grades,
-                "present": present
+                "present": present,
+                "attendance_type": attendance_type
             }
     
     # Форматируем студентов
@@ -680,8 +685,14 @@ def add_grade(
     """Добавить оценку или отметку отсутствия ученику за урок"""
     sb = get_supabase()
     
-    if payload.grade is not None and (payload.grade < 1 or payload.grade > 5):
-        raise HTTPException(status_code=400, detail="Grade must be between 1 and 5")
+    # Проверка оценки (2-5)
+    if payload.grade is not None and (payload.grade < 2 or payload.grade > 5):
+        raise HTTPException(status_code=400, detail="Grade must be between 2 and 5")
+    
+    # Проверка типа посещаемости
+    valid_attendance_types = ["present", "absent", "duty", "excused", "sick", None]
+    if payload.attendance_type not in valid_attendance_types:
+        raise HTTPException(status_code=400, detail=f"Invalid attendance_type. Must be one of: {valid_attendance_types}")
     
     # Проверяем урок
     entry = (
@@ -719,14 +730,21 @@ def add_grade(
     from datetime import date
     d = date.fromisoformat(payload.lesson_date)
     
+    # Определяем present на основе attendance_type
+    is_present = payload.present
+    if payload.attendance_type:
+        # duty считается присутствием (дежурство по другим делам)
+        is_present = payload.attendance_type in ["present", "duty"]
+    
     # Подготавливаем данные
     record_data = {
         "timetable_entry_id": payload.timetable_entry_id,
         "lesson_date": d.isoformat(),
         "student_id": payload.student_id,
         "grade": payload.grade,
-        "present": payload.present,
+        "present": is_present,
         "comment": payload.comment,
+        "attendance_type": payload.attendance_type,
         "created_by": user["id"],
         "updated_at": datetime.utcnow().isoformat()
     }
