@@ -287,21 +287,21 @@ export function TeacherTimetablePage() {
                             </div>
                           )}
 
+                          {/* Google Meet кнопка - ЯРКО ВЫДЕЛЕНА */}
                           {lesson.meet_url ? (
                             <div className={styles.zoomBadge} onClick={(e) => e.stopPropagation()}>
-                              <Video size={12} />
-                              <a href={lesson.meet_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Meet
+                              <Video size={14} />
+                              <a href={lesson.meet_url} target="_blank" rel="noreferrer">
+                                Войти в Meet
                               </a>
                             </div>
                           ) : (
                             <div
-                              className={styles.zoomBadge}
-                              style={{ color: '#9ca3af', cursor: 'pointer' }}
+                              className={styles.zoomBadgeEmpty}
                               onClick={(e) => openMeetModal(e, lesson)}
                             >
                               <Video size={12} />
-                              <span>+ Meet</span>
+                              <span>+ Добавить Meet</span>
                             </div>
                           )}
                         </div>

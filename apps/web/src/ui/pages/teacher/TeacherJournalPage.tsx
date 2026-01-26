@@ -426,26 +426,15 @@ export function TeacherJournalPage() {
         </div>
 
         {/* Filter Bar */}
-        <div style={{
-          display: 'flex',
-          gap: 16,
-          marginBottom: 24,
-          background: 'white',
-          padding: 16,
-          borderRadius: 12,
-          border: '1px solid #e5e7eb',
-          alignItems: 'end',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#374151' }}>
+        <div className={styles.filterBar}>
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel}>
               Взвод (Класс)
             </label>
             <select
               value={selectedClassId}
               onChange={e => setSelectedClassId(e.target.value)}
-              className={styles.textInput}
-              style={{ width: '100%', height: 42 }}
+              className={styles.selectDropdown}
               disabled={loadingClasses}
             >
               <option value="">-- Выберите взвод --</option>
@@ -453,17 +442,17 @@ export function TeacherJournalPage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            {loadingClasses && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Загрузка...</div>}
           </div>
 
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#374151' }}>
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel}>
               Предмет
             </label>
             <select
               value={selectedSubjectId}
               onChange={e => setSelectedSubjectId(e.target.value)}
-              className={styles.textInput}
-              style={{ width: '100%', height: 42 }}
+              className={styles.selectDropdown}
               disabled={!selectedClassId || loadingSubjects}
             >
               <option value="">-- Выберите предмет --</option>
@@ -473,6 +462,7 @@ export function TeacherJournalPage() {
                 </option>
               ))}
             </select>
+            {loadingSubjects && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Загрузка...</div>}
           </div>
         </div>
 
