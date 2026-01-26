@@ -14,7 +14,16 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { Loader } from "../../components/Loader";
-import { apiGetClassSubjects, apiListTeacherClasses, apiTimetableWeek, trackedFetch } from "../../../api/client";
+import {
+  apiGetClassSubjects,
+  apiListTeacherClasses,
+  apiTimetableWeek,
+  apiGetClassJournal,
+  apiGetLessonDetails,
+  apiSaveLessonGrade,
+  apiSaveLessonTopic,
+  trackedFetch // Еще нужен для saveLessonInfo, если мы его не перенесли в API
+} from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
 type Lesson = {
@@ -316,13 +325,10 @@ export function TeacherJournalPage() {
     if (!token || !selectedClassId || !selectedSubjectId) return;
     setLoadingLessons(true);
     try {
-      const resp = await trackedFetch(`/api/journal/classes/${selectedClassId}/journal?subject_id=${selectedSubjectId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await resp.json();
+      const data = await apiGetClassJournal(token, selectedClassId, selectedSubjectId);
       setGridData(data);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load journal grid:", e);
     } finally {
       setLoadingLessons(false);
     }
@@ -363,12 +369,7 @@ export function TeacherJournalPage() {
     if (!token || !selectedLesson) return;
     setSaving(true); // repurpose loading state
     try {
-      const resp = await trackedFetch(
-        `/api/journal/lesson-details?timetable_entry_id=${selectedLesson.timetable_entry_id}&lesson_date=${selectedLesson.date}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!resp.ok) throw new Error("Failed");
-      const data = await resp.json();
+      const data = await apiGetLessonDetails(token, selectedLesson.timetable_entry_id, selectedLesson.date);
       setLessonDetails(data);
       setLessonTopic(data.lesson.lesson_topic || "");
       setHomework(data.lesson.homework || "");
@@ -384,15 +385,11 @@ export function TeacherJournalPage() {
     if (!token || !selectedLesson || !lessonDetails) return;
     // ... same logic as before ...
     try {
-      await trackedFetch(`/api/journal/classes/${lessonDetails.lesson.class_id}/lesson-info`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          timetable_entry_id: selectedLesson.timetable_entry_id,
-          lesson_date: selectedLesson.date,
-          lesson_topic: lessonTopic || null,
-          homework: homework || null,
-        }),
+      await apiSaveLessonTopic(token, lessonDetails.lesson.class_id, {
+        timetable_entry_id: selectedLesson.timetable_entry_id,
+        lesson_date: selectedLesson.date,
+        lesson_topic: lessonTopic || null,
+        homework: homework || null,
       });
       loadGrid(); // Refresh grid
     } catch (e) { console.error(e); }
@@ -639,17 +636,14 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
   async function saveGrade(studentId: string, grade: number | null, present: boolean | null, comment?: string, attendanceType?: string) {
     if (!lessonDetails) return;
     try {
-      await trackedFetch(`/api/journal/classes/${lessonDetails.lesson.class_id}/grades`, {
-        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          student_id: studentId,
-          timetable_entry_id: lessonDetails.lesson.timetable_entry_id,
-          lesson_date: selectedDate,
-          grade,
-          present: present ?? (attendanceType === "present" || attendanceType === "duty"),
-          comment: comment,
-          attendance_type: attendanceType
-        })
+      await apiSaveLessonGrade(token, lessonDetails.lesson.class_id, {
+        student_id: studentId,
+        timetable_entry_id: lessonDetails.lesson.timetable_entry_id,
+        lesson_date: selectedDate,
+        grade,
+        present: present ?? (attendanceType === "present" || attendanceType === "duty"),
+        comment: comment,
+        attendance_type: attendanceType
       });
       onSaveGrade();
     } catch (e) { console.error(e); }

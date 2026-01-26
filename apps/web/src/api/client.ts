@@ -2701,3 +2701,22 @@ export async function apiTeacherDeleteSubjectTopic(token: string, topicId: strin
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// Journal API
+export async function apiGetClassJournal(token: string, classId: string, subjectId?: string) {
+  const url = `/journal/classes/${encodeURIComponent(classId)}/journal` + (subjectId ? `?subject_id=${encodeURIComponent(subjectId)}` : "");
+  return apiGet<any>(url, token);
+}
+
+export async function apiGetLessonDetails(token: string, entryId: string, date: string) {
+  const url = `/journal/lesson-details?timetable_entry_id=${encodeURIComponent(entryId)}&lesson_date=${encodeURIComponent(date)}`;
+  return apiGet<any>(url, token);
+}
+
+export async function apiSaveLessonGrade(token: string, classId: string, payload: any) {
+  return apiPost<any>(`/journal/classes/${encodeURIComponent(classId)}/grades`, payload, token);
+}
+
+export async function apiSaveLessonTopic(token: string, classId: string, payload: any) {
+  return apiPost<any>(`/journal/classes/${encodeURIComponent(classId)}/lesson-info`, payload, token);
+}
