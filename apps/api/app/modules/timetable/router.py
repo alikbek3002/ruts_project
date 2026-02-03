@@ -400,6 +400,13 @@ class TimetableEntryIn(BaseModel):
     lesson_type: str = "lecture"  # lecture, seminar, exam, practical
     lesson_number: int | None = None  # Manual lesson number override
     meet_url: str | None = None
+    lesson_date: date | None = None  # Specific date (YYYY-MM-DD)
+
+class DuplicateWeekIn(BaseModel):
+    source_week_start: date
+    target_week_start: date
+    class_id: str | None = None
+    stream_id: str | None = None
 
 
 @router.post("/entries")
@@ -437,7 +444,21 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
                 raise HTTPException(status_code=400, detail="teacher_id or subject_id is required")
 
         # Conflict detection + lecture merge
-        weekday = int(data.get("weekday", 0))
+        # Ensure weekday matches date if date provided
+        if data.get("lesson_date"):
+            # lesson_date is a date object from pydantic? No, .model_dump() makes it date obj if defined as date
+            # But Supabase needs string. Pydantic might default to obj.
+            # In validation or manual conversion needed?
+            # Creating: data["lesson_date"] = data["lesson_date"].isoformat()
+            d = data["lesson_date"]
+            if isinstance(d, str):
+                d = date.fromisoformat(d)
+            data["lesson_date"] = d.isoformat()
+            weekday = d.weekday() # 0=Mon
+            data["weekday"] = weekday
+        else:
+             weekday = int(data.get("weekday", 0))
+        
         new_start = _norm_time_str(data.get("start_time"), "00:00")
         new_end = _norm_time_str(data.get("end_time"), "00:00")
         teacher_id = data.get("teacher_id")
@@ -445,7 +466,7 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
 
         overlapping = (
             sb.table("timetable_entries")
-            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room")
+            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room,lesson_date")
             .eq("active", True)
             .eq("weekday", weekday)
             .lt("start_time", new_end)
@@ -454,6 +475,24 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
             .data
             or []
         )
+        
+        # Filter overlapping by date
+        # Conflict if: 
+        # (A.date is NULL AND B.date matches A.weekday) -- Recurring vs Dated (Conflict! Recurring claims the slot)
+        # (A.date == B.date) -- Dated vs Dated (Conflict)
+        # (A.date is NULL AND B.date is NULL) -- Recurring vs Recurring (Conflict)
+        
+        real_conflicts = []
+        new_date_str = data.get("lesson_date") # ISO string or None
+        
+        for e in overlapping:
+             e_date = e.get("lesson_date")
+             # If both are dated and different dates -> No conflict
+             if new_date_str and e_date and new_date_str != e_date:
+                 continue
+             real_conflicts.append(e)
+             
+        overlapping = real_conflicts
 
         # Try to merge into an existing lecture in the same stream/time/subject/teacher/room
         if lesson_type == "lecture" and len(class_ids) >= 1:
@@ -548,7 +587,9 @@ class TimetableEntryUpdateIn(BaseModel):
     stream_id: str | None = None
     class_ids: list[str] | None = None
     lesson_number: int | None = None
+    lesson_number: int | None = None
     meet_url: str | None = None
+    lesson_date: date | None = None
 
 
 @router.put("/entries/{entry_id}")
@@ -578,6 +619,13 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         update["lesson_number"] = payload.lesson_number
     if "meet_url" in payload.model_fields_set:
         update["meet_url"] = payload.meet_url
+    if "lesson_date" in payload.model_fields_set:
+        d = payload.lesson_date
+        if d:
+             update["lesson_date"] = d.isoformat()
+             update["weekday"] = d.weekday()
+        else:
+             update["lesson_date"] = None
 
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -596,7 +644,10 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         result_end = _norm_time_str(update.get("end_time", existing.get("end_time")), "00:00")
         result_room = update.get("room", existing.get("room"))
         result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
+        result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
+        result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
         result_lesson_type = (update.get("lesson_type", existing.get("lesson_type")) or "lecture").strip()
+        result_date_str = update.get("lesson_date", existing.get("lesson_date")) # ISO or None
         
         # Validate stream/classes (if class_ids/stream_id are being changed)
         # If class_ids not explicitly provided, keep existing class_ids/class_id.
@@ -722,11 +773,32 @@ def list_rooms(_: dict = require_role("admin", "manager", "teacher")):
 
 
 @router.get("/entries")
-def list_entries(class_id: str | None = None, user: dict = require_role("admin", "manager", "teacher")):
+def list_entries(
+    class_id: str | None = None, 
+    start_date: date | None = None, 
+    end_date: date | None = None,
+    user: dict = require_role("admin", "manager", "teacher")
+):
     sb = get_supabase()
     q = sb.table("timetable_entries").select("*").eq("active", True)
     if user["role"] == "teacher":
         q = q.eq("teacher_id", user["id"])
+        
+    # Date filtering
+    if start_date and end_date:
+        # Show:
+        # 1. Recurring keys (lesson_date IS NULL) -> logic: they apply to all weeks
+        # 2. Dated keys (lesson_date IN range)
+        # But for date-based schedule, maybe we should ONLY show dated ones if asking for range?
+        # User wants "No duplication", implies pure date-based.
+        # Let's return both, frontend can decide. 
+        # Actually OR logic in Postgrest is tricky (lesson_date is null OR lesson_date in range).
+        # Simply fetching ALL for class is okay if dataset is small.
+        # But optimized:
+        # q = q.or_(f"lesson_date.is.null,and(lesson_date.gte.{start_date},lesson_date.lte.{end_date})")
+        # Supabase python syntax:
+        q = q.or_(f"lesson_date.is.null,and(lesson_date.gte.{start_date},lesson_date.lte.{end_date})")
+        
     resp = q.order("weekday").order("start_time").execute()
     rows = resp.data or []
     if class_id:
@@ -737,6 +809,59 @@ def list_entries(class_id: str | None = None, user: dict = require_role("admin",
             if str(r.get("class_id") or "") == cid or cid in _entry_class_ids(r)
         ]
     return {"entries": rows}
+
+
+@router.post("/duplicate")
+def duplicate_week(payload: DuplicateWeekIn, user: dict = require_role("admin", "manager")):
+    sb = get_supabase()
+    
+    # 1. Calculate source week dates
+    src_start = payload.source_week_start
+    src_end = src_start + timedelta(days=6)
+    
+    tgt_start = payload.target_week_start
+    days_diff = (tgt_start - src_start).days
+    
+    if days_diff == 0:
+        raise HTTPException(status_code=400, detail="Исходная и целевая недели совпадают")
+        
+    # 2. Fetch source entries (only DATED entries? Or recurring too? Assuming we duplicate DATED ones)
+    # The user wants to copy "the schedule". 
+    # If they are using dated schedule, we copy dated entries.
+    q = sb.table("timetable_entries").select("*").eq("active", True)
+    q = q.gte("lesson_date", src_start.isoformat()).lte("lesson_date", src_end.isoformat())
+    
+    if payload.class_id:
+        q = q.cs("class_ids", [payload.class_id])
+    if payload.stream_id:
+        q = q.eq("stream_id", payload.stream_id)
+        
+    entries = q.execute().data or []
+    
+    if not entries:
+        return {"count": 0, "message": "Нет занятий для копирования"}
+        
+    created_count = 0
+    # 3. Copy entries
+    for e in entries:
+        # Calculate new date
+        old_date = date.fromisoformat(e["lesson_date"])
+        new_date = old_date + timedelta(days=days_diff)
+        
+        new_entry = e.copy()
+        new_entry.pop("id", None)
+        new_entry.pop("created_at", None)
+        new_entry.pop("updated_at", None)
+        new_entry["lesson_date"] = new_date.isoformat()
+        new_entry["weekday"] = new_date.weekday()
+        
+        # Check conflicts? 
+        # For bulk copy, we might skip conflict check or warn.
+        # Let's try insert.
+        sb.table("timetable_entries").insert(new_entry).execute()
+        created_count += 1
+        
+    return {"count": created_count, "message": f"Скопировано {created_count} занятий"}
 
 
 @router.get("/week")
@@ -753,26 +878,36 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
     if _room_supported(sb):
         select_fields += ",room"
 
-    if user["role"] == "student":
-        # For students: if classId provided, filter by that class
-        # Otherwise, show all classes (shared student account can see all)
-        tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
-        class_ids = []
-        if classId:
-            class_ids = [classId]
-        # If no classId, student sees everything (no filtering)
-    elif user["role"] == "teacher":
-        tt = (
-            sb.table("timetable_entries")
-            .select(select_fields)
-            .eq("teacher_id", user["id"])
-            .eq("active", True)
-            .execute()
-        )
     else:
-        tt = sb.table("timetable_entries").select(select_fields).eq("active", True).execute()
+        tt = sb.table("timetable_entries").select(select_fields).eq("active", True)
 
-    entries = tt.data or []
+    # Filter by date range (recurring OR specific date in range)
+    # Using raw Postgrest filter string for OR logic
+    # (lesson_date IS NULL) OR (lesson_date >= start AND lesson_date < end)
+    # Note: 'end' is start + 7 days, so < end covers the week.
+    
+    # Supabase Python client .or_() accepts a comma-separated string of filters.
+    # To combine OR with existing filters (like active=true), we chain .or_() to the query.
+    # But .or_() in python client might replace previous filters if not careful? 
+    # Actually .or_() adds an OR condition. The top-level filters are ANDed with this OR group.
+    # Condition: lesson_date.is.null,and(lesson_date.gte.{start},lesson_date.lt.{end})
+    
+    # However, 'tt' variable logic above executes immediately in some branches?
+    # No, 'tt' was assigned the query construction in lines 883, 890, 897.
+    # Wait, line 883 has .execute(). Line 894 has .execute(). Line 897 has .execute().
+    # I need to remove .execute() usage above and defer execution.
+    
+    # Let's rewrite the logic block to build query first.
+    q = sb.table("timetable_entries").select(select_fields).eq("active", True)
+    
+    if user["role"] == "teacher":
+        q = q.eq("teacher_id", user["id"])
+    
+    # Date filter
+    q = q.or_(f"lesson_date.is.null,and(lesson_date.gte.{start},lesson_date.lt.{end})")
+    
+    result = q.execute()
+    entries = result.data or []
     
     # Filter by stream dates: only show entries for classes in active streams within their date range
     stream_classes_resp = sb.table("stream_classes").select("class_id,stream_id,streams(start_date,end_date)").execute()

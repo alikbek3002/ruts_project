@@ -339,6 +339,7 @@ export type Subject = {
   name: string;
   photo_url?: string | null;
   open_to_all_teachers?: boolean;
+  cycle_id?: string | null;
 };
 
 export type SubjectContentMaterial = {
@@ -878,6 +879,7 @@ export type TimetableEntry = {
   lesson_type?: "lecture" | "seminar" | "exam" | "practical";
   lesson_number?: number;
   meet_url?: string | null;
+  lesson_date?: string | null;
 };
 
 export async function apiCreateTimetableEntry(
@@ -900,6 +902,7 @@ export async function apiUpdateTimetableEntry(
     class_ids: string[] | null;
     lesson_number: number | null;
     meet_url: string | null;
+    lesson_date: string | null;
   }>
 ) {
   return http<{ entry: TimetableEntry }>(`/timetable/entries/${encodeURIComponent(entryId)}`, {
@@ -916,13 +919,21 @@ export async function apiDeleteTimetableEntry(token: string, entryId: string) {
   });
 }
 
-export async function apiListTimetableEntries(token: string, classId?: string) {
-  const q = classId ? `?class_id=${encodeURIComponent(classId)}` : "";
+export async function apiListTimetableEntries(token: string, classId?: string, startDate?: string, endDate?: string) {
+  const params = new URLSearchParams();
+  if (classId) params.set("class_id", classId);
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  const q = params.toString() ? `?${params.toString()}` : "";
   return apiGet<{ entries: TimetableEntry[] }>(`/timetable/entries${q}`, token);
 }
 
 export async function apiListTimetableRooms(token: string) {
   return apiGet<{ rooms: string[] }>(`/timetable/rooms`, token);
+}
+
+export async function apiDuplicateTimetableWeek(token: string, payload: { source_week_start: string; target_week_start: string; class_id?: string; stream_id?: string }) {
+  return apiPost<{ count: number; message: string }>("/timetable/duplicate", payload, token);
 }
 
 export type WeekTimetableItem = {

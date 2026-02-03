@@ -478,8 +478,10 @@ def get_class_journal(
     """Получить журнал класса с оценками по датам уроков"""
     sb = get_supabase()
     
-    # Проверяем доступ
-    query = sb.table("timetable_entries").select("id,subject,weekday,start_time,subject_id,teacher_id").eq("active", True).eq("class_id", class_id)
+    # Получаем расписание
+    # Используем contains (cs) для class_ids, чтобы найти уроки где этот класс целевой (даже если он не первый в списке)
+    query = sb.table("timetable_entries").select("id,subject,weekday,start_time,subject_id,teacher_id,stream_id,created_at,class_ids,lesson_date").eq("active", True)
+    query = query.cs("class_ids", [class_id])
     
     # If teacher, we normally filter by teacher_id.
     # BUT user requested "School Journal" view (all groups).
@@ -492,10 +494,8 @@ def get_class_journal(
              # This allows seeing lessons where maybe teacher wasn't assigned properly
              pass
         else:
-             # If no subject selected (viewing all), maybe still restrict?
-             # Or just show everything? 
-             # Let's show everything active.
-             pass
+             # Если предмет не выбран, показываем только уроки учителя для этого класса
+             query = query.eq("teacher_id", user["id"])
         
     timetable = query.execute().data or []
 
@@ -520,16 +520,20 @@ def get_class_journal(
         timetable = filtered
     
     if not timetable:
-        if user["role"] == "teacher":
-             # Если учитель, и нет уроков, возможно он не ведет этот предмет или класс
-             # Но чтобы не падать с 403, просто вернем пустоту, если фильтр был
-             pass
-        else:
-             pass
-             
-    if not timetable:
+         # Просто вернем пустоту
         return {"students": [], "lessons": [], "grades": {}}
     
+    # Получаем даты потоков для проверки (чтобы не показывать уроки вне дат потока)
+    stream_ids = {t.get("stream_id") for t in timetable if t.get("stream_id")}
+    streams_map = {}
+    if stream_ids:
+        s_data = sb.table("streams").select("id,start_date,end_date").in_("id", list(stream_ids)).execute().data or []
+        for s in s_data:
+            streams_map[s["id"]] = {
+                "start": date.fromisoformat(s["start_date"]) if s.get("start_date") else None,
+                "end": date.fromisoformat(s["end_date"]) if s.get("end_date") else None
+            }
+
     # Получаем всех учеников класса
     enrollments = (
         sb.table("class_enrollments")
@@ -570,22 +574,55 @@ def get_class_journal(
     # Группируем уроки по датам и собираем темы/ДЗ
     lessons_by_date = {}
     
-    # Генерируем сетку уроков на учебный год
+    # Генерируем сетку уроков - только до сегодняшнего дня (включительно)
     today = date.today()
     # Определяем учебный год (с 1 сентября)
     if today.month >= 9:
         start_date = date(today.year, 9, 1)
-        end_date = date(today.year + 1, 5, 31)
     else:
         start_date = date(today.year - 1, 9, 1)
-        end_date = date(today.year, 5, 31)
+    
+    # Показываем уроки только до сегодняшнего дня (не весь учебный год)
+    end_date = today
         
     current = start_date
     while current <= end_date:
         wd = current.isoweekday()
-        day_entries = [e for e in timetable if e.get("weekday") == wd]
+        d_str = current.isoformat()
+        
+        # Filter entries for this day
+        day_entries = []
+        for e in timetable:
+            # If entry has specific date, it MUST match current date
+            if e.get("lesson_date"):
+                if e["lesson_date"] == d_str:
+                    day_entries.append(e)
+            else:
+                # If recurring, it must match weekday AND not conflict with specific logic?
+                # Simpler: just match weekday.
+                if e.get("weekday") == wd:
+                    day_entries.append(e)
+
         for entry in day_entries:
-            d_str = current.isoformat()
+            # 1. Проверяем даты потока (если урок привязан к потоку)
+            s_id = entry.get("stream_id")
+            if s_id and s_id in streams_map:
+                s_dates = streams_map[s_id]
+                if s_dates["start"] and current < s_dates["start"]:
+                    continue
+                if s_dates["end"] and current > s_dates["end"]:
+                    continue
+            
+            # 2. Проверяем дату создания урока (чтобы не бакфиллить уроки созданные сегодня на сентябрь)
+            created_at_str = entry.get("created_at")
+            if created_at_str:
+                try:
+                    c_date = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
+                    if current < c_date:
+                         continue
+                except Exception:
+                    pass
+
             key = f"{d_str}_{entry['id']}"
             lessons_by_date[key] = {
                 "date": d_str,

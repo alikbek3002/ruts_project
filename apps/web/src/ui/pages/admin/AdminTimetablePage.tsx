@@ -18,6 +18,8 @@ import {
   type Subject,
   type Stream,
   type WeekTimetableItem,
+  apiDuplicateTimetableWeek,
+  apiGetCycleDetail,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -25,7 +27,7 @@ import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar, Video, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar, Video, ExternalLink, Copy } from "lucide-react";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -214,6 +216,9 @@ export function AdminTimetablePage() {
   const [duplicateTargetClassIds, setDuplicateTargetClassIds] = useState<string[]>([]);
   const [duplicating, setDuplicating] = useState(false);
 
+  // Teachers filtered by subject's cycle
+  const [cycleTeachers, setCycleTeachers] = useState<Array<{ id: string; name: string }>>([]);
+
   const weekDays = useMemo(() => {
     // Admin timetable grid: Mon-Sat (6 days)
     return Array.from({ length: 6 }, (_, i) => addDays(weekStart, i));
@@ -237,7 +242,9 @@ export function AdminTimetablePage() {
       setRooms(rr.rooms || []);
 
       if (classId) {
-        const e = await apiListTimetableEntries(token, classId);
+        const start = ymd(weekStart);
+        const end = ymd(addDays(weekStart, 6));
+        const e = await apiListTimetableEntries(token, classId, start, end);
         setEntries(e.entries);
       } else {
         setEntries([]);
@@ -290,11 +297,14 @@ export function AdminTimetablePage() {
       return;
     }
     setLoading(true);
-    apiListTimetableEntries(token, classId)
+    setLoading(true);
+    const start = ymd(weekStart);
+    const end = ymd(addDays(weekStart, 6));
+    apiListTimetableEntries(token, classId, start, end)
       .then((e) => setEntries(e.entries))
       .catch((e) => setErr(toUiError(e)))
       .finally(() => setLoading(false));
-  }, [classId, can, token]);
+  }, [classId, can, token, weekStart]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/app" replace />;
@@ -317,10 +327,11 @@ export function AdminTimetablePage() {
     setFormTeacherId("");
     setFormLessonNumber(1);
     setFormMeetUrl("");
+    setCycleTeachers([]); // Clear cycle teachers for new entry
     setModalOpen(true);
   }
 
-  function openEditModal(date: Date, slot: number, entry: TimetableEntry) {
+  async function openEditModal(date: Date, slot: number, entry: TimetableEntry) {
     setModalDate(date);
     setModalSlot(slot);
     setEditEntry(entry);
@@ -337,6 +348,21 @@ export function AdminTimetablePage() {
     setFormTeacherId(entry.teacher_id || "");
     setFormLessonNumber((entry as any).lesson_number || 1);
     setFormMeetUrl(entry.meet_url || "");
+
+    // Load cycle teachers for the entry's subject
+    setCycleTeachers([]);
+    if (entry.subject_id && token) {
+      const subj = subjects.find(s => s.id === entry.subject_id);
+      if (subj?.cycle_id) {
+        try {
+          const res = await apiGetCycleDetail(token, subj.cycle_id);
+          setCycleTeachers(res.teachers || []);
+        } catch {
+          // Fallback to all teachers
+        }
+      }
+    }
+
     setModalOpen(true);
   }
 
@@ -367,9 +393,9 @@ export function AdminTimetablePage() {
           lesson_type: formLessonType,
           teacher_id: formTeacherId || null,
           stream_id: selectedStreamId || null,
-          class_ids: formLessonType === "lecture" ? effectiveClassIds : null,
           lesson_number: formLessonNumber && formLessonNumber > 0 ? formLessonNumber : null,
           meet_url: formMeetUrl.trim() || null,
+          lesson_date: ymd(modalDate),
         });
       } else {
         await apiCreateTimetableEntry(token, {
@@ -386,9 +412,12 @@ export function AdminTimetablePage() {
           teacher_id: formTeacherId || undefined,
           lesson_number: formLessonNumber && formLessonNumber > 0 ? formLessonNumber : undefined,
           meet_url: formMeetUrl.trim() || undefined,
+          lesson_date: ymd(modalDate),
         });
       }
-      const e = await apiListTimetableEntries(token, classId);
+      const start = ymd(weekStart);
+      const end = ymd(addDays(weekStart, 6));
+      const e = await apiListTimetableEntries(token, classId, start, end);
       setEntries(e.entries);
       closeModal();
     } catch (e) {
@@ -545,6 +574,41 @@ export function AdminTimetablePage() {
           </div>
         </div>
 
+        {classId && (
+          <div style={{ padding: "0 16px 16px", display: "flex", justifyContent: "flex-end" }}>
+            <button
+              className={styles.secondaryBtn}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+              onClick={async () => {
+                if (!token) return;
+                if (!window.confirm("Скопировать расписание текущей недели на СЛЕДУЮЩУЮ неделю?")) return;
+                setLoading(true);
+                try {
+                  const srcStart = ymd(weekStart);
+                  const targetStart = ymd(addDays(weekStart, 7));
+
+                  // We duplication for selected class (and stream?)
+                  // Backend logic supports class_id filter.
+                  const res = await apiDuplicateTimetableWeek(token, {
+                    source_week_start: srcStart,
+                    target_week_start: targetStart,
+                    class_id: classId,
+                    stream_id: selectedStreamId || undefined
+                  });
+                  alert(res.message);
+                } catch (e) {
+                  alert(normalizeUiError(e));
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <Copy size={16} />
+              Дублировать на след. неделю
+            </button>
+          </div>
+        )}
+
         {classId ? (
           <div className={styles.grid}>
             {/* Header Row */}
@@ -665,243 +729,272 @@ export function AdminTimetablePage() {
         )}
       </div>
 
-      {modalOpen && (
-        <div className={styles.modalOverlay} onClick={closeModal}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalTitle}>
-              {editEntry ? "Редактировать пару" : "Добавить пару"}
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Предмет</label>
-              <select
-                value={formSubjectId}
-                onChange={(e) => {
-                  const subjectId = e.target.value;
-                  setFormSubjectId(subjectId);
-                  const subj = subjects.find(s => s.id === subjectId);
-                  if (subj) {
-                    setFormSubject(subj.name);
-                  }
-                }}
-                className={styles.select}
-              >
-                <option value="">— Выберите предмет —</option>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {err && (
-              <div style={{ marginTop: 6, color: "var(--color-error)" }}>
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>{err.title}</div>
-                <div style={{ color: "var(--color-text)" }}>{renderUiErrorBody(err)}</div>
+      {
+        modalOpen && (
+          <div className={styles.modalOverlay} onClick={closeModal}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalTitle}>
+                {editEntry ? "Редактировать пару" : "Добавить пару"}
               </div>
-            )}
 
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Тип занятия</label>
-              <select
-                value={formLessonType}
-                onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "exam" | "practical")}
-                className={styles.select}
-              >
-                <option value="lecture">Лекционное</option>
-                <option value="seminar">Семинарское</option>
-                <option value="exam">Экзамен</option>
-                <option value="practical">Практическое</option>
-              </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Аудитория</label>
-              <select value={formRoom} onChange={(e) => setFormRoom(e.target.value)} className={styles.select}>
-                <option value="">— Не выбрано —</option>
-                {rooms.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Ссылка Google Meet (необязательно)</label>
-              <input
-                value={formMeetUrl}
-                onChange={(e) => setFormMeetUrl(e.target.value)}
-                placeholder="https://meet.google.com/..."
-                className={styles.input} // Ensure using same input styles, might need to check css or use standard style
-                style={{ width: "100%", padding: "8px", borderRadius: 6, border: "1px solid #ccc" }}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Преподаватель</label>
-              <select
-                value={formTeacherId}
-                onChange={(e) => setFormTeacherId(e.target.value)}
-                className={styles.select}
-              >
-                <option value="">— Не выбрано —</option>
-                {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.full_name || t.username}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Номер занятия</label>
-              <input
-                type="number"
-                min={1}
-                value={formLessonNumber}
-                onChange={(e) => setFormLessonNumber(e.target.value ? parseInt(e.target.value) : "")}
-                className={styles.input}
-                placeholder="1"
-                style={{ width: 80 }}
-              />
-            </div>
-
-            {formLessonType === "lecture" && (
               <div className={styles.formGroup}>
-                <label className={styles.label}>Группы (до 4 на одной паре)</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-                  {streamClasses.map((c) => {
-                    const checked = formClassIds.includes(c.id);
-                    return (
-                      <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked
-                              ? Array.from(new Set([...formClassIds, c.id]))
-                              : formClassIds.filter((x) => x !== c.id);
-                            if (next.length > 4) {
-                              setErr(toUiError(new Error("Нельзя больше 4 групп на одной паре")));
-                              return;
-                            }
-                            setFormClassIds(next);
-                          }}
-                        />
-                        <span>{c.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                <label className={styles.label}>Предмет</label>
+                <select
+                  value={formSubjectId}
+                  onChange={async (e) => {
+                    const subjectId = e.target.value;
+                    setFormSubjectId(subjectId);
+                    setFormTeacherId(""); // Reset teacher when subject changes
+                    setCycleTeachers([]); // Clear cycle teachers
 
-            <div className={styles.modalActions}>
-              {editEntry && (
-                <button className={`secondary ${styles.deleteBtn}`} onClick={handleDelete}>
-                  <Trash2 size={18} style={{ marginRight: 8 }} />
-                  Удалить
-                </button>
-              )}
-              <button className="secondary" onClick={closeModal}>
-                Отмена
-              </button>
-              <button onClick={handleSave} disabled={!formSubjectId}>
-                <Save size={18} style={{ marginRight: 8 }} />
-                Сохранить
-              </button>
-              {editEntry && (
-                <button
-                  onClick={() => {
-                    setDuplicateModalOpen(true);
-                    setDuplicateTargetClassIds([]);
+                    const subj = subjects.find(s => s.id === subjectId);
+                    if (subj) {
+                      setFormSubject(subj.name);
+
+                      // Load teachers for this subject's cycle
+                      if (subj.cycle_id && token) {
+                        try {
+                          const res = await apiGetCycleDetail(token, subj.cycle_id);
+                          setCycleTeachers(res.teachers || []);
+                        } catch {
+                          // Fallback to all teachers if cycle load fails
+                          setCycleTeachers([]);
+                        }
+                      }
+                    }
                   }}
-                  style={{ marginLeft: "auto", background: "#8b5cf6" }}
+                  className={styles.select}
                 >
-                  Дублировать
-                </button>
+                  <option value="">— Выберите предмет —</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {err && (
+                <div style={{ marginTop: 6, color: "var(--color-error)" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{err.title}</div>
+                  <div style={{ color: "var(--color-text)" }}>{renderUiErrorBody(err)}</div>
+                </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
 
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Тип занятия</label>
+                <select
+                  value={formLessonType}
+                  onChange={(e) => setFormLessonType(e.target.value as "lecture" | "seminar" | "exam" | "practical")}
+                  className={styles.select}
+                >
+                  <option value="lecture">Лекционное</option>
+                  <option value="seminar">Семинарское</option>
+                  <option value="exam">Экзамен</option>
+                  <option value="practical">Практическое</option>
+                </select>
+              </div>
 
-
-      {duplicateModalOpen && editEntry && (
-        <div className={styles.modalOverlay} onClick={() => setDuplicateModalOpen(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalTitle}>Дублировать расписание</div>
-
-            <div style={{ marginBottom: 16, fontSize: 14, color: "var(--color-text-secondary)" }}>
-              Выберите группы для копирования этого занятия:
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Целевые группы</label>
-              <select
-                multiple
-                value={duplicateTargetClassIds}
-                onChange={(e) => {
-                  const opts = Array.from(e.target.selectedOptions, (o) => o.value);
-                  setDuplicateTargetClassIds(opts);
-                }}
-                className={styles.select}
-                style={{ height: "200px" }}
-              >
-                {allClasses
-                  .filter((c) => c.id !== classId)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.id}
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Аудитория</label>
+                <select value={formRoom} onChange={(e) => setFormRoom(e.target.value)} className={styles.select}>
+                  <option value="">— Не выбрано —</option>
+                  {rooms.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
                     </option>
                   ))}
-              </select>
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                Используйте Cmd (macOS) / Ctrl (Windows) для выбора нескольких групп
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Ссылка Google Meet (необязательно)</label>
+                <input
+                  value={formMeetUrl}
+                  onChange={(e) => setFormMeetUrl(e.target.value)}
+                  placeholder="https://meet.google.com/..."
+                  className={styles.input} // Ensure using same input styles, might need to check css or use standard style
+                  style={{ width: "100%", padding: "8px", borderRadius: 6, border: "1px solid #ccc" }}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>
+                  Преподаватель
+                  {cycleTeachers.length > 0 && <span style={{ fontSize: 11, color: '#888', marginLeft: 6 }}>(учителя цикла)</span>}
+                </label>
+                <select
+                  value={formTeacherId}
+                  onChange={(e) => setFormTeacherId(e.target.value)}
+                  className={styles.select}
+                >
+                  <option value="">— Не выбрано —</option>
+                  {cycleTeachers.length > 0 ? (
+                    cycleTeachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))
+                  ) : (
+                    teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.full_name || t.username}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Номер занятия</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formLessonNumber}
+                  onChange={(e) => setFormLessonNumber(e.target.value ? parseInt(e.target.value) : "")}
+                  className={styles.input}
+                  placeholder="1"
+                  style={{ width: 80 }}
+                />
+              </div>
+
+              {formLessonType === "lecture" && (
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Группы (до 4 на одной паре)</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                    {streamClasses.map((c) => {
+                      const checked = formClassIds.includes(c.id);
+                      return (
+                        <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? Array.from(new Set([...formClassIds, c.id]))
+                                : formClassIds.filter((x) => x !== c.id);
+                              if (next.length > 4) {
+                                setErr(toUiError(new Error("Нельзя больше 4 групп на одной паре")));
+                                return;
+                              }
+                              setFormClassIds(next);
+                            }}
+                          />
+                          <span>{c.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className={styles.modalActions}>
+                {editEntry && (
+                  <button className={`secondary ${styles.deleteBtn}`} onClick={handleDelete}>
+                    <Trash2 size={18} style={{ marginRight: 8 }} />
+                    Удалить
+                  </button>
+                )}
+                <button className="secondary" onClick={closeModal}>
+                  Отмена
+                </button>
+                <button onClick={handleSave} disabled={!formSubjectId}>
+                  <Save size={18} style={{ marginRight: 8 }} />
+                  Сохранить
+                </button>
+                {editEntry && (
+                  <button
+                    onClick={() => {
+                      setDuplicateModalOpen(true);
+                      setDuplicateTargetClassIds([]);
+                    }}
+                    style={{ marginLeft: "auto", background: "#8b5cf6" }}
+                  >
+                    Дублировать
+                  </button>
+                )}
               </div>
             </div>
+          </div>
+        )
+      }
 
-            <div className={styles.modalActions}>
-              <button onClick={() => setDuplicateModalOpen(false)} disabled={duplicating}>
-                Отмена
-              </button>
-              <button
-                onClick={async () => {
-                  if (!token || !editEntry || duplicateTargetClassIds.length === 0) return;
-                  setDuplicating(true);
-                  try {
-                    for (const targetClassId of duplicateTargetClassIds) {
-                      await apiCreateTimetableEntry(token, {
-                        class_id: targetClassId,
-                        subject: editEntry.subject,
-                        subject_id: editEntry.subject_id || undefined,
-                        weekday: editEntry.weekday,
-                        start_time: editEntry.start_time,
-                        end_time: editEntry.end_time,
-                        room: editEntry.room || undefined,
-                        lesson_type: editEntry.lesson_type,
-                        teacher_id: editEntry.teacher_id,
-                        stream_id: editEntry.stream_id || undefined,
-                      });
+
+
+      {
+        duplicateModalOpen && editEntry && (
+          <div className={styles.modalOverlay} onClick={() => setDuplicateModalOpen(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalTitle}>Дублировать расписание</div>
+
+              <div style={{ marginBottom: 16, fontSize: 14, color: "var(--color-text-secondary)" }}>
+                Выберите группы для копирования этого занятия:
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Целевые группы</label>
+                <select
+                  multiple
+                  value={duplicateTargetClassIds}
+                  onChange={(e) => {
+                    const opts = Array.from(e.target.selectedOptions, (o) => o.value);
+                    setDuplicateTargetClassIds(opts);
+                  }}
+                  className={styles.select}
+                  style={{ height: "200px" }}
+                >
+                  {allClasses
+                    .filter((c) => c.id !== classId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name || c.id}
+                      </option>
+                    ))}
+                </select>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                  Используйте Cmd (macOS) / Ctrl (Windows) для выбора нескольких групп
+                </div>
+              </div>
+
+              <div className={styles.modalActions}>
+                <button onClick={() => setDuplicateModalOpen(false)} disabled={duplicating}>
+                  Отмена
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!token || !editEntry || duplicateTargetClassIds.length === 0) return;
+                    setDuplicating(true);
+                    try {
+                      for (const targetClassId of duplicateTargetClassIds) {
+                        await apiCreateTimetableEntry(token, {
+                          class_id: targetClassId,
+                          subject: editEntry.subject,
+                          subject_id: editEntry.subject_id || undefined,
+                          weekday: editEntry.weekday,
+                          start_time: editEntry.start_time,
+                          end_time: editEntry.end_time,
+                          room: editEntry.room || undefined,
+                          lesson_type: editEntry.lesson_type,
+                          teacher_id: editEntry.teacher_id,
+                          stream_id: editEntry.stream_id || undefined,
+                        });
+                      }
+                      setDuplicateModalOpen(false);
+                      setDuplicateTargetClassIds([]);
+                      reload();
+                    } catch (err: any) {
+                      alert("Ошибка дублирования: " + (err?.message || err));
+                    } finally {
+                      setDuplicating(false);
                     }
-                    setDuplicateModalOpen(false);
-                    setDuplicateTargetClassIds([]);
-                    reload();
-                  } catch (err: any) {
-                    alert("Ошибка дублирования: " + (err?.message || err));
-                  } finally {
-                    setDuplicating(false);
-                  }
-                }}
-                disabled={duplicating || duplicateTargetClassIds.length === 0}
-              >
-                {duplicating ? "Дублирование..." : "Дублировать"}
-              </button>
+                  }}
+                  disabled={duplicating || duplicateTargetClassIds.length === 0}
+                >
+                  {duplicating ? "Дублирование..." : "Дублировать"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </AppShell>
+        )
+      }
+    </AppShell >
   );
 }

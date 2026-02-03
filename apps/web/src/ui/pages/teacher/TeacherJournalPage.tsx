@@ -22,6 +22,7 @@ import {
   apiGetLessonDetails,
   apiSaveLessonGrade,
   apiSaveLessonTopic,
+  apiGetClass,
   trackedFetch // Еще нужен для saveLessonInfo, если мы его не перенесли в API
 } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
@@ -78,6 +79,7 @@ type ClassSubject = {
   is_mine: boolean;
 };
 
+
 export function TeacherJournalPage() {
   const { state } = useAuth();
   const user = state.user;
@@ -88,15 +90,25 @@ export function TeacherJournalPage() {
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [classSearch, setClassSearch] = useState("");
 
-  // Level 2: Subjects
+  // Level 2: Subjects + Students (загружаются сразу при выборе группы)
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+  // Ученики класса - загружаются сразу при выборе группы
+  const [classStudents, setClassStudents] = useState<{ id: string; full_name: string | null; student_number?: number | null }[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
 
   // Level 3: Lessons
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loadingLessons, setLoadingLessons] = useState(false);
+
+  // Фильтр по месяцу (формат: YYYY-MM)
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   // Level 4: Lesson Detail (Grid)
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
@@ -204,8 +216,14 @@ export function TeacherJournalPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !selectedClassId) return;
+    if (!token || !selectedClassId) {
+      setClassStudents([]);
+      setClassSubjects([]);
+      return;
+    }
+    // Загружаем и предметы и учеников параллельно при выборе группы
     loadSubjects(selectedClassId);
+    loadClassStudents(selectedClassId);
   }, [token, selectedClassId]);
 
   useEffect(() => {
@@ -250,6 +268,19 @@ export function TeacherJournalPage() {
       console.error(e);
     } finally {
       setLoadingSubjects(false);
+    }
+  }
+
+  async function loadClassStudents(classId: string) {
+    if (!token) return;
+    setLoadingStudents(true);
+    try {
+      const data = await apiGetClass(token, classId);
+      setClassStudents(data.students || []);
+    } catch (e) {
+      console.error("Failed to load students:", e);
+    } finally {
+      setLoadingStudents(false);
     }
   }
 
@@ -343,6 +374,23 @@ export function TeacherJournalPage() {
     }
   }, [selectedClassId, selectedSubjectId]);
 
+  // Автоматически выбираем последний месяц с уроками когда данные загружены
+  useEffect(() => {
+    if (gridData?.lessons && gridData.lessons.length > 0) {
+      const months = new Set<string>();
+      gridData.lessons.forEach(l => {
+        const month = l.date.substring(0, 7); // YYYY-MM
+        months.add(month);
+      });
+      const sortedMonths = Array.from(months).sort().reverse();
+
+      // Если текущий выбранный месяц не имеет уроков, выбираем последний с уроками
+      if (sortedMonths.length > 0 && !sortedMonths.includes(selectedMonth)) {
+        setSelectedMonth(sortedMonths[0]);
+      }
+    }
+  }, [gridData?.lessons]);
+
   // Determine displayed classes
   const displayedClasses = useMemo(() => {
     if (!classSearch) return allClasses;
@@ -350,6 +398,23 @@ export function TeacherJournalPage() {
   }, [allClasses, classSearch]);
 
   const selectedClass = useMemo(() => allClasses.find(c => c.id === selectedClassId), [allClasses, selectedClassId]);
+
+  // Фильтруем уроки по выбранному месяцу
+  const filteredLessons = useMemo(() => {
+    if (!gridData?.lessons) return [];
+    return gridData.lessons.filter(l => l.date.startsWith(selectedMonth));
+  }, [gridData?.lessons, selectedMonth]);
+
+  // Генерируем список доступных месяцев из загруженных уроков
+  const availableMonths = useMemo(() => {
+    if (!gridData?.lessons) return [];
+    const months = new Set<string>();
+    gridData.lessons.forEach(l => {
+      const month = l.date.substring(0, 7); // YYYY-MM
+      months.add(month);
+    });
+    return Array.from(months).sort().reverse();
+  }, [gridData?.lessons]);
 
   // When clicking a column header in grid
   function openLesson(lesson: { timetable_entry_id: string, date: string }) {
@@ -457,43 +522,128 @@ export function TeacherJournalPage() {
             </select>
             {loadingSubjects && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Загрузка...</div>}
           </div>
+
+          {/* Фильтр по месяцу */}
+          {selectedClassId && selectedSubjectId && availableMonths.length > 0 && (
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>
+                Месяц
+              </label>
+              <select
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className={styles.selectDropdown}
+              >
+                {availableMonths.map(m => {
+                  const [year, month] = m.split('-');
+                  const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+                  return (
+                    <option key={m} value={m}>
+                      {monthNames[parseInt(month) - 1]} {year}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
         </div>
 
-        {/* Level 3: Journal Grid */}
+        {/* Этап 1: Показываем список учеников сразу при выборе группы (до выбора предмета) */}
+        {selectedClassId && !selectedSubjectId && (
+          <div className={styles.gridContainer}>
+            {loadingStudents ? (
+              <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}><Loader /></div>
+            ) : classStudents.length > 0 ? (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.colStudent}>№</th>
+                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>ФИО ученика / Окуучунун аты-жѳнү</th>
+                    <th style={{ textAlign: 'center', padding: '8px 12px', color: '#6b7280' }}>
+                      ← Выберите предмет для просмотра оценок
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classStudents.map((s, idx) => (
+                    <tr key={s.id} className={idx % 2 === 0 ? styles.rowEven : styles.rowOdd}>
+                      <td style={{ width: 50, textAlign: 'center', fontWeight: 500, color: '#6b7280' }}>
+                        {s.student_number || idx + 1}
+                      </td>
+                      <td style={{ fontWeight: 500, color: '#1f2937', padding: '10px 12px' }}>
+                        {s.full_name || '—'}
+                      </td>
+                      <td style={{ textAlign: 'center', color: '#d1d5db' }}>—</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className={styles.emptyState}>
+                <div style={{ fontSize: 24, marginBottom: 12 }}>👥</div>
+                <div style={{ fontWeight: 600, color: '#374151' }}>Окуучулар жок / Нет учеников</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  В этой группе нет учеников
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Этап 2: Полная таблица журнала с датами уроков (когда выбран и класс и предмет) */}
         {selectedClassId && selectedSubjectId && (
           <div>
-            {loadingLessons || !gridData ? <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}><Loader /></div> : (
+            {loadingLessons || loadingStudents ? <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}><Loader /></div> : (
               <div className={styles.gridContainer}>
-                <table className={styles.table}>
+                <table className={styles.table} style={{ tableLayout: filteredLessons.length > 10 ? 'fixed' : 'auto' }}>
                   <thead>
                     <tr>
-                      <th className={styles.colStudent}>Ученик / Окуучу</th>
-                      <th className={styles.cellAvg} title="Средний балл">Ср.</th>
-                      {gridData.lessons.map(l => (
-                        <th
-                          key={`${l.date}_${l.timetable_entry_id}`}
-                          className={styles.headerDate}
-                          title="Нажмите, чтобы редактировать урок"
-                          onClick={() => openLesson(l)}
-                        >
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 13, color: '#111' }}>
-                              {new Date(l.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                      <th className={styles.colStudent} style={{ minWidth: 200 }}>Ученик / Окуучу</th>
+                      <th className={styles.cellAvg} title="Средний балл" style={{ minWidth: 40 }}>Ср.</th>
+                      {filteredLessons.map(l => {
+                        // Адаптивная ширина колонок в зависимости от количества уроков
+                        const colWidth = filteredLessons.length > 20 ? 35 : filteredLessons.length > 10 ? 45 : 55;
+                        const fullDate = new Date(l.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const shortDate = new Date(l.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+                        return (
+                          <th
+                            key={`${l.date}_${l.timetable_entry_id}`}
+                            className={styles.headerDate}
+                            title={`${fullDate} — Нажмите для редактирования`}
+                            onClick={() => openLesson(l)}
+                            style={{
+                              minWidth: colWidth,
+                              maxWidth: colWidth,
+                              padding: filteredLessons.length > 15 ? '4px 2px' : '8px 4px',
+                              fontSize: filteredLessons.length > 15 ? 11 : 13,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ color: '#111', fontWeight: 600 }}>
+                                {shortDate}
+                              </div>
                             </div>
-                          </div>
-                        </th>
-                      ))}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {gridData.students.map((s, idx) => {
-                      const sGrades = gridData.grades[s.id] || {};
+                    {classStudents.map((s, idx) => {
+                      const studentId = s.id;
+                      const sGrades = gridData?.grades?.[studentId] || {};
 
-                      // Calculate average
+                      // Calculate average only for filtered lessons
                       let total = 0;
                       let count = 0;
-                      Object.values(sGrades).forEach(g => {
-                        g.grades.forEach(val => { total += val.grade; count++; });
+                      filteredLessons.forEach(l => {
+                        const key = `${l.date}_${l.timetable_entry_id}`;
+                        const cell = sGrades[key];
+                        if (cell?.grades) {
+                          cell.grades.forEach(val => { total += val.grade; count++; });
+                        }
                       });
                       const avg = count ? (total / count).toFixed(2) : "—";
                       const rowClass = idx % 2 === 0 ? styles.rowEven : styles.rowOdd;
@@ -503,32 +653,49 @@ export function TeacherJournalPage() {
                           <td className={styles.colStudent}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               <div style={{ width: 24, textAlign: 'center', color: '#9ca3af', fontWeight: 500 }}>{s.student_number || idx + 1}</div>
-                              <div style={{ fontWeight: 500, color: '#1f2937' }}>{s.name}</div>
+                              <div style={{ fontWeight: 500, color: '#1f2937' }}>{s.full_name || '—'}</div>
                             </div>
                           </td>
                           <td className={styles.cellAvg} style={{ color: count ? '#111' : '#9ca3af' }}>{avg}</td>
-                          {gridData.lessons.map(l => {
+                          {filteredLessons.map(l => {
                             const key = `${l.date}_${l.timetable_entry_id}`;
                             const cell = sGrades[key];
                             const gradesText = cell?.grades?.map(g => g.grade).join(" ") || "";
+                            const isCompact = filteredLessons.length > 15;
 
                             let attendanceMark = null;
                             if (cell?.attendance_type) {
                               switch (cell.attendance_type) {
-                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold' }}>КЖ</span>; break;
-                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>К</span>; break;
-                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>А</span>; break;
-                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold' }}>О</span>; break;
+                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>; break;
+                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>К</span>; break;
+                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>А</span>; break;
+                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>О</span>; break;
                                 default: attendanceMark = null;
                               }
                             } else if (cell?.present === false) {
-                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold' }}>КЖ</span>;
+                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>;
                             }
 
                             return (
-                              <td key={key} className={styles.cellGrade} onClick={() => openLesson(l)} style={{ cursor: 'pointer' }}>
+                              <td
+                                key={key}
+                                className={styles.cellGrade}
+                                onClick={() => openLesson(l)}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: isCompact ? '4px 2px' : '8px 4px',
+                                  fontSize: isCompact ? 11 : 13
+                                }}
+                              >
                                 {attendanceMark}
-                                {gradesText && <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, marginLeft: attendanceMark ? 4 : 0 }}>{gradesText}</span>}
+                                {gradesText && <span style={{
+                                  background: '#eff6ff',
+                                  color: '#1d4ed8',
+                                  padding: isCompact ? '1px 3px' : '2px 6px',
+                                  borderRadius: 4,
+                                  marginLeft: attendanceMark ? 2 : 0,
+                                  fontSize: isCompact ? 10 : 12
+                                }}>{gradesText}</span>}
                               </td>
                             );
                           })}
@@ -537,12 +704,23 @@ export function TeacherJournalPage() {
                     })}
                   </tbody>
                 </table>
-                {gridData.lessons.length === 0 && (
-                  <div className={styles.emptyState}>
-                    <div style={{ fontSize: 24, marginBottom: 12 }}>📅</div>
-                    <div style={{ fontWeight: 600, color: '#374151' }}>Сабактар табылган жок / Уроков не найдено</div>
-                    <div style={{ fontSize: 13, marginTop: 4 }}>
-                      Бул предмет боюнча расписаниеде сабактар жок.
+                {filteredLessons.length === 0 && classStudents.length > 0 && (
+                  <div style={{
+                    padding: '16px 20px',
+                    background: '#fef3c7',
+                    border: '1px solid #fcd34d',
+                    borderRadius: 8,
+                    marginTop: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}>
+                    <span style={{ fontSize: 20 }}>📅</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#92400e' }}>Уроков по этому предмету пока нет</div>
+                      <div style={{ fontSize: 13, color: '#a16207', marginTop: 2 }}>
+                        В расписании нет уроков по выбранному предмету для этой группы
+                      </div>
                     </div>
                   </div>
                 )}
