@@ -315,7 +315,7 @@ def lesson_journal_save(
 @router.get("/classes/{class_id}/journal")
 def class_journal_by_dates(
     class_id: str,
-    user: dict = require_role("teacher", "admin"),
+    user: dict = require_role("teacher", "admin", "manager"),
 ):
     """
     Журнал посещаемости: таблица [ученики × даты]
@@ -349,49 +349,48 @@ def class_journal_by_dates(
         or []
     )
 
-    # Список учеников
+    # Список учеников - напрямую из class_enrollments
     enrollments = (
         sb.table("class_enrollments")
-        .select("legacy_student_id")
+        .select("id,student_full_name,student_number,legacy_student_id")
         .eq("class_id", class_id)
+        .order("student_number")
         .execute()
         .data
         or []
     )
-    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
-    if not student_ids:
+    
+    if not enrollments:
         return {"students": [], "dates": [], "data": {}}
 
-    users = (
-        sb.table("users")
-        .select("id,username,full_name")
-        .in_("id", student_ids)
-        .execute()
-        .data
-        or []
-    )
+    # Формируем список студентов
     students = sorted(
         [
             {
-                "id": u.get("id"),
-                "name": u.get("full_name") or u.get("username"),
-                "username": u.get("username"),
+                "id": e.get("id"),  # Используем enrollment ID
+                "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
+                "student_number": e.get("student_number"),
+                "legacy_student_id": e.get("legacy_student_id"),
             }
-            for u in users
+            for e in enrollments
         ],
-        key=lambda x: x["name"],
+        key=lambda x: (x.get("student_number") or 999, x["name"]),
     )
+    
+    # Создаём маппинг legacy_student_id -> enrollment_id для журнала
+    legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
 
     # Собираем все уникальные даты
     dates = sorted({r.get("lesson_date") for r in journal_records if r.get("lesson_date")})
 
-    # Структура данных: {student_id: {date: {present, grade, comment}}}
+    # Структура данных: {enrollment_id: {date: {present, grade, comment}}}
     data = defaultdict(dict)
     for rec in journal_records:
-        sid = rec.get("student_id")
+        legacy_sid = rec.get("student_id")
+        enrollment_id = legacy_to_enrollment.get(legacy_sid)
         d = rec.get("lesson_date")
-        if sid and d:
-            data[sid][d] = {
+        if enrollment_id and d:
+            data[enrollment_id][d] = {
                 "present": rec.get("present"),
                 "grade": rec.get("grade"),
                 "comment": rec.get("comment"),
@@ -403,7 +402,7 @@ def class_journal_by_dates(
 @router.get("/classes/{class_id}/journal/by-subject")
 def class_journal_by_subject(
     class_id: str,
-    user: dict = require_role("teacher", "admin"),
+    user: dict = require_role("teacher", "admin", "manager"),
 ):
     """
     Журнал оценок по предметам: таблица [ученики × предметы] с средними оценками
@@ -439,44 +438,43 @@ def class_journal_by_subject(
         or []
     )
 
-    # Список учеников
+    # Список учеников - напрямую из class_enrollments
     enrollments = (
         sb.table("class_enrollments")
-        .select("legacy_student_id")
+        .select("id,student_full_name,student_number,legacy_student_id")
         .eq("class_id", class_id)
+        .order("student_number")
         .execute()
         .data
         or []
     )
-    student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
-    if not student_ids:
+    
+    if not enrollments:
         return {"students": [], "subjects": [], "data": {}}
 
-    users = (
-        sb.table("users")
-        .select("id,username,full_name")
-        .in_("id", student_ids)
-        .execute()
-        .data
-        or []
-    )
+    # Формируем список студентов
     students = sorted(
         [
             {
-                "id": u.get("id"),
-                "name": u.get("full_name") or u.get("username"),
-                "username": u.get("username"),
+                "id": e.get("id"),  # Используем enrollment ID
+                "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
+                "student_number": e.get("student_number"),
+                "legacy_student_id": e.get("legacy_student_id"),
             }
-            for u in users
+            for e in enrollments
         ],
-        key=lambda x: x["name"],
+        key=lambda x: (x.get("student_number") or 999, x["name"]),
     )
+    
+    # Создаём маппинг legacy_student_id -> enrollment_id для журнала
+    legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
+    enrollment_ids = [e.get("id") for e in enrollments]
 
     # Собираем предметы
     subjects = sorted({e.get("subject") for e in timetable if e.get("subject")})
 
     # Группируем оценки по ученику и предмету
-    # {student_id: {subject: [grades]}}
+    # {enrollment_id: {subject: [grades]}}
     grades_by_student_subject = defaultdict(lambda: defaultdict(list))
 
     for rec in journal_records:
@@ -486,27 +484,28 @@ def class_journal_by_subject(
             continue
 
         subject = entry.get("subject")
-        sid = rec.get("student_id")
+        legacy_sid = rec.get("student_id")
+        enrollment_id = legacy_to_enrollment.get(legacy_sid)
         grade = rec.get("grade")
 
-        if sid and subject and grade:
-            grades_by_student_subject[sid][subject].append(grade)
+        if enrollment_id and subject and grade:
+            grades_by_student_subject[enrollment_id][subject].append(grade)
 
     # Вычисляем средние оценки
     data = {}
-    for sid in student_ids:
-        data[sid] = {}
+    for enrollment_id in enrollment_ids:
+        data[enrollment_id] = {}
         for subj in subjects:
-            grades_list = grades_by_student_subject[sid].get(subj, [])
+            grades_list = grades_by_student_subject[enrollment_id].get(subj, [])
             if grades_list:
                 avg = sum(grades_list) / len(grades_list)
-                data[sid][subj] = {
+                data[enrollment_id][subj] = {
                     "average": round(avg, 2),
                     "grades": grades_list,
                     "count": len(grades_list),
                 }
             else:
-                data[sid][subj] = {"average": None, "grades": [], "count": 0}
+                data[enrollment_id][subj] = {"average": None, "grades": [], "count": 0}
 
     return {"students": students, "subjects": subjects, "data": data}
 
