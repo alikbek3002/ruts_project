@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
 import {
   apiAdminListUsers,
+  apiBulkEnrollStudents,
   apiCreateClass,
   apiDeleteClass,
   apiEnrollStudent,
@@ -60,7 +61,9 @@ export function AdminClassesPage() {
   // Модальное для добавления студентов
   const [enrollingClassId, setEnrollingClassId] = useState<string | null>(null);
   const [classStudents, setClassStudents] = useState<Array<{ id: string; username: string; full_name: string | null; student_number?: number | null }>>([]);
-  const [studentId, setStudentId] = useState("");
+  const [newStudentName, setNewStudentName] = useState("");
+  const [bulkStudentsList, setBulkStudentsList] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   async function reloadAll() {
     if (!token) return;
@@ -127,7 +130,10 @@ export function AdminClassesPage() {
 
       // Enroll students in selected order (API assigns numbers 1..)
       for (const sid of createStudentIds) {
-        await apiEnrollStudent(token, { class_id: created.class.id, student_id: sid });
+        const student = students.find((s) => s.id === sid);
+        if (student) {
+          await apiEnrollStudent(token, { class_id: created.class.id, student_full_name: student.full_name || student.username });
+        }
       }
 
       setCreateOpen(false);
@@ -184,20 +190,43 @@ export function AdminClassesPage() {
     }
   };
 
-  const handleEnroll = async () => {
-    if (!token || !enrollingClassId || !studentId) return;
+  const handleEnrollByName = async () => {
+    if (!token || !enrollingClassId || !newStudentName.trim()) return;
     if (classStudents.length >= 35) {
       setErr("Максимум 35 учеников");
       return;
     }
     setErr(null);
     try {
-      await apiEnrollStudent(token, { class_id: enrollingClassId, student_id: studentId });
-      setStudentId("");
+      await apiEnrollStudent(token, { class_id: enrollingClassId, student_full_name: newStudentName.trim() });
+      setNewStudentName("");
       await reloadClassStudents(enrollingClassId);
       await reloadAll();
     } catch (e) {
       setErr(String(e));
+    }
+  };
+
+  const handleBulkEnroll = async () => {
+    if (!token || !enrollingClassId || !bulkStudentsList.trim()) return;
+    const lines = bulkStudentsList.split("\n").map(s => s.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+    if (classStudents.length + lines.length > 35) {
+      setErr(`Превышен лимит 35 учеников. Текущий: ${classStudents.length}, добавляется: ${lines.length}`);
+      return;
+    }
+    setErr(null);
+    setBulkLoading(true);
+    try {
+      const result = await apiBulkEnrollStudents(token, enrollingClassId, lines);
+      setBulkStudentsList("");
+      await reloadClassStudents(enrollingClassId);
+      await reloadAll();
+      alert(`Добавлено учеников: ${result.count}`);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBulkLoading(false);
     }
   };
 
@@ -467,25 +496,37 @@ export function AdminClassesPage() {
               </div>
 
               <div className={styles.modalContent}>
-                <h4 className={styles.sectionTitle} style={{ marginTop: 0 }}>Записать студента</h4>
+                <h4 className={styles.sectionTitle} style={{ marginTop: 0 }}>Добавить ученика</h4>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                  <select
-                    value={studentId}
-                    onChange={(e) => setStudentId(e.target.value)}
+                  <input
+                    type="text"
+                    value={newStudentName}
+                    onChange={(e) => setNewStudentName(e.target.value)}
+                    placeholder="Введите ФИО ученика"
                     style={{ flex: 1 }}
                     disabled={classStudents.length >= 35}
+                    onKeyDown={(e) => e.key === "Enter" && handleEnrollByName()}
+                  />
+                  <button onClick={handleEnrollByName} disabled={!newStudentName.trim() || classStudents.length >= 35}>
+                    Добавить
+                  </button>
+                </div>
+
+                <h4 className={styles.sectionTitle}>Массовая загрузка</h4>
+                <p style={{ fontSize: "0.9em", color: "var(--color-text-secondary)", marginBottom: 8 }}>Вставьте список ФИО (каждое на новой строке):</p>
+                <textarea
+                  value={bulkStudentsList}
+                  onChange={(e) => setBulkStudentsList(e.target.value)}
+                  placeholder="Иванов Иван Иванович\nПетров Петр Петрович\nСидорова Мария Ивановна"
+                  style={{ width: "100%", minHeight: 120, resize: "vertical", fontFamily: "inherit", padding: 8 }}
+                  disabled={classStudents.length >= 35 || bulkLoading}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, marginBottom: 16 }}>
+                  <button
+                    onClick={handleBulkEnroll}
+                    disabled={!bulkStudentsList.trim() || classStudents.length >= 35 || bulkLoading}
                   >
-                    <option value="">— Выберите студента —</option>
-                    {students
-                      .filter((s) => !classStudents.find((cs) => cs.id === s.id))
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.full_name || s.username}
-                        </option>
-                      ))}
-                  </select>
-                  <button onClick={handleEnroll} disabled={!studentId || classStudents.length >= 35}>
-                    Записать
+                    {bulkLoading ? "Загрузка..." : "Загрузить список"}
                   </button>
                 </div>
 

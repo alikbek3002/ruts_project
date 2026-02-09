@@ -860,8 +860,12 @@ export async function apiGetClass(token: string, classId: string) {
   return apiGet<{ class: ClassItem | null; students: ClassStudent[] }>(`/classes/${classId}`, token);
 }
 
-export async function apiEnrollStudent(token: string, body: { class_id: string; student_id: string }) {
-  return apiPost<{ ok: boolean }>(`/classes/${body.class_id}/enroll`, { student_id: body.student_id }, token);
+export async function apiEnrollStudent(token: string, body: { class_id: string; student_full_name: string; student_number?: number }) {
+  return apiPost<{ ok: boolean }>(`/classes/${body.class_id}/enroll`, { student_full_name: body.student_full_name, student_number: body.student_number }, token);
+}
+
+export async function apiBulkEnrollStudents(token: string, classId: string, students: string[]) {
+  return apiPost<{ ok: boolean; count: number }>(`/classes/${classId}/enroll-bulk`, { students }, token);
 }
 
 export type TimetableEntry = {

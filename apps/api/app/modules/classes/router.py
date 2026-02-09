@@ -342,6 +342,69 @@ def enroll_student(class_id: str, payload: EnrollIn, _: dict = require_role("adm
         )
 
 
+class BulkEnrollIn(BaseModel):
+    students: list[str]  # Список ФИО учеников
+
+
+@router.post("/{class_id}/enroll-bulk")
+def bulk_enroll_students(class_id: str, payload: BulkEnrollIn, _: dict = require_role("admin", "manager")):
+    """Массовая запись учеников по списку ФИО"""
+    sb = get_supabase()
+    try:
+        # Проверяем текущее количество учеников
+        count_resp = sb.table("class_enrollments").select("id", count="exact").eq("class_id", class_id).execute()
+        current_count = count_resp.count or 0
+        
+        # Фильтруем пустые строки
+        students_to_add = [s.strip() for s in payload.students if s.strip()]
+        
+        if current_count + len(students_to_add) > 35:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Превышен лимит 35 учеников. Текущий: {current_count}, добавляется: {len(students_to_add)}"
+            )
+        
+        # Получаем максимальный номер
+        max_row = (
+            sb.table("class_enrollments")
+            .select("student_number")
+            .eq("class_id", class_id)
+            .order("student_number", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        next_num = 1
+        if max_row and max_row[0].get("student_number"):
+            next_num = int(max_row[0]["student_number"]) + 1
+        
+        # Добавляем учеников
+        added_count = 0
+        for full_name in students_to_add:
+            if next_num > 35:
+                break
+            sb.table("class_enrollments").insert({
+                "class_id": class_id,
+                "student_full_name": full_name,
+                "student_number": next_num
+            }).execute()
+            next_num += 1
+            added_count += 1
+        
+        # Очищаем кеш
+        from app.core.cache import cache
+        cache.delete_pattern("classes_list:*")
+        
+        return {"ok": True, "count": added_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to bulk enroll students: {str(e)}"
+        )
+
+
 @router.delete("/{class_id}/students/{enrollment_id}")
 def remove_student(class_id: str, enrollment_id: str, _: dict = require_role("admin", "manager")):
     """Удалить студента из группы"""
