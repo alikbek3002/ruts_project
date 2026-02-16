@@ -587,7 +587,6 @@ class TimetableEntryUpdateIn(BaseModel):
     stream_id: str | None = None
     class_ids: list[str] | None = None
     lesson_number: int | None = None
-    lesson_number: int | None = None
     meet_url: str | None = None
     lesson_date: date | None = None
 
@@ -644,8 +643,6 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         result_end = _norm_time_str(update.get("end_time", existing.get("end_time")), "00:00")
         result_room = update.get("room", existing.get("room"))
         result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
-        result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
-        result_teacher_id = update.get("teacher_id", existing.get("teacher_id"))
         result_lesson_type = (update.get("lesson_type", existing.get("lesson_type")) or "lecture").strip()
         result_date_str = update.get("lesson_date", existing.get("lesson_date")) # ISO or None
         
@@ -693,6 +690,19 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         for e in overlapping:
             # handled below via structured conflict payload
             pass
+
+        # Filter overlapping by lesson_date (same logic as create_entry)
+        real_conflicts = []
+        result_date_iso = result_date_str if isinstance(result_date_str, str) else (
+            result_date_str.isoformat() if result_date_str else None
+        )
+        for e in overlapping:
+            e_date = e.get("lesson_date")
+            # If both are dated and different dates -> No conflict
+            if result_date_iso and e_date and result_date_iso != e_date:
+                continue
+            real_conflicts.append(e)
+        overlapping = real_conflicts
 
         payload = _build_conflicts_payload(
             sb,

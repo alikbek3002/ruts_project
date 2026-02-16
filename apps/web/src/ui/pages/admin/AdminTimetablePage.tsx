@@ -297,7 +297,6 @@ export function AdminTimetablePage() {
       return;
     }
     setLoading(true);
-    setLoading(true);
     const start = ymd(weekStart);
     const end = ymd(addDays(weekStart, 6));
     apiListTimetableEntries(token, classId, start, end)
@@ -432,7 +431,9 @@ export function AdminTimetablePage() {
       const ok = window.confirm(t("common.deleteConfirm"));
       if (!ok) return;
       await apiDeleteTimetableEntry(token, editEntry.id);
-      const e = await apiListTimetableEntries(token, classId);
+      const start = ymd(weekStart);
+      const end = ymd(addDays(weekStart, 6));
+      const e = await apiListTimetableEntries(token, classId, start, end);
       setEntries(e.entries);
       closeModal();
     } catch (e) {

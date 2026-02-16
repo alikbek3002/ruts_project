@@ -1,0 +1,9 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/apps/api/venv/bin/python",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/apps/api"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/apps/api"
+    ]
+}

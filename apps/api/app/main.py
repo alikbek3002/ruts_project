@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
 
@@ -39,7 +39,9 @@ app = FastAPI(title="RUTS Journal API", version="0.1.0")
 logger.info(f"Starting app in {settings.app_env} mode")
 logger.info(f"CORS origins: {settings.app_cors_origins}")
 
-def _normalize_origin(value: str) -> str | None:
+from typing import Optional
+
+def _normalize_origin(value: Optional[str]) -> Optional[str]:
     v = (value or "").strip().strip('"').strip("'")
     if not v:
         return None
@@ -100,9 +102,6 @@ app.include_router(users_router, prefix="/api/users", tags=["users"])
 app.include_router(curriculum_router, prefix="/api/directions", tags=["curriculum"])
 app.include_router(cycles_router, prefix="/api/cycles", tags=["cycles"])
 app.include_router(meetings_router, prefix="/api/meetings", tags=["meetings"])
-
-from app.modules.archive.router import router as archive_router
-app.include_router(archive_router, prefix="/api/archive", tags=["archive"])
 
 from app.modules.archive.router import router as archive_router
 app.include_router(archive_router, prefix="/api/archive", tags=["archive"])

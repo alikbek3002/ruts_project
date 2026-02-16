@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Streams Router - API endpoints for educational streams (потоки) management
 Handles: stream CRUD, class assignments, curriculum templates, auto-scheduling

@@ -40,7 +40,6 @@ export function AdminClassesPage() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [directions, setDirections] = useState<Direction[]>([]);
-  const [students, setStudents] = useState<AdminUser[]>([]);
   const [teachers, setTeachers] = useState<AdminUser[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
@@ -49,8 +48,7 @@ export function AdminClassesPage() {
   const [createName, setCreateName] = useState("");
   const [createDirection, setCreateDirection] = useState("");
   const [createCuratorId, setCreateCuratorId] = useState("");
-  const [createPickStudentId, setCreatePickStudentId] = useState("");
-  const [createStudentIds, setCreateStudentIds] = useState<string[]>([]);
+  const [createStudentsList, setCreateStudentsList] = useState("");
 
   // Модальное окно для редактирования группы
   const [editingClass, setEditingClass] = useState<ClassItem | null>(null);
@@ -67,15 +65,13 @@ export function AdminClassesPage() {
 
   async function reloadAll() {
     if (!token) return;
-    const [c, d, s, t] = await Promise.all([
+    const [c, d, t] = await Promise.all([
       apiListClasses(token),
       apiListDirections(token),
-      apiAdminListUsers(token, "student"),
       apiAdminListUsers(token, "teacher"),
     ]);
     setClasses(c.classes);
     setDirections(d.directions || []);
-    setStudents(s.users);
     setTeachers(t.users);
   }
 
@@ -109,14 +105,14 @@ export function AdminClassesPage() {
     setCreateName("");
     setCreateDirection("");
     setCreateCuratorId("");
-    setCreatePickStudentId("");
-    setCreateStudentIds([]);
+    setCreateStudentsList("");
     setCreateOpen(true);
   }
 
   async function handleCreate() {
     if (!token || !createName.trim()) return;
-    if (createStudentIds.length > 35) {
+    const studentLines = createStudentsList.split("\n").map(s => s.trim()).filter(Boolean);
+    if (studentLines.length > 35) {
       setErr("Максимум 35 учеников");
       return;
     }
@@ -128,12 +124,9 @@ export function AdminClassesPage() {
         curator_id: createCuratorId || null,
       });
 
-      // Enroll students in selected order (API assigns numbers 1..)
-      for (const sid of createStudentIds) {
-        const student = students.find((s) => s.id === sid);
-        if (student) {
-          await apiEnrollStudent(token, { class_id: created.class.id, student_full_name: student.full_name || student.username });
-        }
+      // Bulk enroll students by FIO list
+      if (studentLines.length > 0) {
+        await apiBulkEnrollStudents(token, created.class.id, studentLines);
       }
 
       setCreateOpen(false);
@@ -404,72 +397,18 @@ export function AdminClassesPage() {
                 </div>
 
                 <h4 className={styles.sectionTitle}>Ученики (максимум 35)</h4>
-                <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-                  <select
-                    value={createPickStudentId}
-                    onChange={(e) => setCreatePickStudentId(e.target.value)}
-                    style={{ flex: 1 }}
-                    disabled={createStudentIds.length >= 35}
-                  >
-                    <option value="">— Выберите ученика —</option>
-                    {students
-                      .filter((s) => !createStudentIds.includes(s.id))
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.full_name || s.username}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    disabled={!createPickStudentId || createStudentIds.length >= 35}
-                    onClick={() => {
-                      if (!createPickStudentId) return;
-                      setCreateStudentIds((prev) => (prev.includes(createPickStudentId) ? prev : [...prev, createPickStudentId]));
-                      setCreatePickStudentId("");
-                    }}
-                  >
-                    Добавить
-                  </button>
-                </div>
-
-                <div className={styles.tableContainer}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th style={{ width: 60 }}>№</th>
-                        <th>ФИО</th>
-                        <th style={{ width: 60 }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {createStudentIds.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} style={{ color: "var(--color-text-light)", textAlign: "center" }}>Пока нет учеников</td>
-                        </tr>
-                      ) : (
-                        createStudentIds.map((sid, idx) => {
-                          const s = students.find((x) => x.id === sid);
-                          return (
-                            <tr key={sid}>
-                              <td>{idx + 1}</td>
-                              <td>{s?.full_name || s?.username || sid}</td>
-                              <td>
-                                <button
-                                  className="secondary"
-                                  onClick={() => setCreateStudentIds((prev) => prev.filter((x) => x !== sid))}
-                                  title="Убрать"
-                                  style={{ padding: 4, height: "auto", color: "var(--color-error)" }}
-                                >
-                                  <X size={16} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <p style={{ fontSize: "0.9em", color: "var(--color-text-secondary)", marginBottom: 8 }}>Введите список ФИО учеников (каждое на новой строке):</p>
+                <textarea
+                  value={createStudentsList}
+                  onChange={(e) => setCreateStudentsList(e.target.value)}
+                  placeholder="Иванов Иван Иванович&#10;Петров Петр Петрович&#10;Сидорова Мария Ивановна"
+                  style={{ width: "100%", minHeight: 160, resize: "vertical", fontFamily: "inherit", padding: 8 }}
+                />
+                {createStudentsList.trim() && (
+                  <p style={{ fontSize: "0.85em", color: "var(--color-text-secondary)", marginTop: 4 }}>
+                    Учеников в списке: {createStudentsList.split("\n").map(s => s.trim()).filter(Boolean).length}
+                  </p>
+                )}
               </div>
 
               <div className={styles.modalFooter}>

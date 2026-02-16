@@ -9,6 +9,7 @@ apps/web/.vite/
 __pycache__/
 *.pyc
 .venv/
+venv/
 apps/api/.env
 apps/api/.env.railway
 

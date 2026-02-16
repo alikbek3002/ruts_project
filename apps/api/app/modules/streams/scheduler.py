@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Auto-Scheduler Module for Streams
 Generates optimal timetables considering:
