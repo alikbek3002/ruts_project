@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import {
   ChevronLeft,
   MapPin,
@@ -90,8 +90,13 @@ export function TeacherJournalPage() {
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [classSearch, setClassSearch] = useState("");
 
-  // Level 2: Subjects + Students (загружаются сразу при выборе группы)
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  // Read URL query params for auto-selection from timetable navigation
+  const [searchParams] = useSearchParams();
+  const qClassId = searchParams.get('classId') || '';
+  const qSubjectId = searchParams.get('subjectId') || '';
+
+  // Level 2: Subjects + Students
+  const [selectedClassId, setSelectedClassId] = useState<string>(qClassId);
   const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
 
@@ -100,7 +105,7 @@ export function TeacherJournalPage() {
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   // Level 3: Lessons
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(qSubjectId);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loadingLessons, setLoadingLessons] = useState(false);
 
@@ -121,6 +126,19 @@ export function TeacherJournalPage() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [editingComment, setEditingComment] = useState<{ id: string, value: string } | null>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Inline grade popup state
+  const [gradePopup, setGradePopup] = useState<{
+    studentId: string;
+    studentName: string;
+    timetableEntryId: string;
+    lessonDate: string;
+    x: number;
+    y: number;
+    currentGrade?: number | null;
+    currentAttendance?: string | null;
+  } | null>(null);
+  const [popupSaving, setPopupSaving] = useState(false);
 
   // Helper functions
   function getMonday(date: Date) {
@@ -460,9 +478,54 @@ export function TeacherJournalPage() {
     } catch (e) { console.error(e); }
   }
 
-  // Helper for quick grade
-  // Note: Quick grade in grid is complex (popover?).
-  // For MVP, just click column header to open lesson details modal.
+  // Inline quick grade handler
+  function openGradePopup(e: React.MouseEvent, studentId: string, studentName: string, lesson: { timetable_entry_id: string, date: string }) {
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const cell = gridData?.grades?.[studentId]?.[`${lesson.date}_${lesson.timetable_entry_id}`];
+    const currentGrade = cell?.grades?.[0]?.grade || null;
+    const currentAttendance = cell?.attendance_type || (cell?.present === false ? 'absent' : null);
+    // Position popup near cell, but keep on screen
+    let x = rect.left + rect.width / 2;
+    let y = rect.bottom + 4;
+    if (x + 120 > window.innerWidth) x = window.innerWidth - 130;
+    if (x < 10) x = 10;
+    if (y + 200 > window.innerHeight) y = rect.top - 204;
+    setGradePopup({ studentId, studentName, timetableEntryId: lesson.timetable_entry_id, lessonDate: lesson.date, x, y, currentGrade, currentAttendance });
+  }
+
+  async function quickSaveGrade(grade: number | null, attendanceType?: string) {
+    if (!gradePopup || !token || !selectedClassId) return;
+    setPopupSaving(true);
+    try {
+      const isPresent = attendanceType ? (attendanceType === 'present' || attendanceType === 'duty') : true;
+      await apiSaveLessonGrade(token, selectedClassId, {
+        student_id: gradePopup.studentId,
+        timetable_entry_id: gradePopup.timetableEntryId,
+        lesson_date: gradePopup.lessonDate,
+        grade,
+        present: isPresent,
+        attendance_type: attendanceType || (grade ? 'present' : undefined),
+      });
+      // Update local state optimistically
+      setGradePopup(prev => prev ? { ...prev, currentGrade: grade, currentAttendance: attendanceType || null } : null);
+      await loadGrid();
+    } catch (e) {
+      console.error('Quick grade save failed:', e);
+    } finally {
+      setPopupSaving(false);
+    }
+  }
+
+  function gradeColorClass(grade: number): string {
+    switch (grade) {
+      case 5: return styles.grade5;
+      case 4: return styles.grade4;
+      case 3: return styles.grade3;
+      case 2: return styles.grade2;
+      default: return '';
+    }
+  }
+
 
   const nav: any = [
     { to: "/app/teacher", labelKey: "nav.home" },
@@ -660,8 +723,8 @@ export function TeacherJournalPage() {
                           {filteredLessons.map(l => {
                             const key = `${l.date}_${l.timetable_entry_id}`;
                             const cell = sGrades[key];
-                            const gradesText = cell?.grades?.map(g => g.grade).join(" ") || "";
                             const isCompact = filteredLessons.length > 15;
+                            const gradeVal = cell?.grades?.[0]?.grade;
 
                             let attendanceMark = null;
                             if (cell?.attendance_type) {
@@ -679,23 +742,18 @@ export function TeacherJournalPage() {
                             return (
                               <td
                                 key={key}
-                                className={styles.cellGrade}
-                                onClick={() => openLesson(l)}
+                                className={`${styles.cellGrade} ${styles.cellGradeClickable}`}
+                                onClick={(e) => openGradePopup(e, studentId, s.full_name || '—', l)}
                                 style={{
-                                  cursor: 'pointer',
                                   padding: isCompact ? '4px 2px' : '8px 4px',
                                   fontSize: isCompact ? 11 : 13
                                 }}
                               >
                                 {attendanceMark}
-                                {gradesText && <span style={{
-                                  background: '#eff6ff',
-                                  color: '#1d4ed8',
-                                  padding: isCompact ? '1px 3px' : '2px 6px',
-                                  borderRadius: 4,
+                                {gradeVal && <span className={gradeColorClass(gradeVal)} style={{
                                   marginLeft: attendanceMark ? 2 : 0,
-                                  fontSize: isCompact ? 10 : 12
-                                }}>{gradesText}</span>}
+                                  fontSize: isCompact ? 11 : 13
+                                }}>{gradeVal}</span>}
                               </td>
                             );
                           })}
@@ -749,6 +807,60 @@ export function TeacherJournalPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Inline Grade Popup */}
+        {gradePopup && (
+          <>
+            <div className={styles.gradePopupOverlay} onClick={() => setGradePopup(null)} />
+            <div className={styles.gradePopup} style={{ left: gradePopup.x - 100, top: gradePopup.y }}>
+              <div className={styles.gradePopupTitle}>
+                {gradePopup.studentName} — {new Date(gradePopup.lessonDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+              </div>
+              <div className={styles.gradePopupSection}>
+                <div className={styles.gradePopupSectionLabel}>Оценка / Баа</div>
+                <div className={styles.gradePopupRow}>
+                  {[5, 4, 3, 2].map(g => (
+                    <button
+                      key={g}
+                      className={`${styles.gradeBtn} ${styles[`gradeBtn${g}` as keyof typeof styles]} ${gradePopup.currentGrade === g ? styles.active || '' : ''}`}
+                      style={gradePopup.currentGrade === g ? { background: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626', color: 'white', borderColor: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626' } : {}}
+                      onClick={() => quickSaveGrade(g, 'present')}
+                      disabled={popupSaving}
+                    >{g}</button>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.gradePopupSection}>
+                <div className={styles.gradePopupSectionLabel}>Катышуу / Посещ.</div>
+                <div className={styles.gradePopupRow}>
+                  {[
+                    { value: 'present', label: '✓', color: '#22c55e' },
+                    { value: 'absent', label: 'КЖ', color: '#ef4444' },
+                    { value: 'duty', label: 'К', color: '#f59e0b' },
+                    { value: 'excused', label: 'А', color: '#3b82f6' },
+                    { value: 'sick', label: 'О', color: '#8b5cf6' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      className={styles.attendBtn}
+                      style={{
+                        color: opt.color,
+                        ...(gradePopup.currentAttendance === opt.value ? { background: opt.color, color: 'white', borderColor: opt.color } : {})
+                      }}
+                      onClick={() => quickSaveGrade(null, opt.value)}
+                      disabled={popupSaving}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+              <button
+                className={styles.clearBtn}
+                onClick={() => quickSaveGrade(null, 'present')}
+                disabled={popupSaving}
+              >Тазалоо / Очистить</button>
+            </div>
+          </>
         )}
 
         {/* Lesson Detail Modal */}

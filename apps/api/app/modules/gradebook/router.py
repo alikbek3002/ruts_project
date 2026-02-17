@@ -172,7 +172,7 @@ def lesson_journal_get(
     # Ensure this is the teacher's own lesson
     e_rows = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id,subject,room,start_time,end_time")
+        .select("id,class_id,class_ids,teacher_id,subject,room,start_time,end_time")
         .eq("id", timetable_entry_id)
         .limit(1)
         .execute()
@@ -185,15 +185,22 @@ def lesson_journal_get(
     if entry.get("teacher_id") != user.get("id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Load class roster
-    enr = (
-        sb.table("class_enrollments")
-        .select("legacy_student_id")
-        .eq("class_id", entry.get("class_id"))
-        .execute()
-        .data
-        or []
-    )
+    # Load class roster — support multi-group via class_ids array
+    roster_class_ids = entry.get("class_ids") or []
+    if not roster_class_ids and entry.get("class_id"):
+        roster_class_ids = [entry.get("class_id")]
+    
+    enr = []
+    for cid in roster_class_ids:
+        rows = (
+            sb.table("class_enrollments")
+            .select("legacy_student_id")
+            .eq("class_id", cid)
+            .execute()
+            .data
+            or []
+        )
+        enr.extend(rows)
     student_ids = [r.get("legacy_student_id") for r in enr if r.get("legacy_student_id")]
     if not student_ids:
         return {"lesson": entry, "students": []}
@@ -263,7 +270,7 @@ def lesson_journal_save(
 
     e_rows = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id")
+        .select("id,class_id,class_ids,teacher_id")
         .eq("id", timetable_entry_id)
         .limit(1)
         .execute()
@@ -276,15 +283,22 @@ def lesson_journal_save(
     if entry.get("teacher_id") != user.get("id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Only allow writing for students in this class
-    valid = (
-        sb.table("class_enrollments")
-        .select("legacy_student_id")
-        .eq("class_id", entry.get("class_id"))
-        .execute()
-        .data
-        or []
-    )
+    # Only allow writing for students in any of the entry's classes
+    roster_class_ids = entry.get("class_ids") or []
+    if not roster_class_ids and entry.get("class_id"):
+        roster_class_ids = [entry.get("class_id")]
+    
+    valid = []
+    for cid in roster_class_ids:
+        rows = (
+            sb.table("class_enrollments")
+            .select("legacy_student_id")
+            .eq("class_id", cid)
+            .execute()
+            .data
+            or []
+        )
+        valid.extend(rows)
     valid_ids = {r.get("legacy_student_id") for r in valid if r.get("legacy_student_id")}
 
     upserts = []
@@ -325,11 +339,11 @@ def class_journal_by_dates(
     if not _lesson_journal_supported(sb):
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
-    # Получаем все уроки класса
+    # Получаем все уроки класса (class_ids — массив UUID)
     timetable = (
         sb.table("timetable_entries")
         .select("id,subject,teacher_id")
-        .eq("class_id", class_id)
+        .cs("class_ids", [class_id])
         .execute()
         .data
         or []
@@ -412,11 +426,11 @@ def class_journal_by_subject(
     if not _lesson_journal_supported(sb):
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
-    # Получаем все уроки класса
+    # Получаем все уроки класса (class_ids — массив UUID)
     timetable = (
         sb.table("timetable_entries")
         .select("id,subject,teacher_id")
-        .eq("class_id", class_id)
+        .cs("class_ids", [class_id])
         .execute()
         .data
         or []

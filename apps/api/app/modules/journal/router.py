@@ -105,7 +105,7 @@ def get_class_subjects(class_id: str, user: dict = require_role("teacher", "admi
                     }
     
     # 2. Также добавляем предметы из расписания для этого класса
-    q = sb.table("timetable_entries").select("subject_id,subject,teacher_id").eq("active", True).eq("class_id", class_id)
+    q = sb.table("timetable_entries").select("subject_id,subject,teacher_id").eq("active", True).cs("class_ids", [class_id])
     rows = q.execute().data or []
     
     for r in rows:
@@ -576,11 +576,33 @@ def get_class_journal(
     
     # Генерируем сетку уроков - только до сегодняшнего дня (включительно)
     today = date.today()
-    # Определяем учебный год (с 1 сентября)
-    if today.month >= 9:
-        start_date = date(today.year, 9, 1)
-    else:
-        start_date = date(today.year - 1, 9, 1)
+    
+    # Используем даты потоков для определения начала журнала
+    # Берем самую раннюю дату start из потоков, привязанных к этим урокам
+    start_date = None
+    if streams_map:
+        stream_starts = [s["start"] for s in streams_map.values() if s.get("start")]
+        if stream_starts:
+            start_date = min(stream_starts)
+    
+    # Fallback: если потоков нет, используем самую раннюю дату создания записей расписания
+    if not start_date:
+        for t in timetable:
+            created_at_str = t.get("created_at")
+            if created_at_str:
+                try:
+                    c_date = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
+                    if start_date is None or c_date < start_date:
+                        start_date = c_date
+                except Exception:
+                    pass
+    
+    # Последний fallback: учебный год
+    if not start_date:
+        if today.month >= 9:
+            start_date = date(today.year, 9, 1)
+        else:
+            start_date = date(today.year - 1, 9, 1)
     
     # Показываем уроки только до сегодняшнего дня (не весь учебный год)
     end_date = today
@@ -751,7 +773,7 @@ def add_grade(
     # Проверяем урок
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id,subject_id")
+        .select("id,class_id,class_ids,teacher_id,subject_id")
         .eq("id", payload.timetable_entry_id)
         .limit(1)
         .execute()
@@ -761,7 +783,9 @@ def add_grade(
         raise HTTPException(status_code=404, detail="Lesson not found")
     
     entry_data = entry[0]
-    if entry_data.get("class_id") != class_id:
+    # Support both class_ids array (multi-group) and legacy class_id
+    entry_class_ids = entry_data.get("class_ids") or []
+    if class_id not in entry_class_ids and entry_data.get("class_id") != class_id:
         raise HTTPException(status_code=400, detail="Lesson does not belong to this class")
     
     # Проверяем доступ для учителя
@@ -838,7 +862,7 @@ def delete_grade(grade_id: str, user: dict = require_role("teacher", "admin", "m
         timetable = (
             sb.table("timetable_entries")
             .select("id")
-            .eq("class_id", grade_data.get("class_id"))
+            .cs("class_ids", [grade_data.get("class_id")])
             .eq("teacher_id", user["id"])
             .eq("subject", grade_data.get("subject"))
             .limit(1)
@@ -961,9 +985,8 @@ def update_lesson_info(
     # Проверяем урок
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,teacher_id,subject_id")
+        .select("id,class_id,class_ids,teacher_id,subject_id")
         .eq("id", payload.timetable_entry_id)
-        .eq("class_id", class_id)
         .limit(1)
         .execute()
         .data
@@ -972,6 +995,12 @@ def update_lesson_info(
         raise HTTPException(status_code=404, detail="Lesson not found")
     
     entry_data = entry[0]
+    # Verify lesson belongs to this class (class_ids array or legacy class_id)
+    entry_class_ids = entry_data.get("class_ids") or []
+    if class_id not in entry_class_ids and entry_data.get("class_id") != class_id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    
     
     # Проверяем права
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
@@ -1039,9 +1068,8 @@ def get_lesson_info(
     # Проверяем урок
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,subject,teacher_id,subject_id,subjects(name)")
+        .select("id,class_id,class_ids,subject,teacher_id,subject_id,subjects(name)")
         .eq("id", timetable_entry_id)
-        .eq("class_id", class_id)
         .limit(1)
         .execute()
         .data
@@ -1050,6 +1078,10 @@ def get_lesson_info(
         raise HTTPException(status_code=404, detail="Lesson not found")
     
     entry_data = entry[0]
+    # Verify lesson belongs to this class (class_ids array or legacy class_id)
+    entry_class_ids = entry_data.get("class_ids") or []
+    if class_id not in entry_class_ids and entry_data.get("class_id") != class_id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
     subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
     
     # Проверяем доступ

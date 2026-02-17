@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, X, Video, MapPin, Users } from "lucide-react";
+import { Navigate, useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, X, Video, MapPin, Users, BookOpen } from "lucide-react";
 import {
   apiTeacherLessonJournalGet,
   apiTeacherLessonJournalSave,
@@ -67,6 +67,7 @@ export function TeacherTimetablePage() {
   const user = state.user;
   const token = state.accessToken;
   const can = useMemo(() => !!user && user.role === "teacher" && !!token, [user, token]);
+  const navigate = useNavigate();
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [items, setItems] = useState<WeekTimetableItem[]>([]);
@@ -304,6 +305,21 @@ export function TeacherTimetablePage() {
                               <span>+ Добавить Meet</span>
                             </div>
                           )}
+
+                          {/* Navigate to Full Journal */}
+                          <div
+                            className={styles.zoomBadgeEmpty}
+                            style={{ marginTop: 4, color: '#2563eb' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const classId = (lesson as any).class_id || '';
+                              const subjectId = (lesson as any).subject_id || '';
+                              navigate(`/app/teacher/journal?classId=${classId}&subjectId=${subjectId}`);
+                            }}
+                          >
+                            <BookOpen size={12} />
+                            <span>Журнал</span>
+                          </div>
                         </div>
                       ) : (
                         <div className={styles.emptyCell} />

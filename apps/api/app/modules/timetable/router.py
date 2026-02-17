@@ -446,16 +446,30 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
         # Conflict detection + lecture merge
         # Ensure weekday matches date if date provided
         if data.get("lesson_date"):
-            # lesson_date is a date object from pydantic? No, .model_dump() makes it date obj if defined as date
-            # But Supabase needs string. Pydantic might default to obj.
-            # In validation or manual conversion needed?
-            # Creating: data["lesson_date"] = data["lesson_date"].isoformat()
             d = data["lesson_date"]
             if isinstance(d, str):
                 d = date.fromisoformat(d)
             data["lesson_date"] = d.isoformat()
             weekday = d.weekday() # 0=Mon
             data["weekday"] = weekday
+            
+            # Validate lesson_date is within stream date range
+            if stream_id:
+                stream_data = sb.table("streams").select("start_date,end_date").eq("id", stream_id).limit(1).execute().data
+                if stream_data:
+                    s = stream_data[0]
+                    s_start = date.fromisoformat(s["start_date"]) if s.get("start_date") else None
+                    s_end = date.fromisoformat(s["end_date"]) if s.get("end_date") else None
+                    if s_start and d < s_start:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Дата урока ({d.isoformat()}) раньше начала потока ({s_start.isoformat()}). Нельзя ставить расписание до начала обучения."
+                        )
+                    if s_end and d > s_end:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Дата урока ({d.isoformat()}) позже окончания потока ({s_end.isoformat()})."
+                        )
         else:
              weekday = int(data.get("weekday", 0))
         
