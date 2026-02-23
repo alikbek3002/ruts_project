@@ -38,12 +38,15 @@ def create_class(payload: CreateClassIn, _: dict = require_role("admin", "manage
         cache.delete_pattern("classes_list:*")
         
         return {"class": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=(
-                "Failed to create class. Ensure the base DB schema is applied "
-                "(see supabase/migrations/20251222_000001_mvp.sql) and restart the API."
+                f"Failed to create class: {str(e)}. "
+                "Ensure all DB migrations are applied "
+                "(see supabase/migrations/) and restart the API."
             ),
         )
 
