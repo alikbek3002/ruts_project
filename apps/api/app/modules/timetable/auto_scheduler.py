@@ -20,6 +20,14 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
+# Fixed time slots matching the frontend grid
+FIXED_TIME_SLOTS = [
+    (time(9, 0), time(10, 20)),
+    (time(10, 30), time(11, 50)),
+    (time(12, 0), time(13, 20)),
+    (time(14, 20), time(15, 40)),
+]
+
 
 @dataclass
 class TimeSlot:
@@ -218,51 +226,38 @@ class AutoScheduler:
         return None
     
     def _get_available_slots_for_day(self, class_id: str, weekday: int) -> List[TimeSlot]:
-        """Generate all possible time slots for a given day."""
-        slots = []
-        
-        # Get existing slots for this class on this day (sorted)
-        existing_slots = sorted(
-            [s for s in self.class_slots.get(class_id, []) if s.weekday == weekday],
-            key=lambda s: s.start_time
+        """Generate available time slots for a given day using FIXED_TIME_SLOTS grid."""
+        # Get existing slots for this class on this day
+        existing_slots = set(
+            s for s in self.class_slots.get(class_id, []) if s.weekday == weekday
         )
         
+        # Find which fixed slot indices are already occupied
+        occupied_indices: set[int] = set()
+        for es in existing_slots:
+            for idx, (s_start, s_end) in enumerate(FIXED_TIME_SLOTS):
+                if es.start_time == s_start and es.end_time == s_end:
+                    occupied_indices.add(idx)
+                    break
+        
         # STRICT NO GAPS RULE:
-        # If there are existing lessons, we can ONLY schedule immediately after the last one.
-        # If there are NO lessons, we can schedule at the earliest start time.
+        # Slots must be consecutive from the beginning.
+        # Find the next available slot index.
+        available: List[TimeSlot] = []
         
         if not existing_slots:
-            # No lessons yet, try ALL possible start times for the first lesson
-            # This allows starting later in the day if the morning is blocked
-            current_time = self.constraints.earliest_start
-            while True:
-                end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
-                if end_time > self.constraints.latest_end:
-                    break
-                
-                slots.append(TimeSlot(weekday, current_time, end_time))
-                
-                # Move to next potential slot (assuming standard break or lesson duration)
-                # We step by (lesson + break) to align with standard grid
-                current_time = self._add_minutes(end_time, self.constraints.break_duration_minutes)
+            # No lessons yet — all fixed slots are candidates (try first one first)
+            for s_start, s_end in FIXED_TIME_SLOTS:
+                available.append(TimeSlot(weekday, s_start, s_end))
         else:
-            # Add slot right after last lesson
-            last_slot = existing_slots[-1]
-            
-            # Check if last slot was lunch (special case if needed, but for now just add break)
-            # Assuming break is included or handled.
-            
-            current_time = self._add_minutes(last_slot.end_time, self.constraints.break_duration_minutes)
-            
-            # Special handling for lunch break if needed (e.g. if current_time is lunch time)
-            # For now, simple logic:
-            
-            end_time = self._add_minutes(current_time, self.constraints.lesson_duration_minutes)
-            
-            if end_time <= self.constraints.latest_end:
-                slots.append(TimeSlot(weekday, current_time, end_time))
+            # Find the next consecutive slot after the last occupied one
+            max_occupied_idx = max(occupied_indices) if occupied_indices else -1
+            next_idx = max_occupied_idx + 1
+            if next_idx < len(FIXED_TIME_SLOTS):
+                s_start, s_end = FIXED_TIME_SLOTS[next_idx]
+                available.append(TimeSlot(weekday, s_start, s_end))
         
-        return slots
+        return available
     
     def _can_schedule_at_slot(self, class_id: str, lesson: Lesson, slot: TimeSlot) -> bool:
         """Check if lesson can be scheduled at given slot (no conflicts)."""

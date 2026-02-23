@@ -1534,9 +1534,12 @@ def auto_generate_schedule(
         # 8. Save to database (if not dry_run)
         saved_entries = []
         if not payload.dry_run:
+            # Determine stream_id
+            sid = payload.stream_id or _infer_stream_id_for_class(sb, payload.class_id)
             for scheduled in scheduled_lessons:
                 entry_data = {
                     "class_id": scheduled.class_id,
+                    "class_ids": [scheduled.class_id],
                     "subject_id": scheduled.lesson.subject_id,
                     "subject": scheduled.lesson.subject_name,
                     "teacher_id": scheduled.lesson.teacher_id,
@@ -1547,6 +1550,8 @@ def auto_generate_schedule(
                     "room": scheduled.room,
                     "active": True
                 }
+                if sid:
+                    entry_data["stream_id"] = sid
                 
                 result = sb.table("timetable_entries").insert(entry_data).execute()
                 if result.data:
@@ -1762,9 +1767,12 @@ def auto_generate_from_curriculum(
         # 7. Save to DB
         saved_entries = []
         if not payload.dry_run:
+            # Determine stream_id
+            sid = payload.stream_id or _infer_stream_id_for_class(sb, payload.class_id)
             for sl in scheduled_lessons:
                 entry_data = {
                     "class_id": sl.class_id,
+                    "class_ids": [sl.class_id],
                     "subject_id": sl.lesson.subject_id,
                     "subject": sl.lesson.subject_name,
                     "teacher_id": sl.lesson.teacher_id,
@@ -1775,8 +1783,8 @@ def auto_generate_from_curriculum(
                     "room": sl.room,
                     "active": True,
                 }
-                if payload.stream_id:
-                    entry_data["stream_id"] = payload.stream_id
+                if sid:
+                    entry_data["stream_id"] = sid
                 result = sb.table("timetable_entries").insert(entry_data).execute()
                 if result.data:
                     saved_entries.append(result.data[0])
