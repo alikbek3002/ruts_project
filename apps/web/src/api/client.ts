@@ -940,6 +940,54 @@ export async function apiDuplicateTimetableWeek(token: string, payload: { source
   return apiPost<{ count: number; message: string }>("/timetable/duplicate", payload, token);
 }
 
+export type AutoGenerateFromCurriculumPayload = {
+  class_id: string;
+  stream_id?: string;
+  weeks?: number;
+  max_lessons_per_day?: number;
+  min_lessons_per_day?: number;
+  working_days?: number[];
+  earliest_start_time?: string;
+  latest_end_time?: string;
+  lesson_duration_minutes?: number;
+  break_duration_minutes?: number;
+  clear_existing?: boolean;
+  dry_run?: boolean;
+};
+
+export type AutoGenerateFromCurriculumResult = {
+  success: boolean;
+  class_id: string;
+  class_name?: string;
+  direction_id: string;
+  weeks: number;
+  dry_run: boolean;
+  lessons_scheduled: number;
+  quality_metrics: {
+    balance_score: number;
+    gap_score: number;
+    load_score: number;
+    overall: number;
+  };
+  curriculum_details: Array<{
+    subject_id: string;
+    subject_name: string;
+    teacher_id: string | null;
+    lecture_hours: number;
+    seminar_hours: number;
+    practical_hours: number;
+    lecture_per_week: number;
+    seminar_per_week: number;
+    practical_per_week: number;
+    total_lessons_per_week: number;
+  }>;
+  schedule: any[];
+};
+
+export async function apiAutoGenerateFromCurriculum(token: string, payload: AutoGenerateFromCurriculumPayload) {
+  return apiPost<AutoGenerateFromCurriculumResult>("/timetable/auto-generate-from-curriculum", payload, token);
+}
+
 export type WeekTimetableItem = {
   id: string;
   class_id: string;

@@ -22,7 +22,8 @@ from .auto_scheduler import (
     ScheduleConflictError,
     calculate_schedule_quality,
     ScheduledLesson,
-    TimeSlot
+    TimeSlot,
+    build_lessons_from_curriculum,
 )
 
 from io import BytesIO
@@ -1606,6 +1607,216 @@ def auto_generate_schedule(
             pass
         
         raise HTTPException(status_code=500, detail=f"Failed to generate schedule: {str(e)}")
+
+
+# ============================================================================
+# AUTO-GENERATE FROM CURRICULUM PLAN
+# ============================================================================
+
+
+class AutoGenerateFromCurriculumRequest(BaseModel):
+    """Request to auto-generate schedule from curriculum plan (учебный план)."""
+    class_id: str
+    stream_id: Optional[str] = None
+    weeks: int = Field(default=12, ge=1, le=52, description="Number of study weeks")
+    
+    # Optional constraints
+    max_lessons_per_day: Optional[int] = Field(None, ge=1, le=8)
+    min_lessons_per_day: Optional[int] = Field(None, ge=1, le=8)
+    working_days: Optional[List[int]] = Field(None, description="Weekday numbers (0=Mon..6=Sun)")
+    earliest_start_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    latest_end_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    lesson_duration_minutes: Optional[int] = Field(None, ge=30, le=180)
+    break_duration_minutes: Optional[int] = Field(None, ge=0, le=60)
+    
+    clear_existing: bool = Field(False, description="Clear existing schedule before generating")
+    dry_run: bool = Field(False, description="Only preview, don't save to database")
+
+
+@router.post("/auto-generate-from-curriculum")
+def auto_generate_from_curriculum(
+    payload: AutoGenerateFromCurriculumRequest,
+    _: dict = require_role("admin", "manager"),
+):
+    """
+    Авторасписание из учебного плана (curriculum_plan).
+
+    Алгоритм:
+    1. Получить direction_id из class.direction_id
+    2. Загрузить curriculum_plan для этого направления
+    3. Конвертировать часы (л/з, с/з, пр/з) в кол-во пар в неделю
+    4. Определить учителей через циклы (subject → cycle → teacher_cycles)
+    5. Равномерно чередовать виды занятий (round-robin)
+    6. Запустить AutoScheduler для генерации расписания
+    7. Сохранить в timetable_entries
+    """
+    sb = get_supabase()
+
+    try:
+        # 1. Load class and get direction_id
+        class_resp = sb.table("classes").select("id,name,direction_id").eq("id", payload.class_id).limit(1).execute()
+        if not class_resp.data:
+            raise HTTPException(status_code=404, detail="Взвод не найден")
+        class_data = class_resp.data[0]
+        direction_id = class_data.get("direction_id")
+        if not direction_id:
+            raise HTTPException(
+                status_code=400,
+                detail="У взвода не указано направление (direction_id). "
+                       "Назначьте направление перед генерацией расписания.",
+            )
+
+        # 2. Build lessons from curriculum plan
+        lessons, curriculum_details = build_lessons_from_curriculum(
+            sb,
+            direction_id=direction_id,
+            weeks=payload.weeks,
+            lesson_duration_hours=(payload.lesson_duration_minutes or 90) / 60,
+        )
+
+        if not lessons:
+            raise HTTPException(
+                status_code=400,
+                detail="Учебный план пуст для данного направления. "
+                       "Заполните учебный план (curriculum_plan) прежде чем генерировать расписание.",
+            )
+
+        logger.info(
+            f"Generating curriculum-based schedule for class {payload.class_id} "
+            f"({class_data.get('name')}): {len(lessons)} lessons from {len(curriculum_details)} subjects"
+        )
+
+        # 3. Build constraints
+        constraints = ScheduleConstraints(
+            max_lessons_per_day=payload.max_lessons_per_day or 4,
+            min_lessons_per_day=payload.min_lessons_per_day or 3,
+            allow_gaps=False,
+            working_days=payload.working_days or [0, 1, 2, 3, 4],
+            earliest_start=dt_time.fromisoformat(payload.earliest_start_time) if payload.earliest_start_time else dt_time(9, 0),
+            latest_end=dt_time.fromisoformat(payload.latest_end_time) if payload.latest_end_time else dt_time(18, 0),
+            lesson_duration_minutes=payload.lesson_duration_minutes or 90,
+            break_duration_minutes=payload.break_duration_minutes or 15,
+        )
+
+        # 4. Clear existing schedule if requested
+        if payload.clear_existing and not payload.dry_run:
+            sb.table("timetable_entries").update({"active": False}).eq("class_id", payload.class_id).execute()
+            logger.info(f"Cleared existing schedule for class {payload.class_id}")
+
+        # 5. Run AutoScheduler
+        scheduler = AutoScheduler(constraints)
+
+        # Load context from other classes to prevent conflicts
+        try:
+            other_entries = (
+                sb.table("timetable_entries")
+                .select("*")
+                .eq("active", True)
+                .neq("class_id", payload.class_id)
+                .execute()
+            )
+            if other_entries.data:
+                context_lessons = []
+                for entry in other_entries.data:
+                    try:
+                        start_t = dt_time.fromisoformat(str(entry["start_time"]))
+                        end_t = dt_time.fromisoformat(str(entry["end_time"]))
+                        context_lessons.append(ScheduledLesson(
+                            lesson=Lesson(
+                                subject_id=entry.get("subject_id", "unknown"),
+                                subject_name=entry.get("subject", "Unknown"),
+                                lesson_type=entry.get("lesson_type", "lecture"),
+                                teacher_id=entry.get("teacher_id"),
+                                preferred_room=entry.get("room"),
+                            ),
+                            time_slot=TimeSlot(
+                                weekday=entry["weekday"],
+                                start_time=start_t,
+                                end_time=end_t,
+                            ),
+                            class_id=entry["class_id"],
+                            room=entry.get("room"),
+                        ))
+                    except Exception:
+                        continue
+                if context_lessons:
+                    scheduler.load_context(context_lessons)
+                    logger.info(f"Loaded {len(context_lessons)} context lessons from other classes")
+        except Exception as e:
+            logger.warning(f"Could not load context schedule: {e}")
+
+        try:
+            scheduled_lessons = scheduler.generate_schedule(
+                class_id=payload.class_id,
+                lessons=lessons,
+            )
+        except ScheduleConflictError as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Конфликт при генерации расписания: {str(e)}",
+            )
+
+        # 6. Quality metrics
+        quality = calculate_schedule_quality(scheduled_lessons, constraints)
+
+        # 7. Save to DB
+        saved_entries = []
+        if not payload.dry_run:
+            for sl in scheduled_lessons:
+                entry_data = {
+                    "class_id": sl.class_id,
+                    "subject_id": sl.lesson.subject_id,
+                    "subject": sl.lesson.subject_name,
+                    "teacher_id": sl.lesson.teacher_id,
+                    "lesson_type": sl.lesson.lesson_type,
+                    "weekday": sl.time_slot.weekday,
+                    "start_time": sl.time_slot.start_time.strftime("%H:%M"),
+                    "end_time": sl.time_slot.end_time.strftime("%H:%M"),
+                    "room": sl.room,
+                    "active": True,
+                }
+                if payload.stream_id:
+                    entry_data["stream_id"] = payload.stream_id
+                result = sb.table("timetable_entries").insert(entry_data).execute()
+                if result.data:
+                    saved_entries.append(result.data[0])
+            logger.info(f"Saved {len(saved_entries)} lessons to database")
+
+        # 8. Build response
+        schedule_preview = [
+            {
+                "subject": sl.lesson.subject_name,
+                "lesson_type": sl.lesson.lesson_type,
+                "weekday": sl.time_slot.weekday,
+                "start_time": sl.time_slot.start_time.strftime("%H:%M"),
+                "end_time": sl.time_slot.end_time.strftime("%H:%M"),
+                "teacher_id": sl.lesson.teacher_id,
+                "room": sl.room,
+            }
+            for sl in scheduled_lessons
+        ]
+
+        return {
+            "success": True,
+            "class_id": payload.class_id,
+            "class_name": class_data.get("name"),
+            "direction_id": direction_id,
+            "weeks": payload.weeks,
+            "dry_run": payload.dry_run,
+            "lessons_scheduled": len(scheduled_lessons),
+            "quality_metrics": quality,
+            "curriculum_details": curriculum_details,
+            "schedule": schedule_preview if payload.dry_run else saved_entries,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in auto-generate-from-curriculum: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка генерации расписания: {str(e)}",
+        )
 
 
 @router.post("/subject-lesson-plans")

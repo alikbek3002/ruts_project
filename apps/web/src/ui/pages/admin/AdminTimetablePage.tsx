@@ -20,6 +20,8 @@ import {
   type WeekTimetableItem,
   apiDuplicateTimetableWeek,
   apiGetCycleDetail,
+  apiAutoGenerateFromCurriculum,
+  type AutoGenerateFromCurriculumResult,
 } from "../../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -27,7 +29,7 @@ import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
 import styles from "./AdminTimetable.module.css";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar, Video, ExternalLink, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save, Calendar, Video, ExternalLink, Copy, Zap } from "lucide-react";
 
 const timeSlots = [
   { slot: 1, start: "09:00", end: "10:20" },
@@ -218,6 +220,14 @@ export function AdminTimetablePage() {
 
   // Teachers filtered by subject's cycle
   const [cycleTeachers, setCycleTeachers] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Auto-schedule modal state
+  const [autoModalOpen, setAutoModalOpen] = useState(false);
+  const [autoWeeks, setAutoWeeks] = useState(12);
+  const [autoClearExisting, setAutoClearExisting] = useState(false);
+  const [autoDryRun, setAutoDryRun] = useState(true);
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [autoResult, setAutoResult] = useState<AutoGenerateFromCurriculumResult | null>(null);
 
   const weekDays = useMemo(() => {
     // Admin timetable grid: Mon-Sat (6 days)
@@ -606,6 +616,18 @@ export function AdminTimetablePage() {
             >
               <Copy size={16} />
               Дублировать на след. неделю
+            </button>
+            <button
+              className={styles.secondaryBtn}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff" }}
+              onClick={() => {
+                setAutoResult(null);
+                setAutoDryRun(true);
+                setAutoModalOpen(true);
+              }}
+            >
+              <Zap size={16} />
+              Авторасписание
             </button>
           </div>
         )}
@@ -996,6 +1018,181 @@ export function AdminTimetablePage() {
           </div>
         )
       }
-    </AppShell >
+
+      {/* Auto-schedule modal */}
+      {autoModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => { if (!autoLoading) setAutoModalOpen(false); }}>
+          <div className={styles.modal} style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalTitle}>
+              <Zap size={18} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />
+              Авторасписание из учебного плана
+            </div>
+
+            {!autoResult ? (
+              <>
+                <p style={{ margin: "8px 0 16px", color: "var(--color-text-secondary)", fontSize: 14 }}>
+                  Расписание будет сгенерировано на основе учебного плана направления, назначенного этому взводу.
+                  Учителя будут назначены автоматически через циклы.
+                </p>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Кол-во учебных недель</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={autoWeeks}
+                    onChange={(e) => setAutoWeeks(Number(e.target.value) || 12)}
+                    className={styles.select}
+                    style={{ width: 100 }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "12px 0" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <input
+                      type="checkbox"
+                      checked={autoClearExisting}
+                      onChange={(e) => setAutoClearExisting(e.target.checked)}
+                    />
+                    Очистить существующее расписание
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <input
+                      type="checkbox"
+                      checked={autoDryRun}
+                      onChange={(e) => setAutoDryRun(e.target.checked)}
+                    />
+                    Только предпросмотр (не сохранять)
+                  </label>
+                </div>
+
+                <div className={styles.modalActions}>
+                  <button
+                    className="secondary"
+                    onClick={() => setAutoModalOpen(false)}
+                    disabled={autoLoading}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    className="primary"
+                    disabled={autoLoading || !classId}
+                    onClick={async () => {
+                      if (!token || !classId) return;
+                      setAutoLoading(true);
+                      setErr(null);
+                      try {
+                        const res = await apiAutoGenerateFromCurriculum(token, {
+                          class_id: classId,
+                          stream_id: selectedStreamId || undefined,
+                          weeks: autoWeeks,
+                          clear_existing: autoClearExisting,
+                          dry_run: autoDryRun,
+                        });
+                        setAutoResult(res);
+                        if (!autoDryRun) {
+                          const start = ymd(weekStart);
+                          const end = ymd(addDays(weekStart, 6));
+                          const e = await apiListTimetableEntries(token, classId, start, end);
+                          setEntries(e.entries);
+                        }
+                      } catch (e) {
+                        setErr(toUiError(e));
+                      } finally {
+                        setAutoLoading(false);
+                      }
+                    }}
+                  >
+                    {autoLoading ? "Генерация..." : autoDryRun ? "Предпросмотр" : "Сгенерировать"}
+                  </button>
+                </div>
+
+                {err && (
+                  <div style={{ marginTop: 12, color: "var(--color-error)" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{err.title}</div>
+                    {renderUiErrorBody(err)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ background: autoResult.success ? "#10b98120" : "#ef444420", padding: 12, borderRadius: 8, margin: "12px 0" }}>
+                  <div style={{ fontWeight: 700, color: autoResult.success ? "#10b981" : "#ef4444", marginBottom: 4 }}>
+                    {autoResult.success ? `✅ Сгенерировано ${autoResult.lessons_scheduled} пар` : "❌ Ошибка генерации"}
+                  </div>
+                  {autoResult.dry_run && (
+                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Предпросмотр — данные не сохранены</div>
+                  )}
+                </div>
+
+                {autoResult.quality_metrics && (
+                  <div style={{ fontSize: 13, margin: "8px 0", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <span>Баланс: <b>{Math.round(autoResult.quality_metrics.balance_score * 100)}%</b></span>
+                    <span>Нагрузка: <b>{Math.round(autoResult.quality_metrics.load_score * 100)}%</b></span>
+                    <span>Общее: <b>{Math.round(autoResult.quality_metrics.overall * 100)}%</b></span>
+                  </div>
+                )}
+
+                {autoResult.curriculum_details && autoResult.curriculum_details.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Предметы:</div>
+                    <div style={{ maxHeight: 200, overflowY: "auto", fontSize: 13 }}>
+                      {autoResult.curriculum_details.map((d, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--color-border)" }}>
+                          <span>{d.subject_name}</span>
+                          <span style={{ whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>
+                            {d.lecture_per_week > 0 && `л:${d.lecture_per_week}`}
+                            {d.seminar_per_week > 0 && ` с:${d.seminar_per_week}`}
+                            {d.practical_per_week > 0 && ` пр:${d.practical_per_week}`}
+                            {" = "}{d.total_lessons_per_week} пар/нед
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className={styles.modalActions} style={{ marginTop: 16 }}>
+                  <button className="secondary" onClick={() => setAutoResult(null)}>Назад</button>
+                  {autoResult.dry_run && autoResult.success && (
+                    <button
+                      className="primary"
+                      disabled={autoLoading}
+                      onClick={async () => {
+                        if (!token || !classId) return;
+                        setAutoLoading(true);
+                        try {
+                          const res = await apiAutoGenerateFromCurriculum(token, {
+                            class_id: classId,
+                            stream_id: selectedStreamId || undefined,
+                            weeks: autoWeeks,
+                            clear_existing: autoClearExisting,
+                            dry_run: false,
+                          });
+                          setAutoResult(res);
+                          const start = ymd(weekStart);
+                          const end = ymd(addDays(weekStart, 6));
+                          const e = await apiListTimetableEntries(token, classId, start, end);
+                          setEntries(e.entries);
+                        } catch (e) {
+                          setErr(toUiError(e));
+                        } finally {
+                          setAutoLoading(false);
+                        }
+                      }}
+                    >
+                      {autoLoading ? "Сохранение..." : "💾 Сохранить расписание"}
+                    </button>
+                  )}
+                  <button className="secondary" onClick={() => setAutoModalOpen(false)}>Закрыть</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+    </AppShell>
   );
 }

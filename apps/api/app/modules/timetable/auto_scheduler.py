@@ -516,3 +516,263 @@ def calculate_schedule_quality(scheduled: List[ScheduledLesson], constraints: Sc
         'load_score': round(load_score, 3),
         'overall': round(overall, 3)
     }
+
+
+# ============================================================================
+# CURRICULUM-BASED LESSON GENERATION
+# ============================================================================
+
+
+def _find_teacher_via_cycle(
+    sb,
+    subject_id: str,
+    teacher_load: Dict[str, int],
+) -> Optional[str]:
+    """
+    Find most available teacher for a subject via cycle system.
+    
+    Chain: subject.cycle_id → teacher_cycles → pick least loaded teacher.
+    
+    Args:
+        sb: Supabase client
+        subject_id: Subject ID to find teacher for
+        teacher_load: Dict of teacher_id → current assigned lesson count
+    
+    Returns:
+        teacher_id or None
+    """
+    try:
+        # 1. Get subject's cycle_id
+        subj_resp = sb.table("subjects").select("cycle_id").eq("id", subject_id).limit(1).execute()
+        if not subj_resp.data:
+            return None
+        cycle_id = subj_resp.data[0].get("cycle_id")
+        if not cycle_id:
+            return None
+
+        # 2. Get all teachers assigned to this cycle
+        links = (
+            sb.table("teacher_cycles")
+            .select("teacher_id")
+            .eq("cycle_id", cycle_id)
+            .execute()
+            .data or []
+        )
+        teacher_ids = [r["teacher_id"] for r in links if r.get("teacher_id")]
+        if not teacher_ids:
+            return None
+
+        # 3. Filter only active teachers
+        active_teachers = (
+            sb.table("users")
+            .select("id")
+            .in_("id", teacher_ids)
+            .eq("role", "teacher")
+            .eq("is_active", True)
+            .execute()
+            .data or []
+        )
+        active_ids = [t["id"] for t in active_teachers]
+        if not active_ids:
+            return None
+
+        # 4. Pick least loaded teacher
+        return min(active_ids, key=lambda tid: teacher_load.get(tid, 0))
+
+    except Exception as e:
+        logger.warning(f"Failed to find teacher via cycle for subject {subject_id}: {e}")
+        return None
+
+
+def _interleave_lesson_types(
+    subject_id: str,
+    subject_name: str,
+    teacher_id: Optional[str],
+    lecture_count: int,
+    seminar_count: int,
+    practical_count: int,
+) -> List[Lesson]:
+    """
+    Distribute lesson types evenly using round-robin.
+    
+    Example: lecture=3, seminar=2, practical=1 →
+        [lecture, seminar, practical, lecture, seminar, lecture]
+    
+    This ensures types alternate rather than cluster.
+    """
+    # Build pools by type
+    pools: List[tuple] = []
+    if lecture_count > 0:
+        pools.append(("lecture", lecture_count))
+    if seminar_count > 0:
+        pools.append(("seminar", seminar_count))
+    if practical_count > 0:
+        pools.append(("practical", practical_count))
+
+    if not pools:
+        return []
+
+    # Round-robin interleaving
+    remaining = {lt: count for lt, count in pools}
+    lessons: List[Lesson] = []
+    type_order = [lt for lt, _ in pools]  # preserve original order
+
+    while any(remaining.get(lt, 0) > 0 for lt in type_order):
+        for lt in type_order:
+            if remaining.get(lt, 0) > 0:
+                lessons.append(Lesson(
+                    subject_id=subject_id,
+                    subject_name=subject_name,
+                    lesson_type=lt,
+                    teacher_id=teacher_id,
+                ))
+                remaining[lt] -= 1
+
+    return lessons
+
+
+import math
+
+
+def build_lessons_from_curriculum(
+    sb,
+    direction_id: str,
+    weeks: int = 12,
+    lesson_duration_hours: float = 1.5,
+) -> tuple[List[Lesson], list[dict]]:
+    """
+    Build lesson list from curriculum_plan for a direction.
+    
+    Reads curriculum_plan → converts hours to weekly lesson counts →
+    resolves teachers via cycles → interleaves lesson types evenly.
+    
+    Args:
+        sb: Supabase client
+        direction_id: Direction ID to load curriculum for
+        weeks: Number of study weeks (default 12)
+        lesson_duration_hours: Duration of one lesson in hours (default 1.5)
+    
+    Returns:
+        Tuple of (lessons list, details list for reporting)
+    """
+    # 1. Load curriculum plan for direction
+    resp = (
+        sb.table("curriculum_plan")
+        .select("*, subjects(id,name,cycle_id)")
+        .eq("direction_id", direction_id)
+        .execute()
+    )
+    items = resp.data or []
+
+    if not items:
+        return [], []
+
+    # 2. Track teacher load for balanced assignment
+    teacher_load: Dict[str, int] = {}
+
+    # Pre-load existing timetable teacher loads
+    try:
+        all_entries = (
+            sb.table("timetable_entries")
+            .select("teacher_id")
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        for entry in all_entries:
+            tid = entry.get("teacher_id")
+            if tid:
+                teacher_load[tid] = teacher_load.get(tid, 0) + 1
+    except Exception:
+        pass
+
+    # 3. Process each curriculum item
+    all_lessons: List[Lesson] = []
+    details: list[dict] = []
+
+    for item in items:
+        subject_data = item.get("subjects") or {}
+        subject_id = item.get("subject_id", "")
+        subject_name = subject_data.get("name") or "???"
+
+        # Get hours
+        lecture_hours = float(item.get("lecture_hours", 0) or 0)
+        seminar_hours = float(item.get("seminar_hours", 0) or 0)
+        practical_hours = float(item.get("practical_hours", 0) or 0)
+
+        total_type_hours = lecture_hours + seminar_hours + practical_hours
+        if total_type_hours <= 0:
+            continue
+
+        # Convert hours to WEEKLY lesson counts
+        # Formula: lessons_per_week = hours / lesson_duration / weeks, rounded up
+        lecture_per_week = math.ceil(lecture_hours / lesson_duration_hours / weeks) if lecture_hours > 0 else 0
+        seminar_per_week = math.ceil(seminar_hours / lesson_duration_hours / weeks) if seminar_hours > 0 else 0
+        practical_per_week = math.ceil(practical_hours / lesson_duration_hours / weeks) if practical_hours > 0 else 0
+
+        # Ensure at least 1 lesson per week if hours are specified
+        total_per_week = lecture_per_week + seminar_per_week + practical_per_week
+        if total_per_week == 0 and total_type_hours > 0:
+            # Distribute 1 lesson to the type with most hours
+            if lecture_hours >= seminar_hours and lecture_hours >= practical_hours:
+                lecture_per_week = 1
+            elif seminar_hours >= practical_hours:
+                seminar_per_week = 1
+            else:
+                practical_per_week = 1
+
+        # Find teacher via cycle system
+        teacher_id = _find_teacher_via_cycle(sb, subject_id, teacher_load)
+
+        # Fallback: try teacher_subjects table
+        if not teacher_id:
+            try:
+                ts_rows = (
+                    sb.table("teacher_subjects")
+                    .select("teacher_id")
+                    .eq("subject_id", subject_id)
+                    .limit(1)
+                    .execute()
+                    .data or []
+                )
+                if ts_rows:
+                    teacher_id = ts_rows[0].get("teacher_id")
+            except Exception:
+                pass
+
+        # Update teacher load tracking
+        total_lessons = lecture_per_week + seminar_per_week + practical_per_week
+        if teacher_id:
+            teacher_load[teacher_id] = teacher_load.get(teacher_id, 0) + total_lessons
+
+        # Build interleaved lesson list for this subject
+        subject_lessons = _interleave_lesson_types(
+            subject_id=subject_id,
+            subject_name=subject_name,
+            teacher_id=teacher_id,
+            lecture_count=lecture_per_week,
+            seminar_count=seminar_per_week,
+            practical_count=practical_per_week,
+        )
+
+        all_lessons.extend(subject_lessons)
+
+        details.append({
+            "subject_id": subject_id,
+            "subject_name": subject_name,
+            "teacher_id": teacher_id,
+            "lecture_hours": lecture_hours,
+            "seminar_hours": seminar_hours,
+            "practical_hours": practical_hours,
+            "lecture_per_week": lecture_per_week,
+            "seminar_per_week": seminar_per_week,
+            "practical_per_week": practical_per_week,
+            "total_lessons_per_week": total_lessons,
+        })
+
+    logger.info(
+        f"Built {len(all_lessons)} weekly lessons from curriculum "
+        f"(direction={direction_id}, {len(details)} subjects, {weeks} weeks)"
+    )
+
+    return all_lessons, details
