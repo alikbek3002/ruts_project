@@ -4,6 +4,7 @@ import {
   apiAdminListUsers,
   apiCreateTimetableEntry,
   apiDeleteTimetableEntry,
+  apiBulkDeleteTimetableEntries,
   apiListClasses,
   apiListTimetableEntries,
   apiListTimetableRooms,
@@ -628,6 +629,31 @@ export function AdminTimetablePage() {
             >
               <Zap size={16} />
               Авторасписание
+            </button>
+            <button
+              className={styles.secondaryBtn}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff" }}
+              onClick={async () => {
+                if (!token || !classId) return;
+                const className = (selectedStreamId ? streamClasses : allClasses).find(c => c.id === classId)?.name || classId;
+                if (!window.confirm(`Вы уверены, что хотите удалить ВСЁ расписание для группы "${className}"?\n\nЭто действие нельзя отменить!`)) return;
+                setLoading(true);
+                try {
+                  const res = await apiBulkDeleteTimetableEntries(token, classId, selectedStreamId || undefined);
+                  alert(res.message);
+                  const start = ymd(weekStart);
+                  const end = ymd(addDays(weekStart, 6));
+                  const e = await apiListTimetableEntries(token, classId, start, end);
+                  setEntries(e.entries);
+                } catch (e) {
+                  setErr(toUiError(e));
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <Trash2 size={16} />
+              Удалить всё расписание
             </button>
           </div>
         )}

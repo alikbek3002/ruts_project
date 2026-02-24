@@ -923,6 +923,15 @@ export async function apiDeleteTimetableEntry(token: string, entryId: string) {
   });
 }
 
+export async function apiBulkDeleteTimetableEntries(token: string, classId: string, streamId?: string) {
+  const params = new URLSearchParams({ class_id: classId });
+  if (streamId) params.set("stream_id", streamId);
+  return http<{ ok: boolean; deleted: number; message: string }>(`/timetable/entries/bulk-delete?${params.toString()}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function apiListTimetableEntries(token: string, classId?: string, startDate?: string, endDate?: string) {
   const params = new URLSearchParams();
   if (classId) params.set("class_id", classId);

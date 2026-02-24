@@ -792,6 +792,42 @@ def delete_entry(entry_id: str, _: dict = require_role("admin", "manager")):
         raise HTTPException(status_code=500, detail="Failed to delete timetable entry")
 
 
+@router.delete("/entries/bulk-delete")
+def bulk_delete_entries(
+    class_id: str,
+    stream_id: str | None = None,
+    _: dict = require_role("admin", "manager"),
+):
+    """Soft-delete ALL active timetable entries for a given class (and optionally stream)."""
+    sb = get_supabase()
+    try:
+        q = sb.table("timetable_entries").update({"active": False}).eq("active", True)
+
+        # Filter by class: entries where class_id matches OR class_ids array contains the id
+        # Since Supabase doesn't easily support OR across columns in a single update,
+        # we do two passes.
+
+        # Pass 1 – entries matched by class_id column
+        r1 = q.eq("class_id", class_id)
+        if stream_id:
+            r1 = r1.eq("stream_id", stream_id)
+        resp1 = r1.execute()
+        count1 = len(resp1.data) if isinstance(resp1.data, list) else 0
+
+        # Pass 2 – entries matched by class_ids array containing this class
+        q2 = sb.table("timetable_entries").update({"active": False}).eq("active", True)
+        q2 = q2.contains("class_ids", [class_id])
+        if stream_id:
+            q2 = q2.eq("stream_id", stream_id)
+        resp2 = q2.execute()
+        count2 = len(resp2.data) if isinstance(resp2.data, list) else 0
+
+        total = count1 + count2
+        return {"ok": True, "deleted": total, "message": f"Удалено записей: {total}"}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Не удалось удалить записи расписания")
+
+
 @router.get("/rooms")
 def list_rooms(_: dict = require_role("admin", "manager", "teacher")):
     return {"rooms": FIXED_ROOMS}
