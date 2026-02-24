@@ -6,6 +6,7 @@ from fastapi import Cookie, Depends, HTTPException, Request
 from jose import JWTError, jwt
 
 from app.core.settings import settings
+from app.core.cache import cache
 from app.db.supabase_client import get_supabase
 
 
@@ -39,12 +40,20 @@ def get_current_user(request: Request) -> dict:
     except JWTError:
         raise HTTPException(status_code=401, detail="Неверный токен")
 
+    # Check cache first (avoids DB hit on every API call)
+    cache_key = f"auth_user:{user_id}"
+    cached_user = cache.get(cache_key)
+    if cached_user is not None:
+        return cached_user
+
     sb = get_supabase()
     resp = sb.table("users").select("*").eq("id", user_id).limit(1).execute()
     rows = resp.data or []
     user = rows[0] if isinstance(rows, list) and rows else None
     if not user or not user.get("is_active", True):
         raise HTTPException(status_code=401, detail="Пользователь отключен")
+    
+    cache.set(cache_key, user, ttl=30)
     return user
 
 

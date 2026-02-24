@@ -51,6 +51,14 @@ def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "t
 
     Нужен для админ-страницы "Предметы", чтобы отображать учителей на карточках.
     """
+    from app.core.cache import cache
+    role = user.get("role", "")
+    uid = user.get("id", "") if role == "teacher" else ""
+    cache_key = f"subjects_with_teachers:{role}:{uid}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     sb = get_supabase()
 
     subjects = sb.table("subjects").select("*").is_("archived_at", "null").order("name").execute().data or []
@@ -144,7 +152,9 @@ def list_subjects_with_teachers(user: dict = require_role("admin", "manager", "t
         sid = str(s.get("id")) if s.get("id") else ""
         enriched.append({**s, "teachers": teachers_for_subject.get(sid, [])})
 
-    return {"subjects": enriched}
+    result = {"subjects": enriched}
+    cache.set(cache_key, result, ttl=60)
+    return result
 
 
 @router.post("/subjects")

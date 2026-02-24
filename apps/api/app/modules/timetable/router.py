@@ -579,6 +579,9 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
              )
 
         resp = sb.table("timetable_entries").insert(data).execute()
+        from app.core.cache import cache
+        cache.delete_pattern("timetable_entries:*")
+        cache.delete_pattern("timetable_week:*")
         return {"entry": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
     except HTTPException:
         raise
@@ -763,6 +766,9 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         row = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
         if not row:
             raise HTTPException(status_code=404, detail="Entry not found")
+        from app.core.cache import cache
+        cache.delete_pattern("timetable_entries:*")
+        cache.delete_pattern("timetable_week:*")
         return {"entry": row}
     except HTTPException:
         raise
@@ -777,21 +783,6 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         )
 
 
-@router.delete("/entries/{entry_id}")
-def delete_entry(entry_id: str, _: dict = require_role("admin", "manager")):
-    sb = get_supabase()
-    try:
-        resp = sb.table("timetable_entries").update({"active": False}).eq("id", entry_id).execute()
-        row = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
-        if not row:
-            raise HTTPException(status_code=404, detail="Entry not found")
-        return {"ok": True}
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to delete timetable entry")
-
-
 @router.delete("/entries/bulk-delete")
 def bulk_delete_entries(
     class_id: str,
@@ -801,31 +792,45 @@ def bulk_delete_entries(
     """Soft-delete ALL active timetable entries for a given class (and optionally stream)."""
     sb = get_supabase()
     try:
-        q = sb.table("timetable_entries").update({"active": False}).eq("active", True)
-
-        # Filter by class: entries where class_id matches OR class_ids array contains the id
-        # Since Supabase doesn't easily support OR across columns in a single update,
-        # we do two passes.
-
         # Pass 1 – entries matched by class_id column
-        r1 = q.eq("class_id", class_id)
+        q1 = sb.table("timetable_entries").update({"active": False}).eq("active", True).eq("class_id", class_id)
         if stream_id:
-            r1 = r1.eq("stream_id", stream_id)
-        resp1 = r1.execute()
+            q1 = q1.eq("stream_id", stream_id)
+        resp1 = q1.execute()
         count1 = len(resp1.data) if isinstance(resp1.data, list) else 0
 
         # Pass 2 – entries matched by class_ids array containing this class
-        q2 = sb.table("timetable_entries").update({"active": False}).eq("active", True)
-        q2 = q2.contains("class_ids", [class_id])
+        q2 = sb.table("timetable_entries").update({"active": False}).eq("active", True).contains("class_ids", [class_id])
         if stream_id:
             q2 = q2.eq("stream_id", stream_id)
         resp2 = q2.execute()
         count2 = len(resp2.data) if isinstance(resp2.data, list) else 0
 
         total = count1 + count2
+        from app.core.cache import cache
+        cache.delete_pattern("timetable_entries:*")
+        cache.delete_pattern("timetable_week:*")
         return {"ok": True, "deleted": total, "message": f"Удалено записей: {total}"}
     except Exception:
         raise HTTPException(status_code=500, detail="Не удалось удалить записи расписания")
+
+
+@router.delete("/entries/{entry_id}")
+def delete_entry(entry_id: str, _: dict = require_role("admin", "manager")):
+    sb = get_supabase()
+    try:
+        resp = sb.table("timetable_entries").update({"active": False}).eq("id", entry_id).execute()
+        row = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
+        if not row:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        from app.core.cache import cache
+        cache.delete_pattern("timetable_entries:*")
+        cache.delete_pattern("timetable_week:*")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete timetable entry")
 
 
 @router.get("/rooms")
@@ -840,6 +845,12 @@ def list_entries(
     end_date: date | None = None,
     user: dict = require_role("admin", "manager", "teacher")
 ):
+    from app.core.cache import cache
+    cache_key = f"timetable_entries:{class_id or 'all'}:{start_date}:{end_date}:{user['role']}:{user.get('id','')}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     sb = get_supabase()
     q = sb.table("timetable_entries").select("*").eq("active", True)
     if user["role"] == "teacher":
@@ -847,17 +858,6 @@ def list_entries(
         
     # Date filtering
     if start_date and end_date:
-        # Show:
-        # 1. Recurring keys (lesson_date IS NULL) -> logic: they apply to all weeks
-        # 2. Dated keys (lesson_date IN range)
-        # But for date-based schedule, maybe we should ONLY show dated ones if asking for range?
-        # User wants "No duplication", implies pure date-based.
-        # Let's return both, frontend can decide. 
-        # Actually OR logic in Postgrest is tricky (lesson_date is null OR lesson_date in range).
-        # Simply fetching ALL for class is okay if dataset is small.
-        # But optimized:
-        # q = q.or_(f"lesson_date.is.null,and(lesson_date.gte.{start_date},lesson_date.lte.{end_date})")
-        # Supabase python syntax:
         q = q.or_(f"lesson_date.is.null,and(lesson_date.gte.{start_date},lesson_date.lte.{end_date})")
         
     resp = q.order("weekday").order("start_time").execute()
@@ -869,7 +869,9 @@ def list_entries(
             for r in rows
             if str(r.get("class_id") or "") == cid or cid in _entry_class_ids(r)
         ]
-    return {"entries": rows}
+    result = {"entries": rows}
+    cache.set(cache_key, result, ttl=30)
+    return result
 
 
 @router.post("/duplicate")

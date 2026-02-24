@@ -151,7 +151,9 @@ function hasAuthHeader(init?: RequestInit): boolean {
 }
 
 async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
-  console.log('[API] Request:', init?.method || 'GET', path, init?.body ? JSON.parse(init.body as string) : null);
+  if (import.meta.env.DEV) {
+    console.log('[API] Request:', init?.method || 'GET', path);
+  }
   let res: Response;
   try {
     res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
@@ -207,18 +209,18 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
     err.status = res.status;
     err.bodyText = msg;
     if (detailObj !== undefined) err.detail = detailObj;
-    console.error('[API] Error:', init?.method || 'GET', path, err);
+    if (import.meta.env.DEV) {
+      console.error('[API] Error:', init?.method || 'GET', path, err);
+    }
     throw err;
   }
 
   // For 204 No Content, return void/undefined instead of trying to parse JSON
   if (res.status === 204) {
-    console.log('[API] Success:', init?.method || 'GET', path, '(No Content)');
     return undefined as T;
   }
 
   const result = (await res.json()) as T;
-  console.log('[API] Success:', init?.method || 'GET', path, result);
   return result;
 }
 

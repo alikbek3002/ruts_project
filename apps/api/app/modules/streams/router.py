@@ -198,6 +198,12 @@ async def list_streams(
 ):
     """List all streams with filtering options"""
     
+    from app.core.cache import cache
+    cache_key = f"streams_list:{status_filter or 'default'}:{direction_id or 'all'}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     sb = get_supabase()
     try:
         query = sb.table("streams").select("*")
@@ -205,44 +211,63 @@ async def list_streams(
         if status_filter:
             query = query.eq("status", status_filter)
         else:
-            # By default hide archived streams (they are in separate archive endpoints)
             query = query.neq("status", "archived")
 
         if direction_id:
             query = query.eq("direction_id", str(direction_id))
 
         result = query.order("created_at", desc=True).execute()
+        all_streams = result.data or []
+        if not all_streams:
+            return []
 
-        streams = []
-        for stream in result.data or []:
-            class_count_result = (
-                sb.table("stream_classes")
-                .select("class_id", count="exact")
-                .eq("stream_id", stream["id"])
+        stream_ids = [s["id"] for s in all_streams]
+
+        # Batch: all stream_classes in one query
+        sc_resp = (
+            sb.table("stream_classes")
+            .select("stream_id,class_id")
+            .in_("stream_id", stream_ids)
+            .execute()
+        )
+        sc_rows = sc_resp.data or []
+
+        # Build maps: stream_id -> class_ids, stream_id -> class_count
+        classes_by_stream: dict[str, list[str]] = {}
+        for row in sc_rows:
+            sid = row["stream_id"]
+            classes_by_stream.setdefault(sid, []).append(row["class_id"])
+
+        # Batch: all enrollments for all relevant class_ids
+        all_class_ids = list({cid for cids in classes_by_stream.values() for cid in cids})
+        enrollment_counts: dict[str, int] = {}
+        if all_class_ids:
+            enr_resp = (
+                sb.table("class_enrollments")
+                .select("class_id")
+                .in_("class_id", all_class_ids)
                 .execute()
             )
-            class_count = class_count_result.count or 0
+            for row in (enr_resp.data or []):
+                cid = row["class_id"]
+                enrollment_counts[cid] = enrollment_counts.get(cid, 0) + 1
 
-            student_count = 0
-            if class_count > 0:
-                class_ids_result = (
-                    sb.table("stream_classes").select("class_id").eq("stream_id", stream["id"]).execute()
-                )
-                class_ids = [c["class_id"] for c in (class_ids_result.data or [])]
-                if class_ids:
-                    student_result = (
-                        sb.table("class_enrollments")
-                        .select("id", count="exact")
-                        .in_("class_id", class_ids)
-                        .execute()
-                    )
-                    student_count = student_result.count or 0
+        # Batch: all directions in one query
+        dir_ids = list({s["direction_id"] for s in all_streams if s.get("direction_id")})
+        dir_names: dict[str, str] = {}
+        if dir_ids:
+            dir_resp = sb.table("directions").select("id,name").in_("id", dir_ids).execute()
+            for d in (dir_resp.data or []):
+                dir_names[d["id"]] = d["name"]
 
-            direction_name = None
-            if stream.get("direction_id"):
-                dir_result = sb.table("directions").select("name").eq("id", stream["direction_id"]).execute()
-                if dir_result.data:
-                    direction_name = dir_result.data[0]["name"]
+        # Build response
+        streams = []
+        for stream in all_streams:
+            sid = stream["id"]
+            stream_class_ids = classes_by_stream.get(sid, [])
+            class_count = len(stream_class_ids)
+            student_count = sum(enrollment_counts.get(cid, 0) for cid in stream_class_ids)
+            direction_name = dir_names.get(stream.get("direction_id")) if stream.get("direction_id") else None
 
             streams.append(
                 StreamResponse(
@@ -253,6 +278,7 @@ async def list_streams(
                 )
             )
 
+        cache.set(cache_key, streams, ttl=60)
         return streams
     except APIError as e:
         _raise_streams_schema_help(e)
