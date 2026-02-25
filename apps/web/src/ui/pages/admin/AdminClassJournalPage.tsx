@@ -4,9 +4,9 @@ import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
-import { apiListSubjectsWithTeachers, Subject, trackedFetch } from "../../../api/client";
+import { apiListSubjectsWithTeachers, Subject, trackedFetch, apiGetSubjectTopics } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
-import { ChevronLeft, Download, RefreshCw, FileSpreadsheet, Filter } from "lucide-react";
+import { ChevronLeft, Download, RefreshCw, FileSpreadsheet, Filter, CheckCircle } from "lucide-react";
 
 type Student = {
   id: string;
@@ -43,6 +43,7 @@ type Lesson = {
   subject_id?: string;
   lesson_topic?: string | null;
   homework?: string | null;
+  subject_topic_id?: string | null;
 };
 
 type DetailedJournalData = {
@@ -59,6 +60,7 @@ export function AdminClassJournalPage() {
   const can = useMemo(() => !!user && (user.role === "admin" || user.role === "manager") && !!token, [user, token]);
 
   const [viewMode, setViewMode] = useState<"dates" | "subjects">("subjects");
+  const [detailViewMode, setDetailViewMode] = useState<"journal" | "topics">("journal");
   const [journalByDates, setJournalByDates] = useState<JournalByDates | null>(null);
   const [journalBySubject, setJournalBySubject] = useState<JournalBySubject | null>(null);
   const [detailedJournal, setDetailedJournal] = useState<DetailedJournalData | null>(null);
@@ -67,6 +69,36 @@ export function AdminClassJournalPage() {
   const [className, setClassName] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [subjectTopics, setSubjectTopics] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!token || !selectedSubjectId) {
+      setSubjectTopics([]);
+      return;
+    }
+    async function loadTopics() {
+      try {
+        const data = await apiGetSubjectTopics(token as string, selectedSubjectId);
+        setSubjectTopics(data.topics || []);
+      } catch (e) {
+        console.error("Failed to load subject topics:", e);
+      }
+    }
+    loadTopics();
+  }, [token, selectedSubjectId]);
+
+  const coveredTopicsCount = useMemo(() => {
+    if (!detailedJournal || !subjectTopics.length) return 0;
+    const coveredIds = new Set<string>();
+    detailedJournal.lessons.forEach(l => {
+      if (l.subject_topic_id) coveredIds.add(l.subject_topic_id);
+    });
+    return coveredIds.size;
+  }, [detailedJournal, subjectTopics]);
+
+  const progressPercentage = subjectTopics.length > 0
+    ? Math.round((coveredTopicsCount / subjectTopics.length) * 100)
+    : 0;
 
   const subjectColumns = useMemo(() => {
     const names = (allSubjects || []).map((s) => (s?.name || "").trim()).filter(Boolean);
@@ -203,31 +235,31 @@ export function AdminClassJournalPage() {
 
         <div className={styles.controls}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: 1 }}>
-            <button 
-                className={viewMode === "subjects" && !selectedSubjectId ? "primary" : "secondary"}
-                onClick={() => { setViewMode("subjects"); setSelectedSubjectId(""); }} 
+            <button
+              className={viewMode === "subjects" && !selectedSubjectId ? "primary" : "secondary"}
+              onClick={() => { setViewMode("subjects"); setSelectedSubjectId(""); }}
             >
               Сводная по предметам
             </button>
-            <button 
-                className={viewMode === "dates" && !selectedSubjectId ? "primary" : "secondary"}
-                onClick={() => { setViewMode("dates"); setSelectedSubjectId(""); }} 
+            <button
+              className={viewMode === "dates" && !selectedSubjectId ? "primary" : "secondary"}
+              onClick={() => { setViewMode("dates"); setSelectedSubjectId(""); }}
             >
               Сводная по датам
             </button>
 
             <div style={{ position: "relative" }}>
               <Filter size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-secondary)" }} />
-              <select 
-                  value={selectedSubjectId} 
-                  onChange={(e) => setSelectedSubjectId(e.target.value)}
-                  className={styles.select}
-                  style={{ paddingLeft: 32 }}
+              <select
+                value={selectedSubjectId}
+                onChange={(e) => setSelectedSubjectId(e.target.value)}
+                className={styles.select}
+                style={{ paddingLeft: 32 }}
               >
-                  <option value="">-- Детализация по предмету --</option>
-                  {allSubjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                <option value="">-- Детализация по предмету --</option>
+                {allSubjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -248,51 +280,118 @@ export function AdminClassJournalPage() {
 
         {!loading && selectedSubjectId && detailedJournal && (
           <div className={styles.tableWrapper}>
-            <table className={styles.journalTable}>
-              <thead>
-                <tr>
-                  <th className={styles.stickyCol}>Ученик</th>
-                  {detailedJournal.lessons.map((l) => (
-                    <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
-                      <div style={{ fontSize: "0.8em" }}>
-                          {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {detailedJournal.students.map((student) => (
-                  <tr key={student.id}>
-                    <td className={styles.stickyCol}>{student.name}</td>
-                    {detailedJournal.lessons.map((l) => {
-                      const key = `${l.date}_${l.timetable_entry_id}`;
-                      const cell = detailedJournal.grades[student.id]?.[key];
-                      const grades = cell?.grades || [];
-                      const present = cell?.present;
+            {subjectTopics.length > 0 && (
+              <div style={{ marginBottom: 16, padding: '12px 16px', background: 'var(--color-bg-secondary)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--color-border)' }}>
+                <CheckCircle size={20} color="var(--color-primary)" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--color-text)' }}>Прогресс по учебному плану (Силлабус)</div>
+                  <div style={{ width: '100%', height: 8, background: 'var(--color-bg-elevated)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                    <div style={{ width: `${progressPercentage}%`, height: '100%', background: 'var(--color-primary)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-secondary)', minWidth: 120, textAlign: 'right' }}>
+                  {coveredTopicsCount} из {subjectTopics.length} тем ({progressPercentage}%)
+                </div>
+              </div>
+            )}
 
-                      return (
-                        <td key={l.timetable_entry_id}>
-                          {grades.length > 0 ? (
-                            grades.map((g, i) => (
-                              <span key={i} title={g.comment || ""} className={`${styles.grade} ${styles[`grade-${g.grade}`] || ""}`}>
-                                {g.grade}
-                              </span>
-                            ))
-                          ) : present === false ? (
-                            <span className={styles.absent}>Н</span>
-                          ) : present === true ? (
-                            <span style={{ color: "var(--color-success)" }}>✓</span>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button className={detailViewMode === "journal" ? "primary" : "secondary"} onClick={() => setDetailViewMode("journal")}>
+                Журнал оценок
+              </button>
+              <button className={detailViewMode === "topics" ? "primary" : "secondary"} onClick={() => setDetailViewMode("topics")}>
+                Пройденные темы
+              </button>
+            </div>
+
+            {detailViewMode === "journal" && (
+              <table className={styles.journalTable}>
+                <thead>
+                  <tr>
+                    <th className={styles.stickyCol}>Ученик</th>
+                    {detailedJournal.lessons.map((l) => (
+                      <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
+                        <div style={{ fontSize: "0.8em" }}>
+                          {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailedJournal.students.map((student) => (
+                    <tr key={student.id}>
+                      <td className={styles.stickyCol}>{student.name}</td>
+                      {detailedJournal.lessons.map((l) => {
+                        const key = `${l.date}_${l.timetable_entry_id}`;
+                        const cell = detailedJournal.grades[student.id]?.[key];
+                        const grades = cell?.grades || [];
+                        const present = cell?.present;
+
+                        return (
+                          <td key={l.timetable_entry_id}>
+                            {grades.length > 0 ? (
+                              grades.map((g, i) => (
+                                <span key={i} title={g.comment || ""} className={`${styles.grade} ${styles[`grade-${g.grade}`] || ""}`}>
+                                  {g.grade}
+                                </span>
+                              ))
+                            ) : present === false ? (
+                              <span className={styles.absent}>Н</span>
+                            ) : present === true ? (
+                              <span style={{ color: "var(--color-success)" }}>✓</span>
+                            ) : (
+                              <span style={{ color: "var(--color-text-light)" }}>·</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {detailViewMode === "topics" && (
+              <table className={styles.journalTable}>
+                <thead>
+                  <tr>
+                    <th>№</th>
+                    <th>Тема из учебного плана (Силлабус)</th>
+                    <th>Статус</th>
+                    <th>Дата урока</th>
+                    <th>Тема урока (вручную)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectTopics.map((topic, idx) => {
+                    const lesson = detailedJournal.lessons.find((l) => l.subject_topic_id === topic.id);
+                    return (
+                      <tr key={topic.id} style={{ opacity: lesson ? 1 : 0.6 }}>
+                        <td>{topic.topic_number || idx + 1}</td>
+                        <td style={{ fontWeight: lesson ? 600 : 400 }}>{topic.topic_name}</td>
+                        <td>
+                          {lesson ? (
+                            <span style={{ color: "var(--color-success)", fontWeight: 600 }}>Пройдена</span>
                           ) : (
-                            <span style={{ color: "var(--color-text-light)" }}>·</span>
+                            <span style={{ color: "var(--color-text-light)" }}>Не пройдена</span>
                           )}
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        <td>{lesson ? new Date(lesson.date).toLocaleDateString("ru-RU") : "—"}</td>
+                        <td>{lesson?.lesson_topic || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                  {subjectTopics.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--color-text-secondary)" }}>
+                        Учебный план для данного предмета не настроен.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 

@@ -393,7 +393,8 @@ def get_lesson_details(
                 "end_time": entry_data.get("end_time"),
                 "room": entry_data.get("room"),
                 "lesson_topic": None,
-                "homework": None
+                "homework": None,
+                "subject_topic_id": None
             },
             "students": []
         }
@@ -411,7 +412,7 @@ def get_lesson_details(
     # Получаем записи из журнала для этого урока
     journal_records = (
         sb.table("lesson_journal")
-        .select("student_id,grade,present,comment,lesson_topic,homework,attendance_type")
+        .select("student_id,grade,present,comment,lesson_topic,homework,attendance_type,subject_topic_id")
         .eq("timetable_entry_id", timetable_entry_id)
         .eq("lesson_date", lesson_date)
         .execute()
@@ -425,11 +426,14 @@ def get_lesson_details(
     # Собираем тему и ДЗ (берем первое непустое значение)
     lesson_topic = None
     homework = None
+    subject_topic_id = None
     for record in journal_records:
         if record.get("lesson_topic") and not lesson_topic:
             lesson_topic = record["lesson_topic"]
         if record.get("homework") and not homework:
             homework = record["homework"]
+        if record.get("subject_topic_id") and not subject_topic_id:
+            subject_topic_id = record["subject_topic_id"]
     
     # Формируем список студентов
     students = []
@@ -463,7 +467,8 @@ def get_lesson_details(
             "end_time": entry_data.get("end_time"),
             "room": entry_data.get("room"),
             "lesson_topic": lesson_topic,
-            "homework": homework
+            "homework": homework,
+            "subject_topic_id": subject_topic_id
         },
         "students": students
     }
@@ -563,7 +568,7 @@ def get_class_journal(
     
     journal_records = (
         sb.table("lesson_journal")
-        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment,lesson_topic,homework,attendance_type")
+        .select("timetable_entry_id,lesson_date,student_id,grade,present,comment,lesson_topic,homework,attendance_type,subject_topic_id")
         .in_("timetable_entry_id", entry_ids)
         .order("lesson_date", desc=False)
         .execute()
@@ -673,17 +678,20 @@ def get_class_journal(
                 "timetable_entry_id": entry_id,
                 "subject_name": entry.get("subject", ""),
                 "lesson_topic": None,
-                "homework": None
+                "homework": None,
+                "subject_topic_id": None
             }
         
         # Собираем тему урока и ДЗ (берем первое непустое значение)
         if key not in lesson_info:
-            lesson_info[key] = {"lesson_topic": None, "homework": None}
+            lesson_info[key] = {"lesson_topic": None, "homework": None, "subject_topic_id": None}
         
         if record.get("lesson_topic") and not lesson_info[key]["lesson_topic"]:
             lesson_info[key]["lesson_topic"] = record["lesson_topic"]
         if record.get("homework") and not lesson_info[key]["homework"]:
             lesson_info[key]["homework"] = record["homework"]
+        if record.get("subject_topic_id") and not lesson_info[key]["subject_topic_id"]:
+            lesson_info[key]["subject_topic_id"] = record["subject_topic_id"]
     
     # Сортируем уроки по дате и добавляем тему/ДЗ
     lessons = sorted(lessons_by_date.values(), key=lambda x: x["date"])
@@ -694,6 +702,8 @@ def get_class_journal(
             lesson["lesson_topic"] = info.get("lesson_topic")
         if info.get("homework"):
             lesson["homework"] = info.get("homework")
+        if info.get("subject_topic_id"):
+            lesson["subject_topic_id"] = info.get("subject_topic_id")
     
     # Структура: grades[student_id][lesson_key] = {grades: [...], present: bool|null}
     grades = {}
@@ -971,6 +981,7 @@ class UpdateLessonInfoIn(BaseModel):
     lesson_date: str  # YYYY-MM-DD
     lesson_topic: str | None = None
     homework: str | None = None
+    subject_topic_id: str | None = None
 
 
 @router.post("/classes/{class_id}/lesson-info")
@@ -1017,10 +1028,12 @@ def update_lesson_info(
     )
     
     update_data = {}
-    if payload.lesson_topic is not None:
+    if "lesson_topic" in payload.model_fields_set:
         update_data["lesson_topic"] = payload.lesson_topic
-    if payload.homework is not None:
+    if "homework" in payload.model_fields_set:
         update_data["homework"] = payload.homework
+    if "subject_topic_id" in payload.model_fields_set:
+        update_data["subject_topic_id"] = payload.subject_topic_id
     
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -1105,7 +1118,7 @@ def get_lesson_info(
     # Получаем тему и ДЗ
     records = (
         sb.table("lesson_journal")
-        .select("lesson_topic,homework")
+        .select("lesson_topic,homework,subject_topic_id")
         .eq("timetable_entry_id", timetable_entry_id)
         .eq("lesson_date", lesson_date)
         .execute()
@@ -1116,16 +1129,20 @@ def get_lesson_info(
     # Берем первую запись с непустыми полями
     lesson_topic = None
     homework = None
+    subject_topic_id = None
     
     for record in records:
         if record.get("lesson_topic") and not lesson_topic:
             lesson_topic = record["lesson_topic"]
         if record.get("homework") and not homework:
             homework = record["homework"]
+        if record.get("subject_topic_id") and not subject_topic_id:
+            subject_topic_id = record["subject_topic_id"]
     
     return {
         "lesson_topic": lesson_topic,
         "homework": homework,
+        "subject_topic_id": subject_topic_id,
         "subject": entry_data.get("subject"),
         "subject_name": subject_name,
         "lesson_date": lesson_date

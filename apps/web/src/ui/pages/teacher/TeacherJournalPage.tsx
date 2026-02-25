@@ -23,6 +23,7 @@ import {
   apiSaveLessonGrade,
   apiSaveLessonTopic,
   apiGetClass,
+  apiGetSubjectTopics,
   trackedFetch // Еще нужен для saveLessonInfo, если мы его не перенесли в API
 } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
@@ -121,6 +122,8 @@ export function TeacherJournalPage() {
 
   // Lesson Editing
   const [lessonTopic, setLessonTopic] = useState("");
+  const [subjectTopicId, setSubjectTopicId] = useState<string | null>(null);
+  const [subjectTopics, setSubjectTopics] = useState<any[]>([]);
   const [homework, setHomework] = useState("");
   const [saving, setSaving] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
@@ -261,6 +264,22 @@ export function TeacherJournalPage() {
     if (!selectedLesson || !token) return;
     loadLessonDetails();
   }, [selectedLesson, token]);
+
+  useEffect(() => {
+    if (!token || !selectedSubjectId) {
+      setSubjectTopics([]);
+      return;
+    }
+    async function loadTopics() {
+      try {
+        const data = await apiGetSubjectTopics(token as string, selectedSubjectId);
+        setSubjectTopics(data.topics || []);
+      } catch (e) {
+        console.error("Failed to load subject topics:", e);
+      }
+    }
+    loadTopics();
+  }, [token, selectedSubjectId]);
 
   async function loadClasses() {
     if (!token) return;
@@ -455,6 +474,7 @@ export function TeacherJournalPage() {
       const data = await apiGetLessonDetails(token, selectedLesson.timetable_entry_id, selectedLesson.date);
       setLessonDetails(data);
       setLessonTopic(data.lesson.lesson_topic || "");
+      setSubjectTopicId(data.lesson.subject_topic_id || null);
       setHomework(data.lesson.homework || "");
     } catch (e) {
       console.error(e);
@@ -473,6 +493,7 @@ export function TeacherJournalPage() {
         lesson_date: selectedLesson.date,
         lesson_topic: lessonTopic || null,
         homework: homework || null,
+        subject_topic_id: subjectTopicId || null,
       });
       loadGrid(); // Refresh grid
     } catch (e) { console.error(e); }
@@ -888,6 +909,9 @@ export function TeacherJournalPage() {
                     setLessonTopic={setLessonTopic}
                     homework={homework}
                     setHomework={setHomework}
+                    subjectTopicId={subjectTopicId}
+                    setSubjectTopicId={setSubjectTopicId}
+                    subjectTopics={subjectTopics}
                     saveLessonInfo={saveLessonInfo}
                     token={token}
                     selectedDate={selectedLesson.date}
@@ -904,7 +928,7 @@ export function TeacherJournalPage() {
 }
 
 // Subcomponent for editing (extracted to avoid huge file duplication)
-function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homework, setHomework, saveLessonInfo, token, selectedDate, onSaveGrade }: any) {
+function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homework, setHomework, subjectTopicId, setSubjectTopicId, subjectTopics, saveLessonInfo, token, selectedDate, onSaveGrade }: any) {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [editingComment, setEditingComment] = useState<{ id: string, value: string } | null>(null);
 
@@ -950,8 +974,28 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
   return (
     <div>
       <div className={styles.infoGrid}>
+        <div className={styles.inputGroup} style={{ gridColumn: '1 / -1' }}>
+          <label>Тема по учебному плану (Силлабус) / Окуу пландагы тема</label>
+          <select
+            className={styles.selectDropdown}
+            value={subjectTopicId || ""}
+            onChange={e => {
+              const val = e.target.value;
+              setSubjectTopicId(val || null);
+              if (val) {
+                const t = subjectTopics.find((x: any) => x.id === val);
+                if (t && !lessonTopic) setLessonTopic(t.topic_name);
+              }
+            }}
+          >
+            <option value="">-- Выберите тему --</option>
+            {subjectTopics?.map((t: any) => (
+              <option key={t.id} value={t.id}>{t.topic_number}. {t.topic_name}</option>
+            ))}
+          </select>
+        </div>
         <div className={styles.inputGroup}>
-          <label>Тема / Темасы</label>
+          <label>Тема / Темасы (Вручную)</label>
           <input className={styles.textInput} value={lessonTopic} onChange={e => setLessonTopic(e.target.value)} />
         </div>
         <div className={styles.inputGroup}>
