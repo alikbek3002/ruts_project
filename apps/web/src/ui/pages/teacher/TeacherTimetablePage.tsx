@@ -6,6 +6,9 @@ import {
   apiTeacherLessonJournalSave,
   apiTimetableWeek,
   apiSetTimetableMeetLink,
+  apiGetLessonDetails,
+  apiSaveLessonTopic,
+  apiGetSubjectTopics,
   type LessonJournalStudentRow,
   type WeekTimetableItem,
 } from "../../../api/client";
@@ -82,11 +85,19 @@ export function TeacherTimetablePage() {
     date: string;
     subject: string;
     className: string;
+    classId: string;
     room?: string | null;
     start: string;
     end: string;
+    subjectId?: string;
   } | null>(null);
   const [journalRows, setJournalRows] = useState<LessonJournalStudentRow[]>([]);
+
+  // Topic & Homework states
+  const [lessonTopic, setLessonTopic] = useState("");
+  const [subjectTopicId, setSubjectTopicId] = useState<string | null>(null);
+  const [subjectTopics, setSubjectTopics] = useState<any[]>([]);
+  const [homework, setHomework] = useState("");
 
   // Google Meet modal states
   const [meetModalOpen, setMeetModalOpen] = useState(false);
@@ -123,13 +134,36 @@ export function TeacherTimetablePage() {
       date: dateISO,
       subject: lesson.subject,
       className: lesson.class_name,
+      classId: (lesson as any).class_id,
+      subjectId: (lesson as any).subject_id,
       room: lesson.room ?? null,
       start: lesson.start_time,
       end: lesson.end_time,
     });
+
+    // reset topic states
+    setLessonTopic("");
+    setSubjectTopicId(null);
+    setHomework("");
+    setSubjectTopics([]);
+
     try {
       const res = await apiTeacherLessonJournalGet(token, lesson.id, dateISO);
       setJournalRows(res.students);
+
+      try {
+        const subjectId = (lesson as any).subject_id;
+        if (subjectId) {
+          const topicData = await apiGetSubjectTopics(token, subjectId);
+          setSubjectTopics(topicData.topics || []);
+        }
+        const details = await apiGetLessonDetails(token, lesson.id, dateISO);
+        setLessonTopic(details.lesson.lesson_topic || "");
+        setSubjectTopicId(details.lesson.subject_topic_id || null);
+        setHomework(details.lesson.homework || "");
+      } catch (err) {
+        console.error("Failed to load extra lesson details", err);
+      }
     } catch (e) {
       setJournalErr(String(e));
       setJournalRows([]);
@@ -153,6 +187,19 @@ export function TeacherTimetablePage() {
           comment: r.comment ?? null,
         })),
       });
+
+      try {
+        await apiSaveLessonTopic(token, journalLesson.classId, {
+          timetable_entry_id: journalLesson.timetableEntryId,
+          lesson_date: journalLesson.date,
+          lesson_topic: lessonTopic || null,
+          homework: homework || null,
+          subject_topic_id: subjectTopicId || null,
+        });
+      } catch (err) {
+        console.error("Failed to save extra lesson details", err);
+      }
+
       setJournalSaved("Сохранено");
       setTimeout(() => setJournalSaved(null), 2000);
     } catch (e) {
@@ -356,6 +403,58 @@ export function TeacherTimetablePage() {
 
               {journalErr && <div style={{ color: "crimson", marginBottom: 12 }}>{journalErr}</div>}
               {journalSaved && <div style={{ color: "#059669", marginBottom: 12, fontWeight: 500 }}>{journalSaved}</div>}
+
+              {/* Topic & Homework Selection */}
+              {journalLesson && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+                      Тема по учебному плану (Силлабус)
+                    </label>
+                    <select
+                      value={subjectTopicId || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setSubjectTopicId(val || null);
+                        if (val) {
+                          const t = subjectTopics.find((x: any) => x.id === val);
+                          if (t && !lessonTopic) setLessonTopic(t.topic_name);
+                        }
+                      }}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+                    >
+                      <option value="">-- Выберите тему --</option>
+                      {subjectTopics?.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.topic_number}. {t.topic_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+                      Тема (Вручную)
+                    </label>
+                    <input
+                      type="text"
+                      value={lessonTopic}
+                      onChange={e => setLessonTopic(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+                      placeholder="Например: Введение в предмет"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+                      Задание на дом (Домашнее задание)
+                    </label>
+                    <input
+                      type="text"
+                      value={homework}
+                      onChange={e => setHomework(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+                      placeholder="Например: Прочитать главу 1"
+                    />
+                  </div>
+                </div>
+              )}
 
               {journalLoading ? (
                 <Loader text="Загрузка..." />

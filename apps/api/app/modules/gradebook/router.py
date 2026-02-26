@@ -599,11 +599,13 @@ def export_attendance_excel(
     wb.save(output)
     output.seek(0)
 
+    from urllib.parse import quote
     filename = f"{class_name}_poseschaiemost.xlsx"
+    encoded_filename = quote(filename)
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{encoded_filename}"},
     )
 
 
@@ -697,9 +699,11 @@ def export_grades_excel(
     wb.save(output)
     output.seek(0)
 
+    from urllib.parse import quote
     filename = f"{class_name}_ocenki.xlsx"
+    encoded_filename = quote(filename)
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{encoded_filename}"},
     )
