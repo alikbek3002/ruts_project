@@ -142,10 +142,25 @@ def list_classes(user: dict = Depends(get_current_user)):
             resp = sb.table("classes").select("id,name,direction_id,curator_id,directions(id,name,code)").is_("archived_at", "null").order("name").execute()
             classes = resp.data or []
             
-            # Подсчитываем студентов для каждого класса
+            # Оптимизация: один запрос для подсчёта студентов всех классов
+            class_ids = [c["id"] for c in classes if c.get("id")]
+            student_counts: dict[str, int] = {}
+            if class_ids:
+                all_enrollments = (
+                    sb.table("class_enrollments")
+                    .select("class_id")
+                    .in_("class_id", class_ids)
+                    .execute()
+                    .data
+                    or []
+                )
+                for enr in all_enrollments:
+                    cid = enr.get("class_id")
+                    if cid:
+                        student_counts[cid] = student_counts.get(cid, 0) + 1
+            
             for cls in classes:
-                count_resp = sb.table("class_enrollments").select("id", count="exact").eq("class_id", cls["id"]).execute()
-                cls["student_count"] = count_resp.count or 0
+                cls["student_count"] = student_counts.get(cls["id"], 0)
                 # Flatten direction
                 if cls.get("directions"):
                     cls["direction"] = cls["directions"]
@@ -188,6 +203,8 @@ def list_classes(user: dict = Depends(get_current_user)):
         # fallback
         return {"classes": []}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=(
@@ -259,7 +276,12 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
             # Students see all classes (shared account)
             pass
 
-        c = sb.table("classes").select("id,name,direction_id,curator_id").eq("id", class_id).single().execute().data
+        # Используем limit(1) вместо single() — single() бросает exception при 0 или 2+ результатов
+        c_rows = sb.table("classes").select("id,name,direction_id,curator_id").eq("id", class_id).limit(1).execute().data or []
+        c = c_rows[0] if c_rows else None
+        if not c:
+            raise HTTPException(status_code=404, detail="Class not found")
+        
         enr_rows = (
             sb.table("class_enrollments")
             .select("id,student_full_name,student_number,legacy_student_id")
@@ -282,11 +304,15 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
         
         students.sort(key=lambda s: (s.get("student_number") is None, s.get("student_number") or 0, s.get("full_name") or ""))
         return {"class": c, "students": students}
-    except Exception:
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=(
-                "Failed to load class details. Ensure the base DB schema is applied "
+                f"Failed to load class details: {str(e)}. Ensure the base DB schema is applied "
                 "(see supabase/migrations/20251222_000001_mvp.sql) and restart the API."
             ),
         )

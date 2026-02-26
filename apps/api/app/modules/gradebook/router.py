@@ -334,83 +334,102 @@ def class_journal_by_dates(
     """
     Журнал посещаемости: таблица [ученики × даты]
     """
+    from app.core.cache import cache
+    
+    cache_key = f"journal_dates:{class_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
     sb = get_supabase()
 
     if not _lesson_journal_supported(sb):
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
-    # Получаем все уроки класса (class_ids — массив UUID)
-    timetable = (
-        sb.table("timetable_entries")
-        .select("id,subject,teacher_id")
-        .cs("class_ids", [class_id])
-        .execute()
-        .data
-        or []
-    )
-    entry_ids = [e.get("id") for e in timetable if e.get("id")]
-    if not entry_ids:
-        return {"students": [], "dates": [], "data": {}}
+    try:
+        # Получаем все уроки класса (class_ids — массив UUID)
+        timetable = (
+            sb.table("timetable_entries")
+            .select("id,subject,teacher_id")
+            .cs("class_ids", [class_id])
+            .execute()
+            .data
+            or []
+        )
+        entry_ids = [e.get("id") for e in timetable if e.get("id")]
+        if not entry_ids:
+            return {"students": [], "dates": [], "data": {}}
 
-    # Получаем все записи журнала для этого класса
-    journal_records = (
-        sb.table("lesson_journal")
-        .select("timetable_entry_id,lesson_date,student_id,present,grade,comment")
-        .in_("timetable_entry_id", entry_ids)
-        .order("lesson_date", desc=False)
-        .execute()
-        .data
-        or []
-    )
+        # Получаем все записи журнала для этого класса
+        journal_records = (
+            sb.table("lesson_journal")
+            .select("timetable_entry_id,lesson_date,student_id,present,grade,comment")
+            .in_("timetable_entry_id", entry_ids)
+            .order("lesson_date", desc=False)
+            .execute()
+            .data
+            or []
+        )
 
-    # Список учеников - напрямую из class_enrollments
-    enrollments = (
-        sb.table("class_enrollments")
-        .select("id,student_full_name,student_number,legacy_student_id")
-        .eq("class_id", class_id)
-        .order("student_number")
-        .execute()
-        .data
-        or []
-    )
-    
-    if not enrollments:
-        return {"students": [], "dates": [], "data": {}}
+        # Список учеников - напрямую из class_enrollments
+        enrollments = (
+            sb.table("class_enrollments")
+            .select("id,student_full_name,student_number,legacy_student_id")
+            .eq("class_id", class_id)
+            .order("student_number")
+            .execute()
+            .data
+            or []
+        )
+        
+        if not enrollments:
+            return {"students": [], "dates": [], "data": {}}
 
-    # Формируем список студентов
-    students = sorted(
-        [
-            {
-                "id": e.get("id"),  # Используем enrollment ID
-                "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
-                "student_number": e.get("student_number"),
-                "legacy_student_id": e.get("legacy_student_id"),
-            }
-            for e in enrollments
-        ],
-        key=lambda x: (x.get("student_number") or 999, x["name"]),
-    )
-    
-    # Создаём маппинг legacy_student_id -> enrollment_id для журнала
-    legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
+        # Формируем список студентов
+        students = sorted(
+            [
+                {
+                    "id": e.get("id"),  # Используем enrollment ID
+                    "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
+                    "student_number": e.get("student_number"),
+                    "legacy_student_id": e.get("legacy_student_id"),
+                }
+                for e in enrollments
+            ],
+            key=lambda x: (x.get("student_number") or 999, x["name"]),
+        )
+        
+        # Создаём маппинг legacy_student_id -> enrollment_id для журнала
+        legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
 
-    # Собираем все уникальные даты
-    dates = sorted({r.get("lesson_date") for r in journal_records if r.get("lesson_date")})
+        # Собираем все уникальные даты
+        dates = sorted({r.get("lesson_date") for r in journal_records if r.get("lesson_date")})
 
-    # Структура данных: {enrollment_id: {date: {present, grade, comment}}}
-    data = defaultdict(dict)
-    for rec in journal_records:
-        legacy_sid = rec.get("student_id")
-        enrollment_id = legacy_to_enrollment.get(legacy_sid)
-        d = rec.get("lesson_date")
-        if enrollment_id and d:
-            data[enrollment_id][d] = {
-                "present": rec.get("present"),
-                "grade": rec.get("grade"),
-                "comment": rec.get("comment"),
-            }
+        # Структура данных: {enrollment_id: {date: {present, grade, comment}}}
+        data = defaultdict(dict)
+        for rec in journal_records:
+            legacy_sid = rec.get("student_id")
+            enrollment_id = legacy_to_enrollment.get(legacy_sid)
+            d = rec.get("lesson_date")
+            if enrollment_id and d:
+                data[enrollment_id][d] = {
+                    "present": rec.get("present"),
+                    "grade": rec.get("grade"),
+                    "comment": rec.get("comment"),
+                }
 
-    return {"students": students, "dates": dates, "data": data}
+        result = {"students": students, "dates": dates, "data": data}
+        cache.set(cache_key, result, ttl=30)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load journal by dates: {str(e)}",
+        )
 
 
 @router.get("/classes/{class_id}/journal/by-subject")
@@ -421,107 +440,126 @@ def class_journal_by_subject(
     """
     Журнал оценок по предметам: таблица [ученики × предметы] с средними оценками
     """
+    from app.core.cache import cache
+    
+    cache_key = f"journal_subjects:{class_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
     sb = get_supabase()
 
     if not _lesson_journal_supported(sb):
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
-    # Получаем все уроки класса (class_ids — массив UUID)
-    timetable = (
-        sb.table("timetable_entries")
-        .select("id,subject,teacher_id")
-        .cs("class_ids", [class_id])
-        .execute()
-        .data
-        or []
-    )
-    entry_ids = [e.get("id") for e in timetable if e.get("id")]
-    entries_by_id = {e.get("id"): e for e in timetable if e.get("id")}
+    try:
+        # Получаем все уроки класса (class_ids — массив UUID)
+        timetable = (
+            sb.table("timetable_entries")
+            .select("id,subject,teacher_id")
+            .cs("class_ids", [class_id])
+            .execute()
+            .data
+            or []
+        )
+        entry_ids = [e.get("id") for e in timetable if e.get("id")]
+        entries_by_id = {e.get("id"): e for e in timetable if e.get("id")}
 
-    if not entry_ids:
-        return {"students": [], "subjects": [], "data": {}}
+        if not entry_ids:
+            return {"students": [], "subjects": [], "data": {}}
 
-    # Получаем все записи журнала с оценками
-    journal_records = (
-        sb.table("lesson_journal")
-        .select("timetable_entry_id,lesson_date,student_id,grade")
-        .in_("timetable_entry_id", entry_ids)
-        .not_.is_("grade", "null")
-        .execute()
-        .data
-        or []
-    )
+        # Получаем все записи журнала с оценками
+        journal_records = (
+            sb.table("lesson_journal")
+            .select("timetable_entry_id,lesson_date,student_id,grade")
+            .in_("timetable_entry_id", entry_ids)
+            .not_.is_("grade", "null")
+            .execute()
+            .data
+            or []
+        )
 
-    # Список учеников - напрямую из class_enrollments
-    enrollments = (
-        sb.table("class_enrollments")
-        .select("id,student_full_name,student_number,legacy_student_id")
-        .eq("class_id", class_id)
-        .order("student_number")
-        .execute()
-        .data
-        or []
-    )
-    
-    if not enrollments:
-        return {"students": [], "subjects": [], "data": {}}
+        # Список учеников - напрямую из class_enrollments
+        enrollments = (
+            sb.table("class_enrollments")
+            .select("id,student_full_name,student_number,legacy_student_id")
+            .eq("class_id", class_id)
+            .order("student_number")
+            .execute()
+            .data
+            or []
+        )
+        
+        if not enrollments:
+            return {"students": [], "subjects": [], "data": {}}
 
-    # Формируем список студентов
-    students = sorted(
-        [
-            {
-                "id": e.get("id"),  # Используем enrollment ID
-                "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
-                "student_number": e.get("student_number"),
-                "legacy_student_id": e.get("legacy_student_id"),
-            }
-            for e in enrollments
-        ],
-        key=lambda x: (x.get("student_number") or 999, x["name"]),
-    )
-    
-    # Создаём маппинг legacy_student_id -> enrollment_id для журнала
-    legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
-    enrollment_ids = [e.get("id") for e in enrollments]
-
-    # Собираем предметы
-    subjects = sorted({e.get("subject") for e in timetable if e.get("subject")})
-
-    # Группируем оценки по ученику и предмету
-    # {enrollment_id: {subject: [grades]}}
-    grades_by_student_subject = defaultdict(lambda: defaultdict(list))
-
-    for rec in journal_records:
-        entry_id = rec.get("timetable_entry_id")
-        entry = entries_by_id.get(entry_id)
-        if not entry:
-            continue
-
-        subject = entry.get("subject")
-        legacy_sid = rec.get("student_id")
-        enrollment_id = legacy_to_enrollment.get(legacy_sid)
-        grade = rec.get("grade")
-
-        if enrollment_id and subject and grade:
-            grades_by_student_subject[enrollment_id][subject].append(grade)
-
-    # Вычисляем средние оценки
-    data = {}
-    for enrollment_id in enrollment_ids:
-        data[enrollment_id] = {}
-        for subj in subjects:
-            grades_list = grades_by_student_subject[enrollment_id].get(subj, [])
-            if grades_list:
-                avg = sum(grades_list) / len(grades_list)
-                data[enrollment_id][subj] = {
-                    "average": round(avg, 2),
-                    "grades": grades_list,
-                    "count": len(grades_list),
+        # Формируем список студентов
+        students = sorted(
+            [
+                {
+                    "id": e.get("id"),  # Используем enrollment ID
+                    "name": e.get("student_full_name") or f"Ученик #{e.get('student_number')}",
+                    "student_number": e.get("student_number"),
+                    "legacy_student_id": e.get("legacy_student_id"),
                 }
-            else:
-                data[enrollment_id][subj] = {"average": None, "grades": [], "count": 0}
+                for e in enrollments
+            ],
+            key=lambda x: (x.get("student_number") or 999, x["name"]),
+        )
+        
+        # Создаём маппинг legacy_student_id -> enrollment_id для журнала
+        legacy_to_enrollment = {e.get("legacy_student_id"): e.get("id") for e in enrollments if e.get("legacy_student_id")}
+        enrollment_ids = [e.get("id") for e in enrollments]
 
-    return {"students": students, "subjects": subjects, "data": data}
+        # Собираем предметы
+        subjects = sorted({e.get("subject") for e in timetable if e.get("subject")})
+
+        # Группируем оценки по ученику и предмету
+        # {enrollment_id: {subject: [grades]}}
+        grades_by_student_subject = defaultdict(lambda: defaultdict(list))
+
+        for rec in journal_records:
+            entry_id = rec.get("timetable_entry_id")
+            entry = entries_by_id.get(entry_id)
+            if not entry:
+                continue
+
+            subject = entry.get("subject")
+            legacy_sid = rec.get("student_id")
+            enrollment_id = legacy_to_enrollment.get(legacy_sid)
+            grade = rec.get("grade")
+
+            if enrollment_id and subject and grade:
+                grades_by_student_subject[enrollment_id][subject].append(grade)
+
+        # Вычисляем средние оценки
+        data = {}
+        for enrollment_id in enrollment_ids:
+            data[enrollment_id] = {}
+            for subj in subjects:
+                grades_list = grades_by_student_subject[enrollment_id].get(subj, [])
+                if grades_list:
+                    avg = sum(grades_list) / len(grades_list)
+                    data[enrollment_id][subj] = {
+                        "average": round(avg, 2),
+                        "grades": grades_list,
+                        "count": len(grades_list),
+                    }
+                else:
+                    data[enrollment_id][subj] = {"average": None, "grades": [], "count": 0}
+
+        result = {"students": students, "subjects": subjects, "data": data}
+        cache.set(cache_key, result, ttl=30)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load journal by subject: {str(e)}",
+        )
 
 
 @router.get("/classes/{class_id}/journal/export/attendance")

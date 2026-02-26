@@ -112,34 +112,54 @@ export function AdminClassJournalPage() {
     setLoading(true);
     setErr(null);
     try {
-      const [byDates, bySubject, classInfo, subjectsResp] = await Promise.all([
+      const results = await Promise.allSettled([
         trackedFetch(`/api/gradebook/classes/${classId}/journal`, {
           headers: { Authorization: `Bearer ${token}` },
-        }).then((r) => {
-          if (!r.ok) throw new Error("Failed to load journal by dates");
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(`Journal Dates error: ${await r.text()}`);
           return r.json();
         }),
         trackedFetch(`/api/gradebook/classes/${classId}/journal/by-subject`, {
           headers: { Authorization: `Bearer ${token}` },
-        }).then((r) => {
-          if (!r.ok) throw new Error("Failed to load journal by subject");
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(`Journal Subjects error: ${await r.text()}`);
           return r.json();
         }),
         trackedFetch(`/api/classes/${classId}`, {
           headers: { Authorization: `Bearer ${token}` },
-        }).then((r) => {
-          if (!r.ok) throw new Error("Failed to load class info");
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(`Class Info error: ${await r.text()}`);
           return r.json();
         }),
         apiListSubjectsWithTeachers(token),
       ]);
 
-      setJournalByDates(byDates);
-      setJournalBySubject(bySubject);
-      setClassName(classInfo.class?.name || "");
-      setAllSubjects(subjectsResp.subjects || []);
+      const [byDates, bySubject, classInfo, subjectsResp] = results;
+
+      if (byDates.status === 'fulfilled') setJournalByDates(byDates.value);
+      else {
+        console.error("Failed to load journal by dates:", byDates.reason);
+        setErr(byDates.reason?.message || "Failed to load journal by dates");
+      }
+
+      if (bySubject.status === 'fulfilled') setJournalBySubject(bySubject.value);
+      else console.error("Failed to load journal by subject:", bySubject.reason);
+
+      if (classInfo.status === 'fulfilled') setClassName(classInfo.value.class?.name || "");
+      else console.error("Failed to load class info:", classInfo.reason);
+
+      if (subjectsResp.status === 'fulfilled') setAllSubjects(subjectsResp.value.subjects || []);
+      else console.error("Failed to load subjects:", subjectsResp.reason);
+
     } catch (e) {
-      setErr(String(e));
+      const errMsg = e instanceof Error ? e.message : String(e);
+      // Извлекаем detail из JSON ошибки если возможно
+      let displayMsg = errMsg;
+      try {
+        const parsed = JSON.parse(errMsg);
+        if (parsed?.detail) displayMsg = parsed.detail;
+      } catch { /* ignore */ }
+      setErr(displayMsg || "Ошибка загрузки журнала");
     } finally {
       setLoading(false);
     }
@@ -165,10 +185,14 @@ export function AdminClassJournalPage() {
         const resp = await trackedFetch(url.toString(), {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!resp.ok) throw new Error("Failed to load detailed journal");
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(`Failed to load detailed journal: ${text}`);
+        }
         const data = await resp.json();
         setDetailedJournal(data);
       } catch (e) {
+        console.error(e);
         setErr(String(e));
       } finally {
         setLoading(false);
