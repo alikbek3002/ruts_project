@@ -25,7 +25,6 @@ import {
   apiGetClass,
   apiGetSubjectTopics,
   type ClassJournalResponse,
-  trackedFetch // Еще нужен для saveLessonInfo, если мы его не перенесли в API
 } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
 
@@ -254,16 +253,10 @@ export function TeacherJournalPage() {
   }, [token, selectedClassId]);
 
   useEffect(() => {
-    if (!token || !selectedClassId) return;
-    // Load lessons regardless of subject selection (show all initially?) 
-    // OR if subject selected, filter?
-    // User wants "Choice of subject". So wait for subject selection?
-    // Let's load all lessons for class, then filter by subject if selected.
-    if (selectedSubjectId) {
-      loadLessons();
-    } else {
-      setLessons([]);
+    if (!token || !selectedClassId || !selectedSubjectId) {
+      return;
     }
+    // loadGrid handles everything when subject is selected (via its own useEffect)
   }, [token, selectedClassId, selectedSubjectId]);
 
   useEffect(() => {
@@ -327,53 +320,7 @@ export function TeacherJournalPage() {
     }
   }
 
-  async function loadLessons() {
-    if (!token || !selectedClassId) return;
-    setLoadingLessons(true);
-    try {
-      // Use get_class_journal endpoint
-      const url = `/api/journal/classes/${selectedClassId}/journal` + (selectedSubjectId ? `?subject_id=${selectedSubjectId}` : "");
-      const resp = await trackedFetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error("Failed to load lessons");
-      const data = await resp.json();
-      // This endpoint returns "lessons" array with date, etc.
-      // But it returns aggregated "lessons" (deduped by date/entry).
-      // Let's rely on it.
-      const all: any[] = data.lessons || [];
-      // map to Lesson type
-      const mapped: Lesson[] = all.map(l => ({
-        timetable_entry_id: l.timetable_entry_id,
-        date: l.date,
-        start_time: "00:00", // The aggregated endpoint might lose time?
-        end_time: "00:00",
-        subject: l.subject_name,
-        subject_name: l.subject_name,
-        class_id: selectedClassId,
-        class_name: "", // Known from context
-        has_journal_entries: true // If it's in journal list, it might have entries, but here we are listing slots
-      }));
-
-      // Wait, get_class_journal returns a GRID structure for ALL dates.
-      // Maybe we should just use "get_journal" to show the GRID directly?
-      // Yes!
-      // But we need to allow editing. The GRID is read-only in the "Excel export" sense?
-      // No, get_class_journal returns { students, lessons, grades }.
-      // This is perfect for a big grid view.
-
-      // So, if Subject Selected -> Show Big Grid.
-      // If user clicks a cell -> Edit Grade?
-      // Or if user clicks column header -> Edit Lesson? OR Edit Attendance?
-
-      // Let's implement the GRID view.
-
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingLessons(false);
-    }
-  }
+  // loadLessons removed: loadGrid() handles all data loading for journal grid
 
   // .. (Rest of lesson editing logic remains similar but adapted for Grid or Day View)
   // Actually, let's keep the "Day View" for editing specific lessons details (Topic, Homework).
@@ -788,6 +735,9 @@ export function TeacherJournalPage() {
                                   marginLeft: attendanceMark ? 2 : 0,
                                   fontSize: isCompact ? 11 : 13
                                 }}>{gradeVal}</span>}
+                                {!attendanceMark && !gradeVal && (
+                                  <span style={{ color: '#d1d5db', fontSize: isCompact ? 12 : 14, fontWeight: 300 }}>+</span>
+                                )}
                               </td>
                             );
                           })}
