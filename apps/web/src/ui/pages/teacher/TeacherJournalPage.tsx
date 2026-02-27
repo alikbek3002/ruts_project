@@ -24,6 +24,7 @@ import {
   apiSaveLessonTopic,
   apiGetClass,
   apiGetSubjectTopics,
+  type ClassJournalResponse,
   trackedFetch // Еще нужен для saveLessonInfo, если мы его не перенесли в API
 } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
@@ -383,11 +384,7 @@ export function TeacherJournalPage() {
   // 3. Show Grid: Rows=Students, Cols=Lessons. 
   //    Clicking a cell allows quick grade entry? Clicking column header opens "Lesson Details"?
 
-  const [gridData, setGridData] = useState<{
-    students: { id: string, name: string, student_number?: number }[],
-    lessons: { timetable_entry_id: string, date: string, subject_name: string }[],
-    grades: Record<string, Record<string, { grades: { grade: number, comment?: string }[], present?: boolean, attendance_type?: string }>>
-  } | null>(null);
+  const [gridData, setGridData] = useState<ClassJournalResponse | null>(null);
 
   async function loadGrid() {
     if (!token || !selectedClassId || !selectedSubjectId) return;
@@ -745,7 +742,14 @@ export function TeacherJournalPage() {
                             const key = `${l.date}_${l.timetable_entry_id}`;
                             const cell = sGrades[key];
                             const isCompact = filteredLessons.length > 15;
-                            const gradeVal = cell?.grades?.[0]?.grade;
+                            const firstGrade = cell?.grades?.[0];
+                            const gradeVal = firstGrade?.grade;
+                            const gradeTitle = firstGrade
+                              ? [
+                                firstGrade.comment?.trim(),
+                                firstGrade.created_by_name ? `Поставил(а): ${firstGrade.created_by_name}` : null,
+                              ].filter(Boolean).join("\n")
+                              : "";
 
                             let attendanceMark = null;
                             if (cell?.attendance_type) {
@@ -765,6 +769,7 @@ export function TeacherJournalPage() {
                                 key={key}
                                 className={`${styles.cellGrade} ${styles.cellGradeClickable}`}
                                 onClick={(e) => openGradePopup(e, studentId, s.full_name || '—', l)}
+                                title={gradeTitle || undefined}
                                 style={{
                                   padding: isCompact ? '4px 2px' : '8px 4px',
                                   fontSize: isCompact ? 11 : 13

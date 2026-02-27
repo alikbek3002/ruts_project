@@ -167,6 +167,54 @@ def _infer_teacher_id_for_subject(sb, subject_id: str) -> str | None:
     return None
 
 
+def _teacher_allowed_for_subject(sb, *, teacher_id: str, subject_id: str) -> bool:
+    subj_rows = (
+        sb.table("subjects")
+        .select("id,open_to_all_teachers,cycle_id")
+        .eq("id", subject_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not subj_rows:
+        return False
+    subj = subj_rows[0]
+
+    if bool(subj.get("open_to_all_teachers")):
+        return True
+
+    direct = (
+        sb.table("teacher_subjects")
+        .select("teacher_id")
+        .eq("teacher_id", teacher_id)
+        .eq("subject_id", subject_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if direct:
+        return True
+
+    cycle_id = subj.get("cycle_id")
+    if cycle_id:
+        cycle_link = (
+            sb.table("teacher_cycles")
+            .select("teacher_id")
+            .eq("teacher_id", teacher_id)
+            .eq("cycle_id", cycle_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if cycle_link:
+            return True
+
+    return False
+
+
 def _room_supported(sb) -> bool:
     try:
         sb.table("timetable_entries").select("room").limit(1).execute()
@@ -435,14 +483,14 @@ def create_entry(payload: TimetableEntryIn, _: dict = require_role("admin", "man
         data["class_ids"] = class_ids
         data["class_id"] = class_ids[0]
 
-        if not data.get("teacher_id"):
-            subject_id = data.get("subject_id")
-            if subject_id:
-                inferred = _infer_teacher_id_for_subject(sb, str(subject_id))
-                if inferred:
-                    data["teacher_id"] = inferred
-            else:
-                raise HTTPException(status_code=400, detail="teacher_id or subject_id is required")
+        subject_id = data.get("subject_id")
+        teacher_id = data.get("teacher_id")
+        if not subject_id:
+            raise HTTPException(status_code=400, detail="subject_id is required")
+        if not teacher_id:
+            raise HTTPException(status_code=400, detail="teacher_id is required")
+        if not _teacher_allowed_for_subject(sb, teacher_id=str(teacher_id), subject_id=str(subject_id)):
+            raise HTTPException(status_code=400, detail="Selected teacher cannot teach this subject")
 
         # Conflict detection + lecture merge
         # Ensure weekday matches date if date provided
@@ -619,11 +667,6 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         update["subject"] = payload.subject
     if payload.subject_id is not None:
         update["subject_id"] = payload.subject_id if payload.subject_id else None
-        # If subject is changed and teacher is not explicitly set, infer teacher.
-        # If we cannot infer (none or multiple), clear teacher_id so UI shows "---".
-        if payload.subject_id and ("teacher_id" not in payload.model_fields_set):
-            inferred = _infer_teacher_id_for_subject(get_supabase(), str(payload.subject_id))
-            update["teacher_id"] = inferred
     if payload.room is not None:
         update["room"] = payload.room
     if payload.lesson_type is not None:
@@ -685,6 +728,18 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
             raise HTTPException(status_code=400, detail="Несколько групп разрешены только для лекции")
         if result_lesson_type == "lecture" and len(class_ids) > 5:
             raise HTTPException(status_code=409, detail="Нельзя больше 5 групп на одной паре")
+
+        result_subject_id = update.get("subject_id", existing.get("subject_id"))
+        if not result_subject_id:
+            raise HTTPException(status_code=400, detail="subject_id is required")
+        if not result_teacher_id:
+            raise HTTPException(status_code=400, detail="teacher_id is required")
+        if not _teacher_allowed_for_subject(
+            sb,
+            teacher_id=str(result_teacher_id),
+            subject_id=str(result_subject_id),
+        ):
+            raise HTTPException(status_code=400, detail="Selected teacher cannot teach this subject")
 
         # Ensure stored compatibility fields
         update.setdefault("stream_id", stream_id)

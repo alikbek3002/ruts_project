@@ -29,6 +29,8 @@ type JournalBySubject = {
 type Grade = {
   grade: number;
   comment: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
 };
 
 type CellData = {
@@ -355,11 +357,19 @@ export function AdminClassJournalPage() {
                         return (
                           <td key={l.timetable_entry_id}>
                             {grades.length > 0 ? (
-                              grades.map((g, i) => (
-                                <span key={i} title={g.comment || ""} className={`${styles.grade} ${styles[`grade-${g.grade}`] || ""}`}>
-                                  {g.grade}
-                                </span>
-                              ))
+                              grades.map((g, i) => {
+                                const gradeTitle = [
+                                  g.comment,
+                                  g.created_by_name ? `Поставил(а): ${g.created_by_name}` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join("\n");
+                                return (
+                                  <span key={i} title={gradeTitle || ""} className={`${styles.grade} ${styles[`grade-${g.grade}`] || ""}`}>
+                                    {g.grade}
+                                  </span>
+                                );
+                              })
                             ) : present === false ? (
                               <span className={styles.absent}>Н</span>
                             ) : present === true ? (

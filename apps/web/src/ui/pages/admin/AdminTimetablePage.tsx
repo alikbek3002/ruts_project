@@ -389,11 +389,13 @@ export function AdminTimetablePage() {
     try {
       const weekday = toDbWeekday(modalDate);
       const slotInfo = timeSlots[modalSlot - 1];
+      if (!formSubjectId) throw new Error("Выберите предмет");
+      if (!formTeacherId) throw new Error("Выберите преподавателя");
 
       const effectiveClassIds = formLessonType === "lecture" ? formClassIds : (classId ? [classId] : []);
       if (formLessonType === "lecture") {
         if (effectiveClassIds.length === 0) throw new Error("Выберите хотя бы одну группу");
-        if (effectiveClassIds.length > 4) throw new Error("Нельзя больше 4 групп на одной паре");
+        if (effectiveClassIds.length > 5) throw new Error("Нельзя больше 5 групп на одной паре");
       }
       if (editEntry) {
         await apiUpdateTimetableEntry(token, editEntry.id, {
@@ -907,7 +909,7 @@ export function AdminTimetablePage() {
 
               {formLessonType === "lecture" && (
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Группы (до 4 на одной паре)</label>
+                  <label className={styles.label}>Группы (до 5 на одной паре)</label>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                     {streamClasses.map((c) => {
                       const checked = formClassIds.includes(c.id);
@@ -920,8 +922,8 @@ export function AdminTimetablePage() {
                               const next = e.target.checked
                                 ? Array.from(new Set([...formClassIds, c.id]))
                                 : formClassIds.filter((x) => x !== c.id);
-                              if (next.length > 4) {
-                                setErr(toUiError(new Error("Нельзя больше 4 групп на одной паре")));
+                              if (next.length > 5) {
+                                setErr(toUiError(new Error("Нельзя больше 5 групп на одной паре")));
                                 return;
                               }
                               setFormClassIds(next);
@@ -945,7 +947,7 @@ export function AdminTimetablePage() {
                 <button className="secondary" onClick={closeModal}>
                   Отмена
                 </button>
-                <button onClick={handleSave} disabled={!formSubjectId}>
+                <button onClick={handleSave} disabled={!formSubjectId || !formTeacherId}>
                   <Save size={18} style={{ marginRight: 8 }} />
                   Сохранить
                 </button>

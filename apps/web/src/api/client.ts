@@ -2777,9 +2777,45 @@ export async function apiTeacherDeleteSubjectTopic(token: string, topicId: strin
 }
 
 // Journal API
+export type JournalCellGrade = {
+  grade: number;
+  comment?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
+};
+
+export type ClassJournalCell = {
+  grades: JournalCellGrade[];
+  present?: boolean | null;
+  attendance_type?: string | null;
+};
+
+export type ClassJournalLesson = {
+  date: string;
+  timetable_entry_id: string;
+  subject_name: string;
+  subject_id?: string | null;
+  lesson_topic?: string | null;
+  homework?: string | null;
+  subject_topic_id?: string | null;
+  start_time?: string | null;
+};
+
+export type ClassJournalStudent = {
+  id: string;
+  name: string;
+  student_number?: number | null;
+};
+
+export type ClassJournalResponse = {
+  students: ClassJournalStudent[];
+  lessons: ClassJournalLesson[];
+  grades: Record<string, Record<string, ClassJournalCell>>;
+};
+
 export async function apiGetClassJournal(token: string, classId: string, subjectId?: string) {
   const url = `/journal/classes/${encodeURIComponent(classId)}/journal` + (subjectId ? `?subject_id=${encodeURIComponent(subjectId)}` : "");
-  return apiGet<any>(url, token);
+  return apiGet<ClassJournalResponse>(url, token);
 }
 
 export async function apiGetLessonDetails(token: string, entryId: string, date: string) {
