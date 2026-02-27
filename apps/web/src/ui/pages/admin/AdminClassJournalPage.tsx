@@ -4,7 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 import { getAdminNavItems } from "../../layout/navigation";
 import { Loader } from "../../components/Loader";
-import { apiListSubjectsWithTeachers, Subject, trackedFetch, apiGetSubjectTopics } from "../../../api/client";
+import { apiListSubjectsWithTeachers, Subject, apiGetSubjectTopics, apiGetJournalByDates, apiGetJournalBySubject, apiGetClass, apiGetClassJournal, apiDownloadBlob } from "../../../api/client";
 import styles from "./AdminClassJournal.module.css";
 import { ChevronLeft, Download, RefreshCw, FileSpreadsheet, Filter, CheckCircle } from "lucide-react";
 
@@ -115,24 +115,9 @@ export function AdminClassJournalPage() {
     setErr(null);
     try {
       const results = await Promise.allSettled([
-        trackedFetch(`/api/gradebook/classes/${classId}/journal`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(async (r) => {
-          if (!r.ok) throw new Error(`Journal Dates error: ${await r.text()}`);
-          return r.json();
-        }),
-        trackedFetch(`/api/gradebook/classes/${classId}/journal/by-subject`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(async (r) => {
-          if (!r.ok) throw new Error(`Journal Subjects error: ${await r.text()}`);
-          return r.json();
-        }),
-        trackedFetch(`/api/classes/${classId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(async (r) => {
-          if (!r.ok) throw new Error(`Class Info error: ${await r.text()}`);
-          return r.json();
-        }),
+        apiGetJournalByDates(token, classId!),
+        apiGetJournalBySubject(token, classId!),
+        apiGetClass(token, classId!),
         apiListSubjectsWithTeachers(token),
       ]);
 
@@ -182,16 +167,7 @@ export function AdminClassJournalPage() {
     async function loadDetailed() {
       setLoading(true);
       try {
-        const url = new URL(`/api/journal/classes/${classId}/journal`, window.location.origin);
-        url.searchParams.append("subject_id", selectedSubjectId);
-        const resp = await trackedFetch(url.toString(), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(`Failed to load detailed journal: ${text}`);
-        }
-        const data = await resp.json();
+        const data = await apiGetClassJournal(token as string, classId!, selectedSubjectId) as any;
         setDetailedJournal(data);
       } catch (e) {
         console.error(e);
@@ -213,16 +189,11 @@ export function AdminClassJournalPage() {
     if (!token || !classId) return;
     const endpoint =
       type === "attendance"
-        ? `/api/gradebook/classes/${classId}/journal/export/attendance`
-        : `/api/gradebook/classes/${classId}/journal/export/grades`;
+        ? `/gradebook/classes/${classId}/journal/export/attendance`
+        : `/gradebook/classes/${classId}/journal/export/grades`;
 
     try {
-      const response = await trackedFetch(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error("Failed to download Excel");
-
-      const blob = await response.blob();
+      const blob = await apiDownloadBlob(token, endpoint);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

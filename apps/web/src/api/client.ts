@@ -2818,6 +2818,24 @@ export async function apiGetClassJournal(token: string, classId: string, subject
   return apiGet<ClassJournalResponse>(url, token);
 }
 
+export async function apiGetJournalByDates(token: string, classId: string) {
+  return apiGet<any>(`/gradebook/classes/${encodeURIComponent(classId)}/journal`, token);
+}
+
+export async function apiGetJournalBySubject(token: string, classId: string) {
+  return apiGet<any>(`/gradebook/classes/${encodeURIComponent(classId)}/journal/by-subject`, token);
+}
+
+export async function apiDownloadBlob(token: string, path: string): Promise<Blob> {
+  const url = `${API_BASE}${withApiPrefix(path)}`;
+  const res = await trackedFetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+  return res.blob();
+}
+
 export async function apiGetLessonDetails(token: string, entryId: string, date: string) {
   const url = `/journal/lesson-details?timetable_entry_id=${encodeURIComponent(entryId)}&lesson_date=${encodeURIComponent(date)}`;
   return apiGet<any>(url, token);
