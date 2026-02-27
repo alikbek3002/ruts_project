@@ -103,7 +103,12 @@ export function TeacherJournalPage() {
   const [loadingSubjects, setLoadingSubjects] = useState(false);
 
   // Ученики класса - загружаются сразу при выборе группы
-  const [classStudents, setClassStudents] = useState<{ id: string; full_name: string | null; student_number?: number | null }[]>([]);
+  const [classStudents, setClassStudents] = useState<{
+    id: string;
+    full_name: string | null;
+    student_number?: number | null;
+    legacy_student_id?: string | null;
+  }[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   // Level 3: Lessons
@@ -713,8 +718,9 @@ export function TeacherJournalPage() {
                   </thead>
                   <tbody>
                     {classStudents.map((s, idx) => {
-                      const studentId = s.id;
+                      const studentId = s.legacy_student_id || s.id;
                       const sGrades = gridData?.grades?.[studentId] || {};
+                      const canEditCell = !!gridData?.grades?.[studentId];
 
                       // Calculate average only for filtered lessons
                       let total = 0;
@@ -767,12 +773,14 @@ export function TeacherJournalPage() {
                             return (
                               <td
                                 key={key}
-                                className={`${styles.cellGrade} ${styles.cellGradeClickable}`}
-                                onClick={(e) => openGradePopup(e, studentId, s.full_name || '—', l)}
-                                title={gradeTitle || undefined}
+                                className={`${styles.cellGrade} ${canEditCell ? styles.cellGradeClickable : ""}`}
+                                onClick={canEditCell ? (e) => openGradePopup(e, studentId, s.full_name || '—', l) : undefined}
+                                title={gradeTitle || (!canEditCell ? "Ученик не привязан к учетной записи" : undefined)}
                                 style={{
                                   padding: isCompact ? '4px 2px' : '8px 4px',
-                                  fontSize: isCompact ? 11 : 13
+                                  fontSize: isCompact ? 11 : 13,
+                                  cursor: canEditCell ? 'pointer' : 'not-allowed',
+                                  opacity: canEditCell ? 1 : 0.65
                                 }}
                               >
                                 {attendanceMark}
