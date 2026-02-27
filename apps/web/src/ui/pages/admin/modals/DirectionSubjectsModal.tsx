@@ -97,7 +97,7 @@ export const DirectionSubjectsModal: React.FC<Props> = ({ direction, token, onCl
             await apiUpdateDirectionSubject(token, direction.id, editingId, editingItem);
             setEditingId(null);
             setEditingItem(null);
-            await reloadData();
+            void reloadData();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -119,7 +119,7 @@ export const DirectionSubjectsModal: React.FC<Props> = ({ direction, token, onCl
                 exam_hours: 0,
                 total_hours: 0,
             });
-            await reloadData();
+            void reloadData();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -132,7 +132,7 @@ export const DirectionSubjectsModal: React.FC<Props> = ({ direction, token, onCl
         setLoading(true);
         try {
             await apiDeleteDirectionSubject(token, direction.id, itemId);
-            await reloadData();
+            void reloadData();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -277,3 +277,4 @@ export const DirectionSubjectsModal: React.FC<Props> = ({ direction, token, onCl
         </div>
     );
 };
+

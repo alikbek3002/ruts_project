@@ -229,7 +229,7 @@ export function TeacherTimetablePage() {
       const url = meetUrl.trim() || null;
       await apiSetTimetableMeetLink(token, meetLesson.id, url);
       setMeetSuccess(url ? "Ссылка сохранена!" : "Ссылка удалена!");
-      await reload();
+      void reload();
       setTimeout(() => setMeetModalOpen(false), 1500);
     } catch (e) {
       setMeetErr(`Ошибка сохранения: ${String(e)}`);

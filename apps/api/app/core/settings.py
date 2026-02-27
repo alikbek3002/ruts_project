@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     app_cors_origins: str = "http://localhost:5173"
     app_frontend_base: str = "http://localhost:5173"
     app_timezone: str = "Asia/Bishkek"
+    app_cookie_secure: bool | None = None
+    app_cookie_samesite: str = "lax"
 
     supabase_url: str
     supabase_service_role_key: str

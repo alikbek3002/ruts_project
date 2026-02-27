@@ -105,7 +105,7 @@ export function AdminStreamsPage() {
         end_date: createEnd,
       });
       setCreateOpen(false);
-      await reload();
+      void reload();
     } catch (e) {
       setErr(String(e));
     }
@@ -144,7 +144,7 @@ export function AdminStreamsPage() {
                 <Link key={s.id} to={`${base}/streams/${s.id}`} className={styles.card}>
                   <div className={styles.cardTitle}>{s.name}</div>
                   <div className={styles.cardMeta}>
-                    {s.start_date} → {s.end_date} • {s.status} • {t("admin.streams.meta.groups")}: {s.class_count} • {t("admin.streams.meta.students")}: {s.student_count}
+                    {s.start_date} — {s.end_date} • {s.status} • {t("admin.streams.meta.groups")}: {s.class_count} • {t("admin.streams.meta.students")}: {s.student_count}
                   </div>
                   <div className={styles.cardSubTitle}>{t("admin.streams.classesInStream")}</div>
                   {classNames.length === 0 ? (
@@ -210,3 +210,4 @@ export function AdminStreamsPage() {
     </AppShell>
   );
 }
+

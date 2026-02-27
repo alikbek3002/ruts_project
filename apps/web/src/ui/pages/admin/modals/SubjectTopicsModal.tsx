@@ -40,6 +40,7 @@ import {
     apiSubjectContentDeleteQuestion,
     apiSubjectContentDeleteOption,
     apiSubjectListQuestions,
+    apiDownloadBlob,
     getSubjectTopicsExportUrl,
 } from "../../../../api/client";
 import { TopicMaterialsModal } from "./TopicMaterialsModal";
@@ -148,7 +149,7 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
             }
             setEditingTopicId(null);
             setEditingTopic(null);
-            await reloadTopics();
+            void reloadTopics();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -176,7 +177,7 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
                 await apiCreateSubjectTopic(token, subject.id, newTopic);
             }
             setIsAddingNew(false);
-            await reloadTopics();
+            void reloadTopics();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -193,7 +194,7 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
             } else {
                 await apiDeleteSubjectTopic(token, subject.id, topicId);
             }
-            await reloadTopics();
+            void reloadTopics();
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -201,9 +202,22 @@ export const SubjectTopicsModal: React.FC<Props> = ({ subject, token, isTeacher,
         }
     };
 
-    const handleDownloadExcel = () => {
-        const url = getSubjectTopicsExportUrl(subject.id, token);
-        window.open(url, "_blank");
+    const handleDownloadExcel = async () => {
+        try {
+            const path = getSubjectTopicsExportUrl(subject.id);
+            const blob = await apiDownloadBlob(token, path);
+            const safeName = (subject.name || "subject").replace(/[\\/:*?\"<>|]+/g, "_");
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `syllabus_${safeName}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            setErr(String(e));
+        }
     };
 
     return (

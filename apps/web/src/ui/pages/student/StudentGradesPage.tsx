@@ -95,8 +95,8 @@ export function StudentGradesPage() {
                   {r.class_name ? ` (${r.class_name})` : ""}
                 </div>
                 <div style={{ opacity: 0.85 }}>
-                  Посещение: {r.present ? "Был(а)" : "Нет"} · Оценка: {r.grade ?? "—"}
-                  {r.room ? ` · ${r.room}` : ""}
+                  Посещение: {r.present ? "Был(а)" : "Нет"} • Оценка: {r.grade ?? "—"}
+                  {r.room ? ` • ${r.room}` : ""}
                 </div>
               </div>
             ))}

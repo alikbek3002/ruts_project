@@ -130,7 +130,7 @@ export function AdminClassesPage() {
       }
 
       setCreateOpen(false);
-      await reloadAll();
+      void reloadAll();
     } catch (e) {
       setErr(String(e));
     }
@@ -153,7 +153,7 @@ export function AdminClassesPage() {
         curator_id: editCuratorId || null,
       });
       setEditingClass(null);
-      await reloadAll();
+      void reloadAll();
     } catch (e) {
       setErr(String(e));
     }
@@ -177,7 +177,7 @@ export function AdminClassesPage() {
     setErr(null);
     try {
       await apiDeleteClass(token, cls.id, actorPassword.trim());
-      await reloadAll();
+      void reloadAll();
     } catch (e) {
       setErr(String(e));
     }
@@ -193,8 +193,8 @@ export function AdminClassesPage() {
     try {
       await apiEnrollStudent(token, { class_id: enrollingClassId, student_full_name: newStudentName.trim() });
       setNewStudentName("");
-      await reloadClassStudents(enrollingClassId);
-      await reloadAll();
+      void reloadClassStudents(enrollingClassId);
+      void reloadAll();
     } catch (e) {
       setErr(String(e));
     }
@@ -213,8 +213,8 @@ export function AdminClassesPage() {
     try {
       const result = await apiBulkEnrollStudents(token, enrollingClassId, lines);
       setBulkStudentsList("");
-      await reloadClassStudents(enrollingClassId);
-      await reloadAll();
+      void reloadClassStudents(enrollingClassId);
+      void reloadAll();
       alert(`Добавлено учеников: ${result.count}`);
     } catch (e) {
       setErr(String(e));

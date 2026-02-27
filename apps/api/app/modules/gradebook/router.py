@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from collections import defaultdict
 from io import BytesIO
@@ -12,6 +13,7 @@ from app.core.deps import get_current_user, require_role
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _lesson_journal_supported(sb) -> bool:
@@ -20,6 +22,18 @@ def _lesson_journal_supported(sb) -> bool:
         return True
     except Exception:
         return False
+
+
+def _invalidate_gradebook_cache(class_ids: list[str] | None = None) -> None:
+    from app.core.cache import cache
+
+    if not class_ids:
+        return
+    for cid in class_ids:
+        if not cid:
+            continue
+        cache.delete(f"journal_dates:{cid}")
+        cache.delete(f"journal_subjects:{cid}")
 
 
 class CreateAssessmentIn(BaseModel):
@@ -32,6 +46,7 @@ class CreateAssessmentIn(BaseModel):
 def create_assessment(payload: CreateAssessmentIn, user: dict = require_role("teacher", "admin")):
     sb = get_supabase()
     resp = sb.table("assessments").insert({**payload.model_dump(), "created_by": user["id"]}).execute()
+    _invalidate_gradebook_cache([payload.class_id])
     return {"assessment": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
 
 
@@ -55,6 +70,10 @@ class SetGradesIn(BaseModel):
 @router.put("/assessments/{assessment_id}/grades")
 def set_grades(assessment_id: str, payload: SetGradesIn, _: dict = require_role("teacher", "admin")):
     sb = get_supabase()
+    class_id = None
+    a_rows = sb.table("assessments").select("class_id").eq("id", assessment_id).limit(1).execute().data or []
+    if a_rows:
+        class_id = a_rows[0].get("class_id")
     rows = [
         {
             "assessment_id": assessment_id,
@@ -66,6 +85,8 @@ def set_grades(assessment_id: str, payload: SetGradesIn, _: dict = require_role(
     ]
     # upsert by composite key (assessment_id, student_id)
     sb.table("grades").upsert(rows, on_conflict="assessment_id,student_id").execute()
+    if class_id:
+        _invalidate_gradebook_cache([str(class_id)])
     return {"ok": True}
 
 
@@ -322,6 +343,7 @@ def lesson_journal_save(
 
     if upserts:
         sb.table("lesson_journal").upsert(upserts, on_conflict="timetable_entry_id,lesson_date,student_id").execute()
+        _invalidate_gradebook_cache([str(cid) for cid in roster_class_ids if cid])
 
     return {"ok": True}
 
@@ -424,11 +446,10 @@ def class_journal_by_dates(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to load journal by dates")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to load journal by dates: {str(e)}",
+            detail="Failed to load journal by dates",
         )
 
 
@@ -554,11 +575,10 @@ def class_journal_by_subject(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to load journal by subject")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to load journal by subject: {str(e)}",
+            detail="Failed to load journal by subject",
         )
 
 

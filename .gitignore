@@ -2,6 +2,7 @@
 node_modules/
 apps/web/dist/
 apps/web/.env
+apps/web/src/.env
 apps/web/tsconfig.tsbuildinfo
 apps/web/.vite/
 

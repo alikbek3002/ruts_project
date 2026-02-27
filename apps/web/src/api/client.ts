@@ -180,7 +180,7 @@ function buildGetCacheKey(path: string, headers?: HeadersInit): string {
 }
 
 export function invalidateApiGetCache(pathPrefix?: string): void {
-  if (!pathPrefix) {
+  if (!pathPrefix || pathPrefix === "*") {
     apiGetCache.clear();
     apiGetInFlight.clear();
     return;
@@ -190,6 +190,66 @@ export function invalidateApiGetCache(pathPrefix?: string): void {
   for (const key of Array.from(apiGetCache.keys())) {
     if (key.startsWith(normalizedPrefix)) apiGetCache.delete(key);
   }
+}
+
+function normalizeApiPath(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const u = new URL(path);
+      return u.pathname || "/";
+    } catch {
+      return path;
+    }
+  }
+  return withApiPrefix(path);
+}
+
+function inferMutationInvalidationPrefixes(path: string): string[] {
+  const normalized = normalizeApiPath(path);
+  if (!normalized.startsWith("/api/")) return ["*"];
+
+  const rest = normalized.slice("/api/".length);
+  const [segment, subsegment] = rest.split("/");
+  if (!segment) return ["*"];
+
+  if (segment === "auth") {
+    if (subsegment === "change-password") return ["/auth/me", "/profile"];
+    return ["*"];
+  }
+
+  const map: Record<string, string[]> = {
+    admin: ["/admin", "/users", "/classes", "/subjects", "/streams", "/directions", "/cycles"],
+    classes: ["/classes", "/journal", "/gradebook", "/timetable", "/streams", "/admin"],
+    courses: ["/courses", "/subject-content", "/subjects"],
+    cycles: ["/cycles", "/subjects", "/users", "/admin"],
+    directions: ["/directions", "/subjects", "/streams", "/curriculum"],
+    gradebook: ["/gradebook", "/journal", "/classes"],
+    journal: ["/journal", "/gradebook", "/classes", "/timetable", "/profile"],
+    library: ["/library"],
+    meetings: ["/meetings", "/timetable", "/journal"],
+    notifications: ["/notifications"],
+    profile: ["/profile", "/auth/me"],
+    streams: ["/streams", "/classes", "/timetable", "/journal", "/gradebook"],
+    "subject-content": ["/subject-content", "/subjects", "/journal", "/courses"],
+    subjects: ["/subjects", "/journal", "/timetable", "/cycles", "/subject-content", "/syllabus"],
+    syllabus: ["/syllabus", "/subjects", "/journal", "/subject-content"],
+    timetable: ["/timetable", "/journal", "/gradebook", "/classes", "/meetings", "/streams"],
+    users: ["/users", "/admin/users", "/profile"],
+    zoom: ["/zoom", "/meetings"],
+  };
+
+  const scoped = map[segment];
+  if (!scoped || scoped.length === 0) return [`/${segment}`];
+  return scoped;
+}
+
+function invalidateMutationCaches(path: string): void {
+  const prefixes = inferMutationInvalidationPrefixes(path);
+  if (prefixes.includes("*")) {
+    invalidateApiGetCache("*");
+    return;
+  }
+  for (const prefix of prefixes) invalidateApiGetCache(prefix);
 }
 
 async function http<T>(path: string, init?: HttpRequestInit, _retry = true, _allowCache = true): Promise<T> {
@@ -277,12 +337,12 @@ async function http<T>(path: string, init?: HttpRequestInit, _retry = true, _all
 
   // For 204 No Content, return void/undefined instead of trying to parse JSON
   if (res.status === 204) {
-    if (isMutation) invalidateApiGetCache();
+    if (isMutation) invalidateMutationCaches(path);
     return undefined as T;
   }
 
   const result = (await res.json()) as T;
-  if (isMutation) invalidateApiGetCache();
+  if (isMutation) invalidateMutationCaches(path);
   return result;
   };
 
@@ -369,7 +429,7 @@ async function apiPostForm<T>(path: string, formData: FormData, accessToken: str
   }
 
   const result = (await res.json()) as T;
-  invalidateApiGetCache();
+  invalidateMutationCaches(path);
   return result;
 }
 
@@ -794,8 +854,8 @@ export async function apiBulkUpdateSubjectTopics(token: string, subjectId: strin
   return apiPost<{ ok: boolean; count: number }>(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/bulk-update`, topics, token);
 }
 
-export function getSubjectTopicsExportUrl(subjectId: string, token: string): string {
-  return withApiPrefix(`/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/export?token=${encodeURIComponent(token)}`);
+export function getSubjectTopicsExportUrl(subjectId: string): string {
+  return `/syllabus/subjects/${encodeURIComponent(subjectId)}/topics/export`;
 }
 
 export type AdminUserDetails = AdminUser & {

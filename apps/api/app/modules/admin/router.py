@@ -79,9 +79,9 @@ class UpdateUserIn(BaseModel):
 def admin_create_user(payload: CreateUserIn, actor: dict = require_role("admin", "manager")):
     role = payload.role
     
-    # Disable student creation - all students use shared account
+    # Disable direct student creation: student access is managed separately.
     if role == "student":
-        raise HTTPException(status_code=400, detail="Student creation disabled. All students use shared account (username: student, password: 123456)")
+        raise HTTPException(status_code=400, detail="Student creation is disabled in this mode. Use managed student access flow.")
     
     if role == "manager":
         raise HTTPException(status_code=400, detail="Cannot create manager users")

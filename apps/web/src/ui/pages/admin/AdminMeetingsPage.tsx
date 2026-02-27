@@ -77,7 +77,7 @@ export function AdminMeetingsPage() {
     if (!window.confirm("Удалить ссылку?")) return;
     try {
       await apiDeleteMeetingLink(token, linkId);
-      await reload();
+      void reload();
     } catch (e) {
       alert(String(e));
     }
@@ -115,7 +115,7 @@ export function AdminMeetingsPage() {
       setTime("");
       setSelectedClassId("");
       setAudience("all");
-      await reload();
+      void reload();
     } catch (e: any) {
       alert(e.message || "Ошибка создания");
     } finally {

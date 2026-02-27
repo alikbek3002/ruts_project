@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -10,6 +11,7 @@ from app.core.deps import CurrentUser, require_role
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _is_missing_table_api_error(err: Exception, table: str) -> bool:
@@ -34,6 +36,51 @@ def _is_missing_column_api_error(err: Exception, column: str) -> bool:
         return ("42703" in msg) and (column in msg)
     except Exception:
         return False
+
+
+def _student_accessible_class_ids(sb, student_id: str) -> set[str]:
+    try:
+        rows = (
+            sb.table("class_enrollments")
+            .select("class_id")
+            .or_(f"legacy_student_id.eq.{student_id},student_id.eq.{student_id}")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        rows = (
+            sb.table("class_enrollments")
+            .select("class_id")
+            .eq("legacy_student_id", student_id)
+            .execute()
+            .data
+            or []
+        )
+    return {str(r.get("class_id")) for r in rows if r.get("class_id")}
+
+
+def _student_can_download_item(sb, student_id: str, item: dict) -> bool:
+    class_id = item.get("class_id")
+    if not class_id and item.get("topic_id"):
+        try:
+            topic = (
+                sb.table("library_topics")
+                .select("class_id")
+                .eq("id", item["topic_id"])
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            class_id = topic[0].get("class_id") if topic else None
+        except Exception:
+            class_id = None
+
+    if not class_id:
+        return True
+
+    return str(class_id) in _student_accessible_class_ids(sb, student_id)
 
 
 class CreateLibraryItemIn(BaseModel):
@@ -222,11 +269,12 @@ async def create_topic_with_file(
             file=file_content,
             file_options={"content-type": file.content_type or "application/octet-stream"},
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+    except Exception:
+        logger.exception("Library file upload failed")
+        raise HTTPException(status_code=500, detail="File upload failed")
 
     # Create library item for the uploaded file
-    item_title = file.filename or "Файл"
+    item_title = file.filename or "File"
     item_resp = (
         sb.table("library_items")
         .insert(
@@ -300,10 +348,11 @@ async def upload_file_to_topic(
             file=file_content,
             file_options={"content-type": file.content_type or "application/octet-stream"},
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+    except Exception:
+        logger.exception("Library file upload failed")
+        raise HTTPException(status_code=500, detail="File upload failed")
 
-    item_title = (title or "").strip() or (file.filename or "Файл")
+    item_title = (title or "").strip() or (file.filename or "File")
     item_resp = (
         sb.table("library_items")
         .insert(
@@ -350,8 +399,9 @@ async def upload_file(
             file=file_content,
             file_options={"content-type": file.content_type or "application/octet-stream"}
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+    except Exception:
+        logger.exception("Library file upload failed")
+        raise HTTPException(status_code=500, detail="File upload failed")
 
     # Create library item record
     item_row = {
@@ -376,20 +426,6 @@ async def upload_file(
 
     item = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
     return {"item": item, "originalFilename": file.filename}
-    
-    # Create library item record
-    resp = sb.table("library_items").insert({
-        "title": title,
-        "description": description,
-        "class_id": class_id,
-        "storage_bucket": "library",
-        "storage_path": storage_path,
-        "uploaded_by": user["id"],
-        "topic_id": topic_id,
-    }).execute()
-    
-    item = resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data
-    return {"item": item, "originalFilename": file.filename}
 
 
 @router.get("/{item_id}/download-url")
@@ -398,11 +434,21 @@ def get_download_url(item_id: str, user: dict = require_role("admin", "teacher",
     sb = get_supabase()
     
     # Get library item
-    resp = sb.table("library_items").select("storage_bucket,storage_path").eq("id", item_id).single().execute()
+    resp = (
+        sb.table("library_items")
+        .select("storage_bucket,storage_path,class_id,topic_id")
+        .eq("id", item_id)
+        .single()
+        .execute()
+    )
     item = resp.data
     
     if not item:
         raise HTTPException(status_code=404, detail="Library item not found")
+
+    if user.get("role") == "student":
+        if not _student_can_download_item(sb, str(user.get("id")), item):
+            raise HTTPException(status_code=403, detail="Permission denied")
     
     # Generate signed URL (valid for 1 hour)
     try:
@@ -411,8 +457,9 @@ def get_download_url(item_id: str, user: dict = require_role("admin", "teacher",
             expires_in=3600  # 1 hour
         )
         return {"url": signed_url["signedURL"]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate download URL: {str(e)}")
+    except Exception:
+        logger.exception("Failed to generate library download URL")
+        raise HTTPException(status_code=500, detail="Failed to generate download URL")
 
 
 @router.delete("/{item_id}")
@@ -436,7 +483,7 @@ def delete_item(item_id: str, user: dict = require_role("teacher", "admin")):
         sb.storage.from_(item["storage_bucket"]).remove([item["storage_path"]])
     except Exception as e:
         # Log error but continue with DB deletion
-        print(f"Warning: Failed to delete file from storage: {e}")
+        logger.warning("Failed to delete file from storage: %s", e)
     
     # Delete database record
     sb.table("library_items").delete().eq("id", item_id).execute()
@@ -449,8 +496,8 @@ def delete_item(item_id: str, user: dict = require_role("teacher", "admin")):
 class TopicCreateIn(BaseModel):
     title: str
     description: str | None = None
-    class_id: str | None = None  # Deprecated - не используется, темы для всех классов
-    subject_id: str | None = None  # Опционально - для учителя определяется автоматически
+    class_id: str | None = None  # Deprecated, topics are not class-scoped now.
+    subject_id: str | None = None  # Optional, for teacher this is resolved automatically.
 
 
 @router.get("/topics")
@@ -459,7 +506,7 @@ def list_topics(
     subject_id: str | None = None,
     user: dict = require_role("admin", "teacher", "student")
 ):
-    print(f"Listing topics for user {user.get('id')} role {user.get('role')}")
+    logger.debug("Listing topics for user=%s role=%s", user.get("id"), user.get("role"))
     sb = get_supabase()
     
     # Get topics
@@ -471,9 +518,9 @@ def list_topics(
         
     try:
         topics_resp = q.order("created_at", desc=True).execute()
-        print(f"Topics found: {len(topics_resp.data) if topics_resp.data else 0}")
+        logger.debug("Library topics found: %s", len(topics_resp.data) if topics_resp.data else 0)
     except APIError as e:
-        print(f"Error listing topics: {e}")
+        logger.warning("Error listing topics: %s", e)
         # Fallback if subject_id column missing
         if _is_missing_column_api_error(e, "subject_id"):
             q = sb.table("library_topics").select("id,title,description,class_id,created_by,created_at")
@@ -600,7 +647,7 @@ async def upload_topic_files(
                 file_options={"content-type": file.content_type or "application/octet-stream"}
             )
         except Exception as e:
-            print(f"Upload failed for {file.filename}: {e}")
+            logger.warning("Library upload failed for %s: %s", file.filename, e)
             continue
         
         item_data = {
@@ -617,7 +664,8 @@ async def upload_topic_files(
             if resp.data:
                 uploaded.append(resp.data[0])
         except Exception as e:
-            print(f"DB insert failed for {file.filename}: {e}")
+            logger.warning("Library DB insert failed for %s: %s", file.filename, e)
             
     return uploaded
+
 

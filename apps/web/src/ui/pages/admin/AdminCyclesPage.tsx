@@ -112,7 +112,7 @@ export function AdminCyclesPage() {
         setModalLoading(true);
         try {
             await apiAssignSubjectToCycle(token, selectedSubjectId, selectedCycle.id);
-            await loadCycleDetail(selectedCycle.id);
+            void loadCycleDetail(selectedCycle.id);
             setSelectedSubjectId("");
         } catch (e) {
             setErr(String(e));
@@ -127,7 +127,7 @@ export function AdminCyclesPage() {
         setModalLoading(true);
         try {
             await apiAssignSubjectToCycle(token, subjectId, null);
-            await loadCycleDetail(selectedCycle.id);
+            void loadCycleDetail(selectedCycle.id);
         } catch (e) {
             setErr(String(e));
         } finally {
@@ -140,7 +140,7 @@ export function AdminCyclesPage() {
         setModalLoading(true);
         try {
             await apiAddTeacherToCycle(token, selectedCycle.id, selectedTeacherId);
-            await loadCycleDetail(selectedCycle.id);
+            void loadCycleDetail(selectedCycle.id);
             setSelectedTeacherId("");
         } catch (e) {
             setErr(String(e));
@@ -155,7 +155,7 @@ export function AdminCyclesPage() {
         setModalLoading(true);
         try {
             await apiRemoveTeacherFromCycle(token, selectedCycle.id, teacherId);
-            await loadCycleDetail(selectedCycle.id);
+            void loadCycleDetail(selectedCycle.id);
         } catch (e) {
             setErr(String(e));
         } finally {

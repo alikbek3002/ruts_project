@@ -230,7 +230,7 @@ export function AdminUsersPage() {
     try {
       await apiAdminDeleteUser(token, viewUser.id);
       setViewOpen(false);
-      await reload();
+      void reload();
     } catch (e) {
       setViewErr(String(e));
     } finally {
@@ -323,8 +323,7 @@ export function AdminUsersPage() {
             fontSize: "14px",
             border: "1px solid #7dd3fc"
           }}>
-            ℹ️ Все студенты используют общий аккаунт для входа:<br />
-            <strong>Логин:</strong> student &nbsp;|&nbsp; <strong>Пароль:</strong> 123456
+            ℹ️ Доступ студентов управляется централизованно. Учётные данные выдаются администратором по защищенному каналу.
           </div>
         )}
 
@@ -430,7 +429,7 @@ export function AdminUsersPage() {
                       {canCreateAdmin && <option value="admin">{t("role.admin")}</option>}
                     </select>
                     <div style={{ fontSize: 12, color: "var(--color-text-light)", marginTop: 4 }}>
-                      Студенты используют общий аккаунт (логин: student, пароль: 123456)
+                      Данные для входа студентов выдаются отдельно администратором.
                     </div>
                   </div>
 
@@ -587,7 +586,7 @@ export function AdminUsersPage() {
                         temp_password: generatedPassword,
                       });
                       setModalOpen(false);
-                      await reload();
+                      void reload();
                     } catch (e) {
                       setErr(String(e));
                     } finally {

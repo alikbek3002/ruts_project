@@ -147,17 +147,28 @@ export function TeacherJournalPage() {
     currentAttendance?: string | null;
   } | null>(null);
   const journalRevalidateTimerRef = useRef<number | null>(null);
+  const cellSaveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
+
+  function enqueueCellSave(cellKey: string, task: () => Promise<void>) {
+    const prev = cellSaveQueueRef.current.get(cellKey) || Promise.resolve();
+    const next = prev
+      .catch(() => undefined)
+      .then(task)
+      .finally(() => {
+        if (cellSaveQueueRef.current.get(cellKey) === next) {
+          cellSaveQueueRef.current.delete(cellKey);
+        }
+      });
+    cellSaveQueueRef.current.set(cellKey, next);
+  }
 
   function scheduleJournalRevalidate(classId: string) {
     if (journalRevalidateTimerRef.current != null) {
       window.clearTimeout(journalRevalidateTimerRef.current);
     }
     journalRevalidateTimerRef.current = window.setTimeout(() => {
-      void Promise.all([
-        loadClassStudents(classId, { silent: true }),
-        loadGrid({ silent: true }),
-      ]);
-    }, 650);
+      void loadGrid({ silent: true });
+    }, 900);
   }
 
   // Helper functions
@@ -518,7 +529,8 @@ export function TeacherJournalPage() {
     setGradePopup(null);
 
     // Save in background so user can immediately grade the next cell.
-    void (async () => {
+    const queueKey = `${popup.studentId}:${cellKey}`;
+    enqueueCellSave(queueKey, async () => {
       try {
         await apiSaveLessonGrade(token, selectedClassId, {
           student_id: popup.studentId,
@@ -533,7 +545,7 @@ export function TeacherJournalPage() {
       } finally {
         scheduleJournalRevalidate(selectedClassId);
       }
-    })();
+    });
   }
 
   function gradeColorClass(grade: number): string {

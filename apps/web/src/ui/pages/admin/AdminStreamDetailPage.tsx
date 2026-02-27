@@ -86,7 +86,7 @@ export function AdminStreamDetailPage() {
     try {
       await apiAddClassesToStream(token, streamId, addClassIds);
       setAddClassIds([]);
-      await reload();
+      void reload();
     } catch (e) {
       setErr(String(e));
     }
@@ -99,7 +99,7 @@ export function AdminStreamDetailPage() {
     setErr(null);
     try {
       await apiRemoveClassFromStream(token, streamId, classId);
-      await reload();
+      void reload();
     } catch (e) {
       setErr(String(e));
     }
@@ -199,7 +199,7 @@ export function AdminStreamDetailPage() {
           <div className={styles.grid}>
             <div className={styles.card}>
               <div className={styles.cardTitle}>{t("admin.streamDetail.params")}</div>
-              <div className={styles.meta}>{t("admin.streamDetail.period")}: {stream.start_date} → {stream.end_date}</div>
+              <div className={styles.meta}>{t("admin.streamDetail.period")}: {stream.start_date} — {stream.end_date}</div>
               <div className={styles.meta}>{t("admin.streamDetail.status")}: {stream.status}</div>
               <div className={styles.meta}>{t("admin.streamDetail.classCount")}: {stream.classes.length}</div>
             </div>
