@@ -719,7 +719,8 @@ export function TeacherJournalPage() {
                                 title={gradeTitle || undefined}
                                 style={{
                                   padding: isCompact ? '4px 2px' : '8px 4px',
-                                  fontSize: isCompact ? 11 : 13
+                                  fontSize: isCompact ? 11 : 13,
+                                  cursor: 'pointer'
                                 }}
                               >
                                 {attendanceMark}
@@ -727,6 +728,9 @@ export function TeacherJournalPage() {
                                   marginLeft: attendanceMark ? 2 : 0,
                                   fontSize: isCompact ? 11 : 13
                                 }}>{gradeVal}</span>}
+                                {!attendanceMark && !gradeVal && (
+                                  <span style={{ color: '#d1d5db', fontSize: isCompact ? 12 : 14, fontWeight: 300 }}>+</span>
+                                )}
                               </td>
                             );
                           })}
