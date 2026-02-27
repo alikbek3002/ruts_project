@@ -2818,6 +2818,10 @@ export async function apiGetClassJournal(token: string, classId: string, subject
   return apiGet<ClassJournalResponse>(url, token);
 }
 
+export async function apiGetTeacherLessons(token: string, lessonDate: string) {
+  return apiGet<any>(`/journal/teacher/lessons/${encodeURIComponent(lessonDate)}`, token);
+}
+
 export async function apiGetJournalByDates(token: string, classId: string) {
   return apiGet<any>(`/gradebook/classes/${encodeURIComponent(classId)}/journal`, token);
 }

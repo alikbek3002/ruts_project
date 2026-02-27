@@ -135,11 +135,25 @@ def get_teacher_schedule(
     timetable = _timetable_entries_for_teacher(
         sb,
         user["id"],
-        "id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)",
+        "id,class_id,class_ids,subject,weekday,start_time,end_time,room,subject_id,subjects(name)",
     )
     
     if not timetable:
         return {"lessons": []}
+    
+    # Собираем все class_ids для batch запроса названий
+    all_cids: list[str] = []
+    for e in timetable:
+        cids = e.get("class_ids") or []
+        if cids:
+            all_cids.extend([str(c) for c in cids if c])
+        elif e.get("class_id"):
+            all_cids.append(str(e["class_id"]))
+    all_cids = list(dict.fromkeys(all_cids))
+    class_names: dict[str, str] = {}
+    if all_cids:
+        cn_rows = sb.table("classes").select("id,name").in_("id", all_cids).execute().data or []
+        class_names = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
     
     # Генерируем даты в диапазоне
     start_date = date.fromisoformat(date_from)
@@ -149,27 +163,32 @@ def get_teacher_schedule(
     current_date = start_date
     
     while current_date <= end_date:
-        weekday = current_date.isoweekday()  # 1=Mon, 7=Sun
+        wd = current_date.weekday()  # 0=Mon, 6=Sun (matches timetable_entries)
         
         # Находим уроки на этот день недели
-        day_lessons = [e for e in timetable if e.get("weekday") == weekday]
+        day_lessons = [e for e in timetable if e.get("weekday") == wd]
         
         for entry in day_lessons:
             subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject")
-            class_name = entry.get("classes", {}).get("name") if entry.get("classes") else ""
+            cids = entry.get("class_ids") or []
+            if not cids:
+                cids = [entry.get("class_id")] if entry.get("class_id") else []
             
-            lessons.append({
-                "timetable_entry_id": entry.get("id"),
-                "date": current_date.isoformat(),
-                "weekday": weekday,
-                "start_time": entry.get("start_time"),
-                "end_time": entry.get("end_time"),
-                "subject": entry.get("subject"),
-                "subject_name": subject_name,
-                "class_id": entry.get("class_id"),
-                "class_name": class_name,
-                "room": entry.get("room")
-            })
+            # Для каждой группы создаём отдельный урок
+            for cid in cids:
+                cid_str = str(cid) if cid else ""
+                lessons.append({
+                    "timetable_entry_id": entry.get("id"),
+                    "date": current_date.isoformat(),
+                    "weekday": wd,
+                    "start_time": entry.get("start_time"),
+                    "end_time": entry.get("end_time"),
+                    "subject": entry.get("subject"),
+                    "subject_name": subject_name,
+                    "class_id": cid_str,
+                    "class_name": class_names.get(cid_str, ""),
+                    "room": entry.get("room")
+                })
         
         current_date += timedelta(days=1)
     
@@ -188,21 +207,35 @@ def get_teacher_lessons_for_date(
     """Получить все уроки учителя на конкретную дату"""
     sb = get_supabase()
     
-    # Определяем день недели
+    # Определяем день недели (0=Mon, 6=Sun — совпадает с timetable_entries)
     lesson_date_obj = date.fromisoformat(lesson_date)
-    weekday = lesson_date_obj.isoweekday()
+    wd = lesson_date_obj.weekday()
     
     # Получаем расписание на этот день.
     timetable = _timetable_entries_for_teacher(
         sb,
         user["id"],
-        "id,class_id,subject,weekday,start_time,end_time,room,subject_id,classes(name),subjects(name)",
-        weekday=weekday,
+        "id,class_id,class_ids,subject,weekday,start_time,end_time,room,subject_id,subjects(name)",
+        weekday=wd,
     )
     timetable.sort(key=lambda x: (x.get("start_time") or ""))
     
     if not timetable:
         return {"lessons": []}
+
+    # Собираем все class_ids для batch запроса названий
+    all_cids: list[str] = []
+    for e in timetable:
+        cids = e.get("class_ids") or []
+        if cids:
+            all_cids.extend([str(c) for c in cids if c])
+        elif e.get("class_id"):
+            all_cids.append(str(e["class_id"]))
+    all_cids = list(dict.fromkeys(all_cids))
+    class_names: dict[str, str] = {}
+    if all_cids:
+        cn_rows = sb.table("classes").select("id,name").in_("id", all_cids).execute().data or []
+        class_names = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
 
     # Оптимизация: получаем все записи журнала одним запросом
     entry_ids = [e["id"] for e in timetable]
@@ -222,20 +255,25 @@ def get_teacher_lessons_for_date(
     lessons = []
     for entry in timetable:
         subject_name = entry.get("subjects", {}).get("name") if entry.get("subjects") else entry.get("subject")
-        class_name = entry.get("classes", {}).get("name") if entry.get("classes") else ""
+        cids = entry.get("class_ids") or []
+        if not cids:
+            cids = [entry.get("class_id")] if entry.get("class_id") else []
         
-        lessons.append({
-            "timetable_entry_id": entry.get("id"),
-            "date": lesson_date,
-            "start_time": entry.get("start_time"),
-            "end_time": entry.get("end_time"),
-            "subject": entry.get("subject"),
-            "subject_name": subject_name,
-            "class_id": entry.get("class_id"),
-            "class_name": class_name,
-            "room": entry.get("room"),
-            "has_journal_entries": entry.get("id") in entries_with_journal
-        })
+        # Для каждой группы создаём отдельную запись урока
+        for cid in cids:
+            cid_str = str(cid) if cid else ""
+            lessons.append({
+                "timetable_entry_id": entry.get("id"),
+                "date": lesson_date,
+                "start_time": entry.get("start_time"),
+                "end_time": entry.get("end_time"),
+                "subject": entry.get("subject"),
+                "subject_name": subject_name,
+                "class_id": cid_str,
+                "class_name": class_names.get(cid_str, ""),
+                "room": entry.get("room"),
+                "has_journal_entries": entry.get("id") in entries_with_journal
+            })
     
     return {"lessons": lessons}
 
@@ -318,7 +356,7 @@ def get_lesson_details(
     # Получаем информацию об уроке
     entry = (
         sb.table("timetable_entries")
-        .select("id,class_id,subject,teacher_id,start_time,end_time,room,subject_id,classes(name),subjects(name)")
+        .select("id,class_id,class_ids,subject,teacher_id,start_time,end_time,room,subject_id,subjects(name)")
         .eq("id", timetable_entry_id)
         .limit(1)
         .execute()
@@ -333,19 +371,33 @@ def get_lesson_details(
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    class_id = entry_data.get("class_id")
-    subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
-    class_name = entry_data.get("classes", {}).get("name") if entry_data.get("classes") else ""
+    # Поддержка multi-group: используем class_ids (массив) вместо class_id (одного)
+    class_ids_list = entry_data.get("class_ids") or []
+    if not class_ids_list:
+        class_ids_list = [entry_data.get("class_id")] if entry_data.get("class_id") else []
+    class_ids_list = [str(c) for c in class_ids_list if c]
     
-    # Получаем студентов класса с их номерами
-    enrollments = (
-        sb.table("class_enrollments")
-        .select("legacy_student_id,student_number")
-        .eq("class_id", class_id)
-        .execute()
-        .data
-        or []
-    )
+    subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
+    
+    # Получаем названия всех классов
+    class_name = ""
+    if class_ids_list:
+        cn_rows = sb.table("classes").select("id,name").in_("id", class_ids_list).execute().data or []
+        cn_map = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
+        class_name = ", ".join(cn_map.get(c, c) for c in class_ids_list)
+    
+    # Получаем студентов из ВСЕХ классов (для multi-group уроков)
+    enrollments = []
+    for cid in class_ids_list:
+        enr = (
+            sb.table("class_enrollments")
+            .select("legacy_student_id,student_number,class_id")
+            .eq("class_id", cid)
+            .execute()
+            .data
+            or []
+        )
+        enrollments.extend(enr)
     
     student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
     student_numbers = {e.get("legacy_student_id"): e.get("student_number") for e in enrollments}
@@ -430,7 +482,7 @@ def get_lesson_details(
             "date": lesson_date,
             "subject": entry_data.get("subject"),
             "subject_name": subject_name,
-            "class_id": class_id,
+            "class_id": class_ids_list[0] if class_ids_list else None,
             "class_name": class_name,
             "start_time": entry_data.get("start_time"),
             "end_time": entry_data.get("end_time"),
@@ -591,7 +643,7 @@ def get_class_journal(
         
     current = start_date
     while current <= end_date:
-        wd = current.isoweekday()
+        wd = current.weekday()  # 0=Mon, 6=Sun (matches timetable_entries)
         d_str = current.isoformat()
         
         # Filter entries for this day

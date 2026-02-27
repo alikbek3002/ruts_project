@@ -12,7 +12,6 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { AppShell } from "../../layout/AppShell";
 
-import { trackedFetch } from "../../../api/client";
 import { Loader } from "../../components/Loader";
 import { useI18n } from "../../i18n/I18nProvider";
 import styles from "./TeacherHome.module.css";
@@ -47,17 +46,13 @@ export function TeacherHomePage() {
   async function loadTodayLessons() {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const res = await trackedFetch(`/api/journal/teacher/lessons/${today}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // Sort by start time
-        const sorted = (data.lessons || []).sort((a: Lesson, b: Lesson) =>
-          a.start_time.localeCompare(b.start_time)
-        );
-        setTodayLessons(sorted);
-      }
+      const { apiGetTeacherLessons } = await import("../../../api/client");
+      const data = await apiGetTeacherLessons(token!, today);
+      // Sort by start time
+      const sorted = (data.lessons || []).sort((a: Lesson, b: Lesson) =>
+        a.start_time.localeCompare(b.start_time)
+      );
+      setTodayLessons(sorted);
     } catch (e) {
       console.error("Failed to load lessons", e);
     } finally {
