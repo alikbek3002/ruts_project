@@ -797,6 +797,7 @@ export function TeacherJournalPage() {
                             let attendanceMark = null;
                             if (cell?.attendance_type) {
                               switch (cell.attendance_type) {
+                                case 'present': attendanceMark = <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>✓</span>; break;
                                 case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>; break;
                                 case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>К</span>; break;
                                 case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>А</span>; break;
@@ -805,6 +806,8 @@ export function TeacherJournalPage() {
                               }
                             } else if (cell?.present === false) {
                               attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>;
+                            } else if (cell?.present === true) {
+                              attendanceMark = <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>✓</span>;
                             }
 
                             return (

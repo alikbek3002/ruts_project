@@ -355,14 +355,20 @@ export function AdminClassJournalPage() {
                         const markedBy = grades[0]?.created_by_name || cell?.marked_by_name || null;
 
                         let attendanceLabel: string | null = null;
-                        if (attendanceType === "absent" || (attendanceType == null && present === false)) attendanceLabel = "Н";
-                        if (attendanceType === "duty") attendanceLabel = "К";
-                        if (attendanceType === "excused") attendanceLabel = "А";
-                        if (attendanceType === "sick") attendanceLabel = "О";
-                        if (attendanceType === "present") attendanceLabel = "✓";
+                        let attendanceColor: string | null = null;
+                        if (attendanceType === "absent" || (attendanceType == null && present === false)) { attendanceLabel = "Н"; attendanceColor = "#ef4444"; }
+                        else if (attendanceType === "duty") { attendanceLabel = "К"; attendanceColor = "#f59e0b"; }
+                        else if (attendanceType === "excused") { attendanceLabel = "А"; attendanceColor = "#3b82f6"; }
+                        else if (attendanceType === "sick") { attendanceLabel = "О"; attendanceColor = "#8b5cf6"; }
+                        else if (attendanceType === "present" || (attendanceType == null && present === true)) { attendanceLabel = "✓"; attendanceColor = "#22c55e"; }
 
                         return (
                           <td key={key}>
+                            {attendanceLabel && (
+                              <span style={{ color: attendanceColor || undefined, fontWeight: 'bold', fontSize: 11, marginRight: grades.length > 0 ? 3 : 0 }}
+                                className={attendanceLabel === "Н" ? styles.absent : undefined}
+                              >{attendanceLabel}</span>
+                            )}
                             {grades.length > 0 ? (
                               grades.map((g, i) => {
                                 const gradeTitle = [
@@ -377,11 +383,9 @@ export function AdminClassJournalPage() {
                                   </span>
                                 );
                               })
-                            ) : attendanceLabel ? (
-                              <span className={attendanceLabel === "Н" ? styles.absent : undefined}>{attendanceLabel}</span>
-                            ) : (
+                            ) : !attendanceLabel ? (
                               <span style={{ color: "var(--color-text-light)" }}>·</span>
-                            )}
+                            ) : null}
                             {markedBy && (
                               <div className={styles.cellAuthor} title={`Поставил(а): ${markedBy}`}>
                                 {markedBy}
