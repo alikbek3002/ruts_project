@@ -478,7 +478,7 @@ export function TeacherJournalPage() {
       });
       // Update local state optimistically
       setGradePopup(prev => prev ? { ...prev, currentGrade: grade, currentAttendance: attendanceType || null } : null);
-      await loadGrid();
+      await Promise.all([loadClassStudents(selectedClassId), loadGrid()]);
     } catch (e) {
       console.error('Quick grade save failed:', e);
     } finally {
@@ -667,7 +667,7 @@ export function TeacherJournalPage() {
                     {classStudents.map((s, idx) => {
                       const studentId = s.legacy_student_id || s.id;
                       const sGrades = gridData?.grades?.[studentId] || {};
-                      const canEditCell = !!gridData?.grades?.[studentId];
+                      const canEditCell = true;
 
                       // Calculate average only for filtered lessons
                       let total = 0;
@@ -722,7 +722,7 @@ export function TeacherJournalPage() {
                                 key={key}
                                 className={`${styles.cellGrade} ${canEditCell ? styles.cellGradeClickable : ""}`}
                                 onClick={canEditCell ? (e) => openGradePopup(e, studentId, s.full_name || '—', l) : undefined}
-                                title={gradeTitle || (!canEditCell ? "Ученик не привязан к учетной записи" : undefined)}
+                                title={gradeTitle}
                                 style={{
                                   padding: isCompact ? '4px 2px' : '8px 4px',
                                   fontSize: isCompact ? 11 : 13,

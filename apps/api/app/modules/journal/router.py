@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from app.core.deps import get_current_user, require_role
 from app.core.monitor import timed
+from app.core.provisioning import password_fingerprint
+from app.core.security import hash_password
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
@@ -18,6 +20,168 @@ def _timetable_entries_for_teacher(sb, teacher_id: str, select_fields: str, week
     if weekday is not None:
         q1 = q1.eq("weekday", weekday)
     return q1.execute().data or []
+
+
+def _timetable_entries_for_class(
+    sb,
+    class_id: str,
+    select_fields: str,
+    teacher_id: str | None = None,
+) -> list[dict]:
+    """
+    Backward-compatible class timetable fetch:
+    - new schema: class_ids contains class_id
+    - legacy schema/rows: class_id equals class_id
+    """
+    q_multi = (
+        sb.table("timetable_entries")
+        .select(select_fields)
+        .eq("active", True)
+        .cs("class_ids", [class_id])
+    )
+    if teacher_id:
+        q_multi = q_multi.eq("teacher_id", teacher_id)
+    rows_multi = q_multi.execute().data or []
+
+    q_legacy = (
+        sb.table("timetable_entries")
+        .select(select_fields)
+        .eq("active", True)
+        .eq("class_id", class_id)
+    )
+    if teacher_id:
+        q_legacy = q_legacy.eq("teacher_id", teacher_id)
+    rows_legacy = q_legacy.execute().data or []
+
+    by_id: dict[str, dict] = {}
+    for row in rows_multi + rows_legacy:
+        rid = row.get("id")
+        if not rid:
+            continue
+        by_id[str(rid)] = row
+    return list(by_id.values())
+
+
+def _normalize_lesson_date(value: object) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if "T" in s:
+        s = s.split("T", 1)[0]
+    return s[:10] if len(s) >= 10 else s
+
+
+def _entry_matches_weekday(entry_weekday: object, target_weekday: int) -> bool:
+    """
+    Compatibility for both weekday conventions:
+    - 0..6 (Mon..Sun) [current]
+    - 1..7 (Mon..Sun) [legacy]
+    """
+    if entry_weekday is None:
+        return False
+    try:
+        w = int(str(entry_weekday))
+    except (ValueError, TypeError):
+        return False
+    if 0 <= w <= 6:
+        return w == target_weekday
+    if 1 <= w <= 7:
+        return (w - 1) == target_weekday
+    return False
+
+
+def _ensure_legacy_student_id_for_enrollment(sb, class_id: str, enrollment: dict) -> str | None:
+    """
+    Ensure class enrollment has legacy_student_id.
+    If missing, create a technical inactive student user and bind it.
+    """
+    legacy = enrollment.get("legacy_student_id")
+    if legacy:
+        return str(legacy)
+
+    enrollment_id = enrollment.get("id")
+    if not enrollment_id:
+        return None
+    enrollment_id = str(enrollment_id)
+
+    username = f"enr-{enrollment_id}"
+    full_name = (enrollment.get("student_full_name") or "").strip()
+    if not full_name:
+        num = enrollment.get("student_number")
+        full_name = f"Student #{num}" if num is not None else f"Student {enrollment_id[:8]}"
+
+    existing = (
+        sb.table("users")
+        .select("id")
+        .eq("username", username)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if existing:
+        user_id = str(existing[0].get("id"))
+    else:
+        raw_password = f"enrollment:{enrollment_id}"
+        payload = {
+            "role": "student",
+            "username": username,
+            "full_name": full_name,
+            "password_hash": hash_password(raw_password),
+            "password_fingerprint": password_fingerprint(raw_password),
+            "must_change_password": False,
+            "is_active": False,
+        }
+        try:
+            created = sb.table("users").insert(payload).execute().data or []
+        except Exception:
+            # Backward-compatible fallback if password_fingerprint column is absent.
+            payload.pop("password_fingerprint", None)
+            created = sb.table("users").insert(payload).execute().data or []
+        if not created:
+            raise HTTPException(status_code=500, detail="Failed to provision student account")
+        user_id = str(created[0].get("id"))
+
+    sb.table("class_enrollments").update({"legacy_student_id": user_id}).eq("class_id", class_id).eq("id", enrollment_id).execute()
+    return user_id
+
+
+def _resolve_legacy_student_id_for_class(sb, class_id: str, raw_student_id: str) -> str | None:
+    sid = str(raw_student_id)
+
+    by_legacy = (
+        sb.table("class_enrollments")
+        .select("id,legacy_student_id,student_full_name,student_number")
+        .eq("class_id", class_id)
+        .eq("legacy_student_id", sid)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if by_legacy and by_legacy[0].get("legacy_student_id"):
+        return str(by_legacy[0]["legacy_student_id"])
+
+    by_enrollment = (
+        sb.table("class_enrollments")
+        .select("id,legacy_student_id,student_full_name,student_number")
+        .eq("class_id", class_id)
+        .eq("id", sid)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not by_enrollment:
+        return None
+
+    enrollment = by_enrollment[0]
+    if enrollment.get("legacy_student_id"):
+        return str(enrollment["legacy_student_id"])
+
+    return _ensure_legacy_student_id_for_enrollment(sb, class_id, enrollment)
 
 
 def _teacher_can_access_entry(sb, teacher_id: str, entry_data: dict) -> bool:
@@ -40,15 +204,15 @@ class AddGradeIn(BaseModel):
     timetable_entry_id: str
     lesson_date: str  # YYYY-MM-DD
     grade: int | None = None  # None = no grade, 2-5 valid values
-    present: bool = True  # False = отсутствие
+    present: bool = True  # False = РѕС‚СЃСѓС‚СЃС‚РІРёРµ
     comment: str | None = None
-    attendance_type: str | None = None  # present, absent, duty (Кезмет), excused (Арыз), sick (Оруу)
+    attendance_type: str | None = None  # present, absent, duty (РљРµР·РјРµС‚), excused (РђСЂС‹Р·), sick (РћСЂСѓСѓ)
 
 
 @router.get("/teacher/classes")
 @timed("get_teacher_classes")
 def get_teacher_classes(user: dict = require_role("teacher", "admin", "manager")):
-    """Получить все классы (для выбора журнала)"""
+    """РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РєР»Р°СЃСЃС‹ (РґР»СЏ РІС‹Р±РѕСЂР° Р¶СѓСЂРЅР°Р»Р°)"""
     sb = get_supabase()
     
     # Return all classes, sorted by name
@@ -68,16 +232,12 @@ def get_teacher_classes(user: dict = require_role("teacher", "admin", "manager")
 def get_class_subjects(class_id: str, user: dict = require_role("teacher", "admin", "manager")):
     """Return class subjects from active timetable entries."""
     sb = get_supabase()
-
-    q = (
-        sb.table("timetable_entries")
-        .select("subject_id,subject,teacher_id")
-        .eq("active", True)
-        .cs("class_ids", [class_id])
+    rows = _timetable_entries_for_class(
+        sb,
+        class_id,
+        "id,subject_id,subject,teacher_id",
+        user["id"] if user.get("role") == "teacher" else None,
     )
-    if user.get("role") == "teacher":
-        q = q.eq("teacher_id", user["id"])
-    rows = q.execute().data or []
 
     subject_ids = sorted({str(r.get("subject_id")) for r in rows if r.get("subject_id")})
     names_by_id: dict[str, str] = {}
@@ -128,10 +288,10 @@ def get_teacher_schedule(
     date_to: str,
     user: dict = require_role("teacher")
 ):
-    """Получить расписание учителя на диапазон дат с уроками"""
+    """РџРѕР»СѓС‡РёС‚СЊ СЂР°СЃРїРёСЃР°РЅРёРµ СѓС‡РёС‚РµР»СЏ РЅР° РґРёР°РїР°Р·РѕРЅ РґР°С‚ СЃ СѓСЂРѕРєР°РјРё"""
     sb = get_supabase()
     
-    # Получаем все уроки учителя из расписания.
+    # РџРѕР»СѓС‡Р°РµРј РІСЃРµ СѓСЂРѕРєРё СѓС‡РёС‚РµР»СЏ РёР· СЂР°СЃРїРёСЃР°РЅРёСЏ.
     timetable = _timetable_entries_for_teacher(
         sb,
         user["id"],
@@ -141,7 +301,7 @@ def get_teacher_schedule(
     if not timetable:
         return {"lessons": []}
     
-    # Собираем все class_ids для batch запроса названий
+    # РЎРѕР±РёСЂР°РµРј РІСЃРµ class_ids РґР»СЏ batch Р·Р°РїСЂРѕСЃР° РЅР°Р·РІР°РЅРёР№
     all_cids: list[str] = []
     for e in timetable:
         cids = e.get("class_ids") or []
@@ -155,7 +315,7 @@ def get_teacher_schedule(
         cn_rows = sb.table("classes").select("id,name").in_("id", all_cids).execute().data or []
         class_names = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
     
-    # Генерируем даты в диапазоне
+    # Р“РµРЅРµСЂРёСЂСѓРµРј РґР°С‚С‹ РІ РґРёР°РїР°Р·РѕРЅРµ
     start_date = date.fromisoformat(date_from)
     end_date = date.fromisoformat(date_to)
     
@@ -165,7 +325,7 @@ def get_teacher_schedule(
     while current_date <= end_date:
         wd = current_date.weekday()  # 0=Mon, 6=Sun (matches timetable_entries)
         
-        # Находим уроки на этот день недели
+        # РќР°С…РѕРґРёРј СѓСЂРѕРєРё РЅР° СЌС‚РѕС‚ РґРµРЅСЊ РЅРµРґРµР»Рё
         day_lessons = [e for e in timetable if e.get("weekday") == wd]
         
         for entry in day_lessons:
@@ -174,7 +334,7 @@ def get_teacher_schedule(
             if not cids:
                 cids = [entry.get("class_id")] if entry.get("class_id") else []
             
-            # Для каждой группы создаём отдельный урок
+            # Р”Р»СЏ РєР°Р¶РґРѕР№ РіСЂСѓРїРїС‹ СЃРѕР·РґР°С‘Рј РѕС‚РґРµР»СЊРЅС‹Р№ СѓСЂРѕРє
             for cid in cids:
                 cid_str = str(cid) if cid else ""
                 lessons.append({
@@ -192,7 +352,7 @@ def get_teacher_schedule(
         
         current_date += timedelta(days=1)
     
-    # Сортируем по дате и времени
+    # РЎРѕСЂС‚РёСЂСѓРµРј РїРѕ РґР°С‚Рµ Рё РІСЂРµРјРµРЅРё
     lessons.sort(key=lambda x: (x["date"], x["start_time"] or ""))
     
     return {"lessons": lessons}
@@ -204,14 +364,14 @@ def get_teacher_lessons_for_date(
     lesson_date: str,
     user: dict = require_role("teacher")
 ):
-    """Получить все уроки учителя на конкретную дату"""
+    """РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ СѓСЂРѕРєРё СѓС‡РёС‚РµР»СЏ РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ РґР°С‚Сѓ"""
     sb = get_supabase()
     
-    # Определяем день недели (0=Mon, 6=Sun — совпадает с timetable_entries)
+    # РћРїСЂРµРґРµР»СЏРµРј РґРµРЅСЊ РЅРµРґРµР»Рё (0=Mon, 6=Sun вЂ” СЃРѕРІРїР°РґР°РµС‚ СЃ timetable_entries)
     lesson_date_obj = date.fromisoformat(lesson_date)
     wd = lesson_date_obj.weekday()
     
-    # Получаем расписание на этот день.
+    # РџРѕР»СѓС‡Р°РµРј СЂР°СЃРїРёСЃР°РЅРёРµ РЅР° СЌС‚РѕС‚ РґРµРЅСЊ.
     timetable = _timetable_entries_for_teacher(
         sb,
         user["id"],
@@ -223,7 +383,7 @@ def get_teacher_lessons_for_date(
     if not timetable:
         return {"lessons": []}
 
-    # Собираем все class_ids для batch запроса названий
+    # РЎРѕР±РёСЂР°РµРј РІСЃРµ class_ids РґР»СЏ batch Р·Р°РїСЂРѕСЃР° РЅР°Р·РІР°РЅРёР№
     all_cids: list[str] = []
     for e in timetable:
         cids = e.get("class_ids") or []
@@ -237,7 +397,7 @@ def get_teacher_lessons_for_date(
         cn_rows = sb.table("classes").select("id,name").in_("id", all_cids).execute().data or []
         class_names = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
 
-    # Оптимизация: получаем все записи журнала одним запросом
+    # РћРїС‚РёРјРёР·Р°С†РёСЏ: РїРѕР»СѓС‡Р°РµРј РІСЃРµ Р·Р°РїРёСЃРё Р¶СѓСЂРЅР°Р»Р° РѕРґРЅРёРј Р·Р°РїСЂРѕСЃРѕРј
     entry_ids = [e["id"] for e in timetable]
     journal_entries = (
         sb.table("lesson_journal")
@@ -249,7 +409,7 @@ def get_teacher_lessons_for_date(
         or []
     )
     
-    # Создаем множество ID уроков, для которых есть записи в журнале
+    # РЎРѕР·РґР°РµРј РјРЅРѕР¶РµСЃС‚РІРѕ ID СѓСЂРѕРєРѕРІ, РґР»СЏ РєРѕС‚РѕСЂС‹С… РµСЃС‚СЊ Р·Р°РїРёСЃРё РІ Р¶СѓСЂРЅР°Р»Рµ
     entries_with_journal = {e["timetable_entry_id"] for e in journal_entries}
     
     lessons = []
@@ -259,7 +419,7 @@ def get_teacher_lessons_for_date(
         if not cids:
             cids = [entry.get("class_id")] if entry.get("class_id") else []
         
-        # Для каждой группы создаём отдельную запись урока
+        # Р”Р»СЏ РєР°Р¶РґРѕР№ РіСЂСѓРїРїС‹ СЃРѕР·РґР°С‘Рј РѕС‚РґРµР»СЊРЅСѓСЋ Р·Р°РїРёСЃСЊ СѓСЂРѕРєР°
         for cid in cids:
             cid_str = str(cid) if cid else ""
             lessons.append({
@@ -290,10 +450,10 @@ def bulk_mark_attendance(
     payload: BulkAttendanceIn,
     user: dict = require_role("teacher", "admin", "manager")
 ):
-    """Массовая отметка посещаемости"""
+    """РњР°СЃСЃРѕРІР°СЏ РѕС‚РјРµС‚РєР° РїРѕСЃРµС‰Р°РµРјРѕСЃС‚Рё"""
     sb = get_supabase()
     
-    # Проверяем урок
+    # РџСЂРѕРІРµСЂСЏРµРј СѓСЂРѕРє
     entry = (
         sb.table("timetable_entries")
         .select("id,class_id,teacher_id")
@@ -323,7 +483,7 @@ def bulk_mark_attendance(
         else:
             raise HTTPException(status_code=403, detail="Access denied")
     
-    # Создаем/обновляем записи для всех студентов
+    # РЎРѕР·РґР°РµРј/РѕР±РЅРѕРІР»СЏРµРј Р·Р°РїРёСЃРё РґР»СЏ РІСЃРµС… СЃС‚СѓРґРµРЅС‚РѕРІ
     records = []
     for student_id in payload.student_ids:
         records.append({
@@ -350,10 +510,10 @@ def get_lesson_details(
     lesson_date: str,
     user: dict = require_role("teacher", "admin", "manager")
 ):
-    """Получить детальную информацию об уроке со списком студентов и их оценками"""
+    """РџРѕР»СѓС‡РёС‚СЊ РґРµС‚Р°Р»СЊРЅСѓСЋ РёРЅС„РѕСЂРјР°С†РёСЋ РѕР± СѓСЂРѕРєРµ СЃРѕ СЃРїРёСЃРєРѕРј СЃС‚СѓРґРµРЅС‚РѕРІ Рё РёС… РѕС†РµРЅРєР°РјРё"""
     sb = get_supabase()
     
-    # Получаем информацию об уроке
+    # РџРѕР»СѓС‡Р°РµРј РёРЅС„РѕСЂРјР°С†РёСЋ РѕР± СѓСЂРѕРєРµ
     entry = (
         sb.table("timetable_entries")
         .select("id,class_id,class_ids,subject,teacher_id,start_time,end_time,room,subject_id,subjects(name)")
@@ -367,11 +527,11 @@ def get_lesson_details(
     
     entry_data = entry[0]
     
-    # Проверяем доступ для учителя
+    # РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРї РґР»СЏ СѓС‡РёС‚РµР»СЏ
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Поддержка multi-group: используем class_ids (массив) вместо class_id (одного)
+    # РџРѕРґРґРµСЂР¶РєР° multi-group: РёСЃРїРѕР»СЊР·СѓРµРј class_ids (РјР°СЃСЃРёРІ) РІРјРµСЃС‚Рѕ class_id (РѕРґРЅРѕРіРѕ)
     class_ids_list = entry_data.get("class_ids") or []
     if not class_ids_list:
         class_ids_list = [entry_data.get("class_id")] if entry_data.get("class_id") else []
@@ -379,19 +539,19 @@ def get_lesson_details(
     
     subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
     
-    # Получаем названия всех классов
+    # РџРѕР»СѓС‡Р°РµРј РЅР°Р·РІР°РЅРёСЏ РІСЃРµС… РєР»Р°СЃСЃРѕРІ
     class_name = ""
     if class_ids_list:
         cn_rows = sb.table("classes").select("id,name").in_("id", class_ids_list).execute().data or []
         cn_map = {str(r["id"]): r.get("name", "") for r in cn_rows if r.get("id")}
         class_name = ", ".join(cn_map.get(c, c) for c in class_ids_list)
     
-    # Получаем студентов из ВСЕХ классов (для multi-group уроков)
+    # РџРѕР»СѓС‡Р°РµРј СЃС‚СѓРґРµРЅС‚РѕРІ РёР· Р’РЎР•РҐ РєР»Р°СЃСЃРѕРІ (РґР»СЏ multi-group СѓСЂРѕРєРѕРІ)
     enrollments = []
     for cid in class_ids_list:
         enr = (
             sb.table("class_enrollments")
-            .select("legacy_student_id,student_number,class_id")
+            .select("id,legacy_student_id,student_number,student_full_name,class_id")
             .eq("class_id", cid)
             .execute()
             .data
@@ -400,37 +560,20 @@ def get_lesson_details(
         enrollments.extend(enr)
     
     student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
-    student_numbers = {e.get("legacy_student_id"): e.get("student_number") for e in enrollments}
+    users_by_id: dict[str, dict] = {}
     
-    if not student_ids:
-        return {
-            "lesson": {
-                "timetable_entry_id": timetable_entry_id,
-                "date": lesson_date,
-                "subject": entry_data.get("subject"),
-                "subject_name": subject_name,
-                "class_name": class_name,
-                "start_time": entry_data.get("start_time"),
-                "end_time": entry_data.get("end_time"),
-                "room": entry_data.get("room"),
-                "lesson_topic": None,
-                "homework": None,
-                "subject_topic_id": None
-            },
-            "students": []
-        }
+    if student_ids:
+        students_resp = (
+            sb.table("users")
+            .select("id,username,full_name")
+            .in_("id", student_ids)
+            .execute()
+            .data
+            or []
+        )
+        users_by_id = {str(s.get("id")): s for s in students_resp if s.get("id")}
     
-    # Получаем информацию о студентах
-    students_resp = (
-        sb.table("users")
-        .select("id,username,full_name")
-        .in_("id", student_ids)
-        .execute()
-        .data
-        or []
-    )
-    
-    # Получаем записи из журнала для этого урока
+    # РџРѕР»СѓС‡Р°РµРј Р·Р°РїРёСЃРё РёР· Р¶СѓСЂРЅР°Р»Р° РґР»СЏ СЌС‚РѕРіРѕ СѓСЂРѕРєР°
     journal_records = (
         sb.table("lesson_journal")
         .select("student_id,grade,present,comment,lesson_topic,homework,attendance_type,subject_topic_id")
@@ -441,10 +584,10 @@ def get_lesson_details(
         or []
     )
     
-    # Индексируем записи по student_id
+    # РРЅРґРµРєСЃРёСЂСѓРµРј Р·Р°РїРёСЃРё РїРѕ student_id
     journal_by_student = {r.get("student_id"): r for r in journal_records}
     
-    # Собираем тему и ДЗ (берем первое непустое значение)
+    # РЎРѕР±РёСЂР°РµРј С‚РµРјСѓ Рё Р”Р— (Р±РµСЂРµРј РїРµСЂРІРѕРµ РЅРµРїСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ)
     lesson_topic = None
     homework = None
     subject_topic_id = None
@@ -456,24 +599,33 @@ def get_lesson_details(
         if record.get("subject_topic_id") and not subject_topic_id:
             subject_topic_id = record["subject_topic_id"]
     
-    # Формируем список студентов
+    # Р¤РѕСЂРјРёСЂСѓРµРј СЃРїРёСЃРѕРє СЃС‚СѓРґРµРЅС‚РѕРІ
     students = []
-    for s in students_resp:
-        sid = s.get("id")
-        journal = journal_by_student.get(sid, {})
-        
+    for e in enrollments:
+        legacy_id = e.get("legacy_student_id")
+        enrollment_id = e.get("id")
+        sid = str(legacy_id) if legacy_id else (str(enrollment_id) if enrollment_id else None)
+        if not sid:
+            continue
+
+        user_row = users_by_id.get(str(legacy_id)) if legacy_id else None
+        journal = journal_by_student.get(str(legacy_id), {}) if legacy_id else {}
+        student_number = e.get("student_number")
+        fallback_name = e.get("student_full_name") or (f"Student #{student_number}" if student_number is not None else "Student")
+        display_name = (user_row.get("full_name") or user_row.get("username")) if user_row else fallback_name
+
         students.append({
             "id": sid,
-            "name": s.get("full_name") or s.get("username"),
-            "username": s.get("username"),
-            "student_number": student_numbers.get(sid),
+            "name": display_name,
+            "username": user_row.get("username") if user_row else None,
+            "student_number": student_number,
             "grade": journal.get("grade"),
             "present": journal.get("present"),
             "comment": journal.get("comment"),
             "attendance_type": journal.get("attendance_type")
         })
     
-    # Сортируем по номеру студента
+    # РЎРѕСЂС‚РёСЂСѓРµРј РїРѕ РЅРѕРјРµСЂСѓ СЃС‚СѓРґРµРЅС‚Р°
     students.sort(key=lambda x: (x["student_number"] is None, x["student_number"] or 0, x["name"] or "", x["username"] or ""))
     
     return {
@@ -501,57 +653,49 @@ def get_class_journal(
     subject_id: str | None = None,
     user: dict = require_role("teacher", "admin", "manager")
 ):
-    """Получить журнал класса с оценками по датам уроков"""
+    """РџРѕР»СѓС‡РёС‚СЊ Р¶СѓСЂРЅР°Р» РєР»Р°СЃСЃР° СЃ РѕС†РµРЅРєР°РјРё РїРѕ РґР°С‚Р°Рј СѓСЂРѕРєРѕРІ"""
     sb = get_supabase()
     
-    # Получаем расписание
-    # Используем contains (cs) для class_ids, чтобы найти уроки, где этот класс целевой
-    # (даже если он не первый в списке)
-    query = sb.table("timetable_entries").select("id,subject,weekday,start_time,subject_id,teacher_id,stream_id,created_at,class_ids,lesson_date").eq("active", True)
-    query = query.cs("class_ids", [class_id])
-    
-    # Teacher sees only their own timetable entries.
-    if user["role"] == "teacher":
-        query = query.eq("teacher_id", user["id"])
-
-    timetable = query.execute().data or []
+    timetable = _timetable_entries_for_class(
+        sb,
+        class_id,
+        "id,class_id,class_ids,subject,weekday,start_time,subject_id,teacher_id,stream_id,created_at,lesson_date",
+        user["id"] if user["role"] == "teacher" else None,
+    )
 
     # Filter in memory to handle cases where subject_id is missing in timetable but name matches
     if subject_id:
+        target_subject_id = str(subject_id)
         # 1. Get the target subject name
         subj_data = sb.table("subjects").select("name").eq("id", subject_id).limit(1).execute().data
-        target_name = subj_data[0]["name"] if subj_data else ""
+        target_name = str(subj_data[0]["name"]) if subj_data else ""
+        target_name_norm = target_name.strip().casefold()
         
         # 2. Filter entries: match ID OR match Name
         filtered = []
         for t in timetable:
             # Match by ID
-            if t.get("subject_id") == subject_id:
+            if t.get("subject_id") and str(t.get("subject_id")) == target_subject_id:
                 filtered.append(t)
                 continue
             # Match by Name (loose match)
-            if target_name and t.get("subject") == target_name:
+            t_name_norm = str(t.get("subject") or "").strip().casefold()
+            if target_name_norm and (
+                t_name_norm == target_name_norm
+                or target_name_norm in t_name_norm
+                or t_name_norm in target_name_norm
+            ):
                 filtered.append(t)
                 continue
         
         timetable = filtered
     
     if not timetable:
-         # Просто вернем пустоту
+         # РџСЂРѕСЃС‚Рѕ РІРµСЂРЅРµРј РїСѓСЃС‚РѕС‚Сѓ
         return {"students": [], "lessons": [], "grades": {}}
     
-    # Получаем даты потоков для проверки (чтобы не показывать уроки вне дат потока)
-    stream_ids = {t.get("stream_id") for t in timetable if t.get("stream_id")}
-    streams_map = {}
-    if stream_ids:
-        s_data = sb.table("streams").select("id,start_date,end_date").in_("id", list(stream_ids)).execute().data or []
-        for s in s_data:
-            streams_map[s["id"]] = {
-                "start": date.fromisoformat(s["start_date"]) if s.get("start_date") else None,
-                "end": date.fromisoformat(s["end_date"]) if s.get("end_date") else None
-            }
-
-    # Получаем всех учеников класса
+    # РџРѕР»СѓС‡Р°РµРј РґР°С‚С‹ РїРѕС‚РѕРєРѕРІ РґР»СЏ РїСЂРѕРІРµСЂРєРё (С‡С‚РѕР±С‹ РЅРµ РїРѕРєР°Р·С‹РІР°С‚СЊ СѓСЂРѕРєРё РІРЅРµ РґР°С‚ РїРѕС‚РѕРєР°)
+    # РџРѕР»СѓС‡Р°РµРј РІСЃРµС… СѓС‡РµРЅРёРєРѕРІ РєР»Р°СЃСЃР°
     enrollments = (
         sb.table("class_enrollments")
         .select("legacy_student_id")
@@ -562,20 +706,19 @@ def get_class_journal(
     )
     student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
     
-    if not student_ids:
-        return {"students": [], "lessons": [], "grades": {}}
+    students = []
+    if student_ids:
+        students = (
+            sb.table("users")
+            .select("id,username,full_name")
+            .in_("id", student_ids)
+            .order("full_name")
+            .execute()
+            .data
+            or []
+        )
     
-    students = (
-        sb.table("users")
-        .select("id,username,full_name")
-        .in_("id", student_ids)
-        .order("full_name")
-        .execute()
-        .data
-        or []
-    )
-    
-    # Получаем записи из lesson_journal для этих уроков
+    # РџРѕР»СѓС‡Р°РµРј Р·Р°РїРёСЃРё РёР· lesson_journal РґР»СЏ СЌС‚РёС… СѓСЂРѕРєРѕРІ
     entry_ids = [e.get("id") for e in timetable if e.get("id")]
     
     journal_records = (
@@ -588,7 +731,7 @@ def get_class_journal(
         or []
     )
     
-    # Группируем уроки по датам и собираем темы/ДЗ
+    # Р“СЂСѓРїРїРёСЂСѓРµРј СѓСЂРѕРєРё РїРѕ РґР°С‚Р°Рј Рё СЃРѕР±РёСЂР°РµРј С‚РµРјС‹/Р”Р—
     creator_ids = sorted({str(r.get("created_by")) for r in journal_records if r.get("created_by")})
     creator_names: dict[str, str] = {}
     if creator_ids:
@@ -604,42 +747,23 @@ def get_class_journal(
             uid = row.get("id")
             if not uid:
                 continue
-            creator_names[str(uid)] = str(row.get("full_name") or row.get("username") or "Не указано")
+            creator_names[str(uid)] = str(row.get("full_name") or row.get("username") or "РќРµ СѓРєР°Р·Р°РЅРѕ")
 
     lessons_by_date = {}
     
-    # Генерируем сетку уроков - только до сегодняшнего дня (включительно)
+    # Р“РµРЅРµСЂРёСЂСѓРµРј СЃРµС‚РєСѓ СѓСЂРѕРєРѕРІ: РїСЂРѕС€Р»С‹Рµ/С‚РµРєСѓС‰РёРµ + Р±Р»РёР¶Р°Р№С€Р°СЏ РЅРµРґРµР»СЏ РІРїРµСЂРµРґ
     today = date.today()
+    journal_future_days = 7
     
-    # Используем даты потоков для определения начала журнала
-    # Берем самую раннюю дату start из потоков, привязанных к этим урокам
-    start_date = None
-    if streams_map:
-        stream_starts = [s["start"] for s in streams_map.values() if s.get("start")]
-        if stream_starts:
-            start_date = min(stream_starts)
-    
-    # Fallback: если потоков нет, используем самую раннюю дату создания записей расписания
-    if not start_date:
-        for t in timetable:
-            created_at_str = t.get("created_at")
-            if created_at_str:
-                try:
-                    c_date = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
-                    if start_date is None or c_date < start_date:
-                        start_date = c_date
-                except Exception:
-                    pass
-    
-    # Последний fallback: учебный год
-    if not start_date:
-        if today.month >= 9:
-            start_date = date(today.year, 9, 1)
-        else:
-            start_date = date(today.year - 1, 9, 1)
-    
-    # Показываем уроки только до сегодняшнего дня (не весь учебный год)
-    end_date = today
+    # РСЃРїРѕР»СЊР·СѓРµРј РґР°С‚С‹ РїРѕС‚РѕРєРѕРІ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РЅР°С‡Р°Р»Р° Р¶СѓСЂРЅР°Р»Р°
+    # Р‘РµСЂРµРј СЃР°РјСѓСЋ СЂР°РЅРЅСЋСЋ РґР°С‚Сѓ start РёР· РїРѕС‚РѕРєРѕРІ, РїСЂРёРІСЏР·Р°РЅРЅС‹С… Рє СЌС‚РёРј СѓСЂРѕРєР°Рј
+    if today.month >= 9:
+        start_date = date(today.year, 9, 1)
+    else:
+        start_date = date(today.year - 1, 9, 1)
+
+    # Show lessons up to one week ahead.
+    end_date = today + timedelta(days=journal_future_days)
         
     current = start_date
     while current <= end_date:
@@ -650,35 +774,15 @@ def get_class_journal(
         day_entries = []
         for e in timetable:
             # If entry has specific date, it MUST match current date
-            if e.get("lesson_date"):
-                if e["lesson_date"] == d_str:
+            lesson_date = _normalize_lesson_date(e.get("lesson_date"))
+            if lesson_date:
+                if lesson_date == d_str:
                     day_entries.append(e)
             else:
-                # If recurring, it must match weekday AND not conflict with specific logic?
-                # Simpler: just match weekday.
-                if e.get("weekday") == wd:
+                if _entry_matches_weekday(e.get("weekday"), wd):
                     day_entries.append(e)
 
         for entry in day_entries:
-            # 1. Проверяем даты потока (если урок привязан к потоку)
-            s_id = entry.get("stream_id")
-            if s_id and s_id in streams_map:
-                s_dates = streams_map[s_id]
-                if s_dates["start"] and current < s_dates["start"]:
-                    continue
-                if s_dates["end"] and current > s_dates["end"]:
-                    continue
-            
-            # 2. Проверяем дату создания урока (чтобы не бакфиллить уроки созданные сегодня на сентябрь)
-            created_at_str = entry.get("created_at")
-            if created_at_str:
-                try:
-                    c_date = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
-                    if current < c_date:
-                         continue
-                except Exception:
-                    pass
-
             key = f"{d_str}_{entry['id']}"
             lessons_by_date[key] = {
                 "date": d_str,
@@ -690,13 +794,13 @@ def get_class_journal(
             }
         current += timedelta(days=1)
     
-    lesson_info = {}  # Храним тему и ДЗ для каждого урока
+    lesson_info = {}  # РҐСЂР°РЅРёРј С‚РµРјСѓ Рё Р”Р— РґР»СЏ РєР°Р¶РґРѕРіРѕ СѓСЂРѕРєР°
     
     for record in journal_records:
         entry_id = record.get("timetable_entry_id")
         d_str = record.get("lesson_date")
         
-        # Находим информацию о уроке
+        # РќР°С…РѕРґРёРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ СѓСЂРѕРєРµ
         entry = next((e for e in timetable if e.get("id") == entry_id), None)
         if not entry:
             continue
@@ -713,7 +817,7 @@ def get_class_journal(
                 "subject_topic_id": None
             }
         
-        # Собираем тему урока и ДЗ (берем первое непустое значение)
+        # РЎРѕР±РёСЂР°РµРј С‚РµРјСѓ СѓСЂРѕРєР° Рё Р”Р— (Р±РµСЂРµРј РїРµСЂРІРѕРµ РЅРµРїСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ)
         if key not in lesson_info:
             lesson_info[key] = {"lesson_topic": None, "homework": None, "subject_topic_id": None}
         
@@ -724,7 +828,7 @@ def get_class_journal(
         if record.get("subject_topic_id") and not lesson_info[key]["subject_topic_id"]:
             lesson_info[key]["subject_topic_id"] = record["subject_topic_id"]
     
-    # Сортируем уроки по дате и добавляем тему/ДЗ
+    # РЎРѕСЂС‚РёСЂСѓРµРј СѓСЂРѕРєРё РїРѕ РґР°С‚Рµ Рё РґРѕР±Р°РІР»СЏРµРј С‚РµРјСѓ/Р”Р—
     lessons = sorted(
         lessons_by_date.values(),
         key=lambda x: (
@@ -743,7 +847,7 @@ def get_class_journal(
         if info.get("subject_topic_id"):
             lesson["subject_topic_id"] = info.get("subject_topic_id")
     
-    # Структура: grades[student_id][lesson_key] = {grades: [...], present: bool|null}
+    # РЎС‚СЂСѓРєС‚СѓСЂР°: grades[student_id][lesson_key] = {grades: [...], present: bool|null}
     grades = {}
     for student in students:
         sid = student.get("id")
@@ -751,7 +855,7 @@ def get_class_journal(
         for lesson in lessons:
             key = f"{lesson['date']}_{lesson['timetable_entry_id']}"
             
-            # Находим все записи для этого ученика/урока
+            # РќР°С…РѕРґРёРј РІСЃРµ Р·Р°РїРёСЃРё РґР»СЏ СЌС‚РѕРіРѕ СѓС‡РµРЅРёРєР°/СѓСЂРѕРєР°
             student_records = [
                 r for r in journal_records
                 if r.get("student_id") == sid 
@@ -764,15 +868,15 @@ def get_class_journal(
                     "grade": r.get("grade"),
                     "comment": r.get("comment"),
                     "created_by": r.get("created_by"),
-                    "created_by_name": creator_names.get(str(r.get("created_by")), "Не указано")
+                    "created_by_name": creator_names.get(str(r.get("created_by")), "РќРµ СѓРєР°Р·Р°РЅРѕ")
                     if r.get("created_by")
-                    else "Не указано"
+                    else "РќРµ СѓРєР°Р·Р°РЅРѕ"
                 }
                 for r in student_records
                 if r.get("grade") is not None
             ]
             
-            # Определяем статус присутствия
+            # РћРїСЂРµРґРµР»СЏРµРј СЃС‚Р°С‚СѓСЃ РїСЂРёСЃСѓС‚СЃС‚РІРёСЏ
             present = None
             attendance_type = None
             for r in student_records:
@@ -787,7 +891,7 @@ def get_class_journal(
                 "attendance_type": attendance_type
             }
     
-    # Форматируем студентов
+    # Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃС‚СѓРґРµРЅС‚РѕРІ
     students_list = [
         {
             "id": s.get("id"),
@@ -810,19 +914,19 @@ def add_grade(
     payload: AddGradeIn,
     user: dict = require_role("teacher", "admin", "manager")
 ):
-    """Добавить оценку или отметку отсутствия ученику за урок"""
+    """Р”РѕР±Р°РІРёС‚СЊ РѕС†РµРЅРєСѓ РёР»Рё РѕС‚РјРµС‚РєСѓ РѕС‚СЃСѓС‚СЃС‚РІРёСЏ СѓС‡РµРЅРёРєСѓ Р·Р° СѓСЂРѕРє"""
     sb = get_supabase()
     
-    # Проверка оценки (2-5)
+    # РџСЂРѕРІРµСЂРєР° РѕС†РµРЅРєРё (2-5)
     if payload.grade is not None and (payload.grade < 2 or payload.grade > 5):
         raise HTTPException(status_code=400, detail="Grade must be between 2 and 5")
     
-    # Проверка типа посещаемости
+    # РџСЂРѕРІРµСЂРєР° С‚РёРїР° РїРѕСЃРµС‰Р°РµРјРѕСЃС‚Рё
     valid_attendance_types = ["present", "absent", "duty", "excused", "sick", None]
     if payload.attendance_type not in valid_attendance_types:
         raise HTTPException(status_code=400, detail=f"Invalid attendance_type. Must be one of: {valid_attendance_types}")
     
-    # Проверяем урок
+    # РџСЂРѕРІРµСЂСЏРµРј СѓСЂРѕРє
     entry = (
         sb.table("timetable_entries")
         .select("id,class_id,class_ids,teacher_id,subject_id")
@@ -840,37 +944,29 @@ def add_grade(
     if class_id not in entry_class_ids and entry_data.get("class_id") != class_id:
         raise HTTPException(status_code=400, detail="Lesson does not belong to this class")
     
-    # Проверяем доступ для учителя
+    # РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРї РґР»СЏ СѓС‡РёС‚РµР»СЏ
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Проверяем, что студент в этом классе
-    enrollment = (
-        sb.table("class_enrollments")
-        .select("legacy_student_id")
-        .eq("class_id", class_id)
-        .eq("legacy_student_id", payload.student_id)
-        .limit(1)
-        .execute()
-        .data
-    )
-    if not enrollment:
+    # РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ СЃС‚СѓРґРµРЅС‚ РІ СЌС‚РѕРј РєР»Р°СЃСЃРµ
+    resolved_student_id = _resolve_legacy_student_id_for_class(sb, class_id, payload.student_id)
+    if not resolved_student_id:
         raise HTTPException(status_code=404, detail="Student not in this class")
     
     from datetime import date
     d = date.fromisoformat(payload.lesson_date)
     
-    # Определяем present на основе attendance_type
+    # РћРїСЂРµРґРµР»СЏРµРј present РЅР° РѕСЃРЅРѕРІРµ attendance_type
     is_present = payload.present
     if payload.attendance_type:
-        # duty считается присутствием (дежурство по другим делам)
+        # duty СЃС‡РёС‚Р°РµС‚СЃСЏ РїСЂРёСЃСѓС‚СЃС‚РІРёРµРј (РґРµР¶СѓСЂСЃС‚РІРѕ РїРѕ РґСЂСѓРіРёРј РґРµР»Р°Рј)
         is_present = payload.attendance_type in ["present", "duty"]
     
-    # Подготавливаем данные
+    # РџРѕРґРіРѕС‚Р°РІР»РёРІР°РµРј РґР°РЅРЅС‹Рµ
     record_data = {
         "timetable_entry_id": payload.timetable_entry_id,
         "lesson_date": d.isoformat(),
-        "student_id": payload.student_id,
+        "student_id": resolved_student_id,
         "grade": payload.grade,
         "present": is_present,
         "comment": payload.comment,
@@ -879,7 +975,7 @@ def add_grade(
         "updated_at": datetime.utcnow().isoformat()
     }
     
-    # Используем upsert для добавления или обновления записи
+    # РСЃРїРѕР»СЊР·СѓРµРј upsert РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ РёР»Рё РѕР±РЅРѕРІР»РµРЅРёСЏ Р·Р°РїРёСЃРё
     sb.table("lesson_journal").upsert(
         record_data,
         on_conflict="timetable_entry_id,lesson_date,student_id"
@@ -890,10 +986,10 @@ def add_grade(
 
 @router.delete("/grades/{grade_id}")
 def delete_grade(grade_id: str, user: dict = require_role("teacher", "admin", "manager")):
-    """Удалить оценку"""
+    """РЈРґР°Р»РёС‚СЊ РѕС†РµРЅРєСѓ"""
     sb = get_supabase()
     
-    # Получаем оценку для проверки доступа
+    # РџРѕР»СѓС‡Р°РµРј РѕС†РµРЅРєСѓ РґР»СЏ РїСЂРѕРІРµСЂРєРё РґРѕСЃС‚СѓРїР°
     grade = (
         sb.table("subject_grades")
         .select("class_id,subject,created_by")
@@ -908,9 +1004,9 @@ def delete_grade(grade_id: str, user: dict = require_role("teacher", "admin", "m
     
     grade_data = grade[0]
     
-    # Проверяем доступ
+    # РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРї
     if user["role"] == "teacher":
-        # Учитель может удалить только свои оценки по своим предметам
+        # РЈС‡РёС‚РµР»СЊ РјРѕР¶РµС‚ СѓРґР°Р»РёС‚СЊ С‚РѕР»СЊРєРѕ СЃРІРѕРё РѕС†РµРЅРєРё РїРѕ СЃРІРѕРёРј РїСЂРµРґРјРµС‚Р°Рј
         timetable = (
             sb.table("timetable_entries")
             .select("id")
@@ -931,7 +1027,7 @@ def delete_grade(grade_id: str, user: dict = require_role("teacher", "admin", "m
 
 @router.get("/classes/{class_id}/export")
 def export_journal(class_id: str, user: dict = require_role("teacher", "admin", "manager")):
-    """Экспорт журнала в Excel"""
+    """Р­РєСЃРїРѕСЂС‚ Р¶СѓСЂРЅР°Р»Р° РІ Excel"""
     try:
         import openpyxl
         from openpyxl.utils import get_column_letter
@@ -942,45 +1038,45 @@ def export_journal(class_id: str, user: dict = require_role("teacher", "admin", 
     
     sb = get_supabase()
     
-    # Получаем данные журнала
+    # РџРѕР»СѓС‡Р°РµРј РґР°РЅРЅС‹Рµ Р¶СѓСЂРЅР°Р»Р°
     journal = get_class_journal(class_id=class_id, user=user)
     students = journal["students"]
     lessons = journal["lessons"]
     grades_data = journal["grades"]
     
-    # Получаем название класса
+    # РџРѕР»СѓС‡Р°РµРј РЅР°Р·РІР°РЅРёРµ РєР»Р°СЃСЃР°
     cls = sb.table("classes").select("name").eq("id", class_id).limit(1).execute().data
     class_name = cls[0].get("name") if cls else "Class"
     
-    # Создаем Excel
+    # РЎРѕР·РґР°РµРј Excel
     wb = openpyxl.Workbook()
     ws = wb.active
     if ws is None:
         raise HTTPException(status_code=500, detail="Failed to create worksheet")
     ws.title = "Journal"
     
-    # Заголовки
+    # Р—Р°РіРѕР»РѕРІРєРё
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
     
-    ws.cell(1, 1, "Ученик").fill = header_fill
+    ws.cell(1, 1, "РЈС‡РµРЅРёРє").fill = header_fill
     ws.cell(1, 1).font = header_font
     
-    # Даты уроков
+    # Р”Р°С‚С‹ СѓСЂРѕРєРѕРІ
     for col_idx, lesson in enumerate(lessons, start=2):
         cell = ws.cell(1, col_idx, f"{lesson['date']}\n{lesson['subject_name']}")
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     
-    # Средний балл
+    # РЎСЂРµРґРЅРёР№ Р±Р°Р»Р»
     avg_col = len(lessons) + 2
-    cell = ws.cell(1, avg_col, "Средний балл")
+    cell = ws.cell(1, avg_col, "РЎСЂРµРґРЅРёР№ Р±Р°Р»Р»")
     cell.fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
     cell.font = header_font
     cell.alignment = Alignment(horizontal="center", vertical="center")
     
-    # Данные
+    # Р”Р°РЅРЅС‹Рµ
     for row_idx, student in enumerate(students, start=2):
         ws.cell(row_idx, 1, student["name"])
         
@@ -992,23 +1088,23 @@ def export_journal(class_id: str, user: dict = require_role("teacher", "admin", 
             cell_data = grades_data.get(sid, {}).get(key, {})
             student_grades = cell_data.get("grades", []) if isinstance(cell_data, dict) else []
             if student_grades:
-                # Берем все оценки
+                # Р‘РµСЂРµРј РІСЃРµ РѕС†РµРЅРєРё
                 grade_values = [g["grade"] for g in student_grades]
-                # Показываем все оценки через запятую
+                # РџРѕРєР°Р·С‹РІР°РµРј РІСЃРµ РѕС†РµРЅРєРё С‡РµСЂРµР· Р·Р°РїСЏС‚СѓСЋ
                 cell = ws.cell(row_idx, col_idx, ", ".join(map(str, grade_values)))
                 all_grades.extend(grade_values)
         
-        # Средний балл
+        # РЎСЂРµРґРЅРёР№ Р±Р°Р»Р»
         if all_grades:
             avg = sum(all_grades) / len(all_grades)
             ws.cell(row_idx, avg_col, round(avg, 2))
     
-    # Ширина колонок
+    # РЁРёСЂРёРЅР° РєРѕР»РѕРЅРѕРє
     ws.column_dimensions["A"].width = 30
     for col_idx in range(2, len(lessons) + 3):
         ws.column_dimensions[get_column_letter(col_idx)].width = 15
     
-    # Сохраняем
+    # РЎРѕС…СЂР°РЅСЏРµРј
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -1035,10 +1131,10 @@ def update_lesson_info(
     payload: UpdateLessonInfoIn,
     user: dict = require_role("teacher", "admin", "manager")
 ):
-    """Обновить тему урока и домашнее задание"""
+    """РћР±РЅРѕРІРёС‚СЊ С‚РµРјСѓ СѓСЂРѕРєР° Рё РґРѕРјР°С€РЅРµРµ Р·Р°РґР°РЅРёРµ"""
     sb = get_supabase()
     
-    # Проверяем урок
+    # РџСЂРѕРІРµСЂСЏРµРј СѓСЂРѕРє
     entry = (
         sb.table("timetable_entries")
         .select("id,class_id,class_ids,teacher_id,subject_id")
@@ -1058,11 +1154,11 @@ def update_lesson_info(
     
     
     
-    # Проверяем права
+    # РџСЂРѕРІРµСЂСЏРµРј РїСЂР°РІР°
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Not your lesson")
     
-    # Проверяем есть ли уже записи для этого урока/даты
+    # РџСЂРѕРІРµСЂСЏРµРј РµСЃС‚СЊ Р»Рё СѓР¶Рµ Р·Р°РїРёСЃРё РґР»СЏ СЌС‚РѕРіРѕ СѓСЂРѕРєР°/РґР°С‚С‹
     existing = (
         sb.table("lesson_journal")
         .select("*")
@@ -1084,31 +1180,38 @@ def update_lesson_info(
         raise HTTPException(status_code=400, detail="No data to update")
     
     if existing:
-        # Обновляем все существующие записи для этого урока
+        # РћР±РЅРѕРІР»СЏРµРј РІСЃРµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ Р·Р°РїРёСЃРё РґР»СЏ СЌС‚РѕРіРѕ СѓСЂРѕРєР°
         sb.table("lesson_journal").update(update_data).eq("timetable_entry_id", payload.timetable_entry_id).eq("lesson_date", payload.lesson_date).execute()
     else:
-        # Если нет записей, создаем их для всех студентов класса
-        students_resp = (
+        # If there are no rows yet, create rows for all class enrollments.
+        # Provision missing legacy_student_id to keep lesson_journal consistent.
+        enrollments_resp = (
             sb.table("class_enrollments")
-            .select("legacy_student_id")
+            .select("id,legacy_student_id,student_full_name,student_number")
             .eq("class_id", class_id)
             .execute()
         )
-        students = students_resp.data or []
+        enrollments = enrollments_resp.data or []
         
-        if students:
-            insert_records = [
-                {
-                    "timetable_entry_id": payload.timetable_entry_id,
-                    "lesson_date": payload.lesson_date,
-                    "student_id": s["legacy_student_id"],
-                    "created_by": user["id"],
-                    **update_data
-                }
-                for s in students
-                if s.get("legacy_student_id")
-            ]
-            sb.table("lesson_journal").insert(insert_records).execute()
+        if enrollments:
+            insert_records = []
+            for enr in enrollments:
+                student_id = enr.get("legacy_student_id")
+                if not student_id:
+                    student_id = _ensure_legacy_student_id_for_enrollment(sb, class_id, enr)
+                if not student_id:
+                    continue
+                insert_records.append(
+                    {
+                        "timetable_entry_id": payload.timetable_entry_id,
+                        "lesson_date": payload.lesson_date,
+                        "student_id": student_id,
+                        "created_by": user["id"],
+                        **update_data,
+                    }
+                )
+            if insert_records:
+                sb.table("lesson_journal").insert(insert_records).execute()
     
     return {"success": True, "message": "Lesson info updated"}
 
@@ -1120,10 +1223,10 @@ def get_lesson_info(
     lesson_date: str,
     user: dict = Depends(get_current_user),
 ):
-    """Получить тему урока и домашнее задание для конкретного урока"""
+    """РџРѕР»СѓС‡РёС‚СЊ С‚РµРјСѓ СѓСЂРѕРєР° Рё РґРѕРјР°С€РЅРµРµ Р·Р°РґР°РЅРёРµ РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ СѓСЂРѕРєР°"""
     sb = get_supabase()
     
-    # Проверяем урок
+    # РџСЂРѕРІРµСЂСЏРµРј СѓСЂРѕРє
     entry = (
         sb.table("timetable_entries")
         .select("id,class_id,class_ids,subject,teacher_id,subject_id,subjects(name)")
@@ -1142,12 +1245,12 @@ def get_lesson_info(
         raise HTTPException(status_code=404, detail="Lesson not found")
     subject_name = entry_data.get("subjects", {}).get("name") if entry_data.get("subjects") else entry_data.get("subject")
     
-    # Проверяем доступ
+    # РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРї
     if user["role"] == "teacher" and not _teacher_can_access_entry(sb, user["id"], entry_data):
         raise HTTPException(status_code=403, detail="Not your lesson")
     
     if user["role"] == "student":
-        # Студент может видеть только если он в этом классе
+        # РЎС‚СѓРґРµРЅС‚ РјРѕР¶РµС‚ РІРёРґРµС‚СЊ С‚РѕР»СЊРєРѕ РµСЃР»Рё РѕРЅ РІ СЌС‚РѕРј РєР»Р°СЃСЃРµ
         enrollment = (
             sb.table("class_enrollments")
             .select("id")
@@ -1160,7 +1263,7 @@ def get_lesson_info(
         if not enrollment:
             raise HTTPException(status_code=403, detail="Not in this class")
     
-    # Получаем тему и ДЗ
+    # РџРѕР»СѓС‡Р°РµРј С‚РµРјСѓ Рё Р”Р—
     records = (
         sb.table("lesson_journal")
         .select("lesson_topic,homework,subject_topic_id")
@@ -1171,7 +1274,7 @@ def get_lesson_info(
         or []
     )
     
-    # Берем первую запись с непустыми полями
+    # Р‘РµСЂРµРј РїРµСЂРІСѓСЋ Р·Р°РїРёСЃСЊ СЃ РЅРµРїСѓСЃС‚С‹РјРё РїРѕР»СЏРјРё
     lesson_topic = None
     homework = None
     subject_topic_id = None
@@ -1196,10 +1299,10 @@ def get_lesson_info(
 
 @router.get("/student/homework")
 def get_student_homework(user: dict = require_role("student")):
-    """Получить все домашние задания для студента"""
+    """РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РґРѕРјР°С€РЅРёРµ Р·Р°РґР°РЅРёСЏ РґР»СЏ СЃС‚СѓРґРµРЅС‚Р°"""
     sb = get_supabase()
     
-    # Получаем классы студента
+    # РџРѕР»СѓС‡Р°РµРј РєР»Р°СЃСЃС‹ СЃС‚СѓРґРµРЅС‚Р°
     enrollments = (
         sb.table("class_enrollments")
         .select("class_id")
@@ -1213,7 +1316,7 @@ def get_student_homework(user: dict = require_role("student")):
     if not class_ids:
         return {"homework": []}
     
-    # Получаем расписание этих классов
+    # РџРѕР»СѓС‡Р°РµРј СЂР°СЃРїРёСЃР°РЅРёРµ СЌС‚РёС… РєР»Р°СЃСЃРѕРІ
     timetable = (
         sb.table("timetable_entries")
         .select("id,class_id,subject,weekday,start_time,subject_id,classes(name),subjects(name)")
@@ -1227,7 +1330,7 @@ def get_student_homework(user: dict = require_role("student")):
     if not timetable_ids:
         return {"homework": []}
     
-    # Получаем все ДЗ за последние 30 дней
+    # РџРѕР»СѓС‡Р°РµРј РІСЃРµ Р”Р— Р·Р° РїРѕСЃР»РµРґРЅРёРµ 30 РґРЅРµР№
     from datetime import date, timedelta
     date_from = (date.today() - timedelta(days=30)).isoformat()
     
@@ -1243,7 +1346,7 @@ def get_student_homework(user: dict = require_role("student")):
         or []
     )
     
-    # Группируем и форматируем
+    # Р“СЂСѓРїРїРёСЂСѓРµРј Рё С„РѕСЂРјР°С‚РёСЂСѓРµРј
     result = []
     for record in homework_records:
         entry_id = record.get("timetable_entry_id")
