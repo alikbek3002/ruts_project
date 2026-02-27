@@ -72,10 +72,12 @@ export function AdminSubjectsPage() {
     setErr(null);
     setLoading(true);
     try {
-      await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null, false);
+      const created = await apiCreateSubject(token, newSubjectName.trim(), newSubjectPhotoUrl.trim() || null, false);
+      if (created?.subject) {
+        setSubjects(prev => [...prev, created.subject].sort((a, b) => a.name.localeCompare(b.name)));
+      }
       setNewSubjectName("");
       setNewSubjectPhotoUrl("");
-      await reloadAll();
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -100,17 +102,21 @@ export function AdminSubjectsPage() {
     setErr(null);
     setLoading(true);
     try {
-      await apiUpdateSubject(
+      const updated = await apiUpdateSubject(
         token,
         editingSubjectId,
         editSubjectName.trim(),
         editSubjectPhotoUrl.trim() || null,
         false,
       );
+      if (updated?.subject) {
+        setSubjects(prev => prev
+          .map(s => s.id === updated.subject.id ? { ...s, ...updated.subject } : s)
+          .sort((a, b) => a.name.localeCompare(b.name)));
+      }
       setEditingSubjectId(null);
       setEditSubjectName("");
       setEditSubjectPhotoUrl("");
-      await reloadAll();
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -125,7 +131,7 @@ export function AdminSubjectsPage() {
     setLoading(true);
     try {
       await apiDeleteSubject(token, subjectId);
-      await reloadAll();
+      setSubjects(prev => prev.filter(s => s.id !== subjectId));
     } catch (e) {
       setErr(String(e));
     } finally {

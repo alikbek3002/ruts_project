@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import {
   ChevronLeft,
@@ -146,7 +146,19 @@ export function TeacherJournalPage() {
     currentGrade?: number | null;
     currentAttendance?: string | null;
   } | null>(null);
-  const [popupSaving, setPopupSaving] = useState(false);
+  const journalRevalidateTimerRef = useRef<number | null>(null);
+
+  function scheduleJournalRevalidate(classId: string) {
+    if (journalRevalidateTimerRef.current != null) {
+      window.clearTimeout(journalRevalidateTimerRef.current);
+    }
+    journalRevalidateTimerRef.current = window.setTimeout(() => {
+      void Promise.all([
+        loadClassStudents(classId, { silent: true }),
+        loadGrid({ silent: true }),
+      ]);
+    }, 650);
+  }
 
   // Helper functions
   function getMonday(date: Date) {
@@ -265,6 +277,14 @@ export function TeacherJournalPage() {
   }, [selectedLesson, token]);
 
   useEffect(() => {
+    return () => {
+      if (journalRevalidateTimerRef.current != null) {
+        window.clearTimeout(journalRevalidateTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!token || !selectedSubjectId) {
       setSubjectTopics([]);
       return;
@@ -307,16 +327,16 @@ export function TeacherJournalPage() {
     }
   }
 
-  async function loadClassStudents(classId: string) {
+  async function loadClassStudents(classId: string, options?: { silent?: boolean }) {
     if (!token) return;
-    setLoadingStudents(true);
+    if (!options?.silent) setLoadingStudents(true);
     try {
       const data = await apiGetClass(token, classId);
       setClassStudents(data.students || []);
     } catch (e) {
       console.error("Failed to load students:", e);
     } finally {
-      setLoadingStudents(false);
+      if (!options?.silent) setLoadingStudents(false);
     }
   }
 
@@ -338,16 +358,16 @@ export function TeacherJournalPage() {
 
   const [gridData, setGridData] = useState<ClassJournalResponse | null>(null);
 
-  async function loadGrid() {
+  async function loadGrid(options?: { silent?: boolean }) {
     if (!token || !selectedClassId || !selectedSubjectId) return;
-    setLoadingLessons(true);
+    if (!options?.silent) setLoadingLessons(true);
     try {
       const data = await apiGetClassJournal(token, selectedClassId, selectedSubjectId);
       setGridData(data);
     } catch (e) {
       console.error("Failed to load journal grid:", e);
     } finally {
-      setLoadingLessons(false);
+      if (!options?.silent) setLoadingLessons(false);
     }
   }
 
@@ -416,9 +436,9 @@ export function TeacherJournalPage() {
   }
 
   // Load details wrapper
-  async function loadLessonDetails() {
+  async function loadLessonDetails(options?: { silent?: boolean }) {
     if (!token || !selectedLesson) return;
-    setSaving(true); // repurpose loading state
+    if (!options?.silent) setSaving(true); // repurpose loading state
     try {
       const data = await apiGetLessonDetails(token, selectedLesson.timetable_entry_id, selectedLesson.date);
       setLessonDetails(data);
@@ -428,7 +448,7 @@ export function TeacherJournalPage() {
     } catch (e) {
       console.error(e);
     } finally {
-      setSaving(false);
+      if (!options?.silent) setSaving(false);
     }
   }
 
@@ -465,25 +485,55 @@ export function TeacherJournalPage() {
 
   async function quickSaveGrade(grade: number | null, attendanceType?: string) {
     if (!gradePopup || !token || !selectedClassId) return;
-    setPopupSaving(true);
-    try {
-      const isPresent = attendanceType ? (attendanceType === 'present' || attendanceType === 'duty') : true;
-      await apiSaveLessonGrade(token, selectedClassId, {
-        student_id: gradePopup.studentId,
-        timetable_entry_id: gradePopup.timetableEntryId,
-        lesson_date: gradePopup.lessonDate,
-        grade,
+    const popup = gradePopup;
+    const isPresent = attendanceType ? (attendanceType === 'present' || attendanceType === 'duty') : true;
+    const nextAttendanceType = attendanceType ?? (grade !== null ? 'present' : null);
+    const cellKey = `${popup.lessonDate}_${popup.timetableEntryId}`;
+    const creatorName = user?.full_name || user?.username || "Вы";
+
+    // Update local state immediately and close popup to allow rapid input.
+    setGridData((prev) => {
+      if (!prev) return prev;
+      const studentCells = { ...(prev.grades?.[popup.studentId] || {}) };
+      const currentCell = studentCells[cellKey] || { grades: [], present: null, attendance_type: null };
+      studentCells[cellKey] = {
+        ...currentCell,
+        grades: grade !== null ? [{
+          grade,
+          comment: currentCell.grades?.[0]?.comment || null,
+          created_by: user?.id,
+          created_by_name: currentCell.grades?.[0]?.created_by_name || creatorName,
+        }] : [],
         present: isPresent,
-        attendance_type: attendanceType || (grade ? 'present' : undefined),
-      });
-      // Update local state optimistically
-      setGradePopup(prev => prev ? { ...prev, currentGrade: grade, currentAttendance: attendanceType || null } : null);
-      await Promise.all([loadClassStudents(selectedClassId), loadGrid()]);
-    } catch (e) {
-      console.error('Quick grade save failed:', e);
-    } finally {
-      setPopupSaving(false);
-    }
+        attendance_type: nextAttendanceType,
+      };
+      return {
+        ...prev,
+        grades: {
+          ...prev.grades,
+          [popup.studentId]: studentCells,
+        },
+      };
+    });
+    setGradePopup(null);
+
+    // Save in background so user can immediately grade the next cell.
+    void (async () => {
+      try {
+        await apiSaveLessonGrade(token, selectedClassId, {
+          student_id: popup.studentId,
+          timetable_entry_id: popup.timetableEntryId,
+          lesson_date: popup.lessonDate,
+          grade,
+          present: isPresent,
+          attendance_type: nextAttendanceType || undefined,
+        });
+      } catch (e) {
+        console.error('Quick grade save failed:', e);
+      } finally {
+        scheduleJournalRevalidate(selectedClassId);
+      }
+    })();
   }
 
   function gradeColorClass(grade: number): string {
@@ -810,7 +860,6 @@ export function TeacherJournalPage() {
                       className={`${styles.gradeBtn} ${styles[`gradeBtn${g}` as keyof typeof styles]} ${gradePopup.currentGrade === g ? styles.active || '' : ''}`}
                       style={gradePopup.currentGrade === g ? { background: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626', color: 'white', borderColor: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626' } : {}}
                       onClick={() => quickSaveGrade(g, 'present')}
-                      disabled={popupSaving}
                     >{g}</button>
                   ))}
                 </div>
@@ -833,7 +882,6 @@ export function TeacherJournalPage() {
                         ...(gradePopup.currentAttendance === opt.value ? { background: opt.color, color: 'white', borderColor: opt.color } : {})
                       }}
                       onClick={() => quickSaveGrade(null, opt.value)}
-                      disabled={popupSaving}
                     >{opt.label}</button>
                   ))}
                 </div>
@@ -841,7 +889,6 @@ export function TeacherJournalPage() {
               <button
                 className={styles.clearBtn}
                 onClick={() => quickSaveGrade(null, 'present')}
-                disabled={popupSaving}
               >Тазалоо / Очистить</button>
             </div>
           </>
@@ -878,7 +925,7 @@ export function TeacherJournalPage() {
                     saveLessonInfo={saveLessonInfo}
                     token={token}
                     selectedDate={selectedLesson.date}
-                    onSaveGrade={async () => { await loadLessonDetails(); }}
+                    onSaveGrade={() => { void loadLessonDetails({ silent: true }); }}
                   />
                 )}
               </div>
@@ -1042,4 +1089,3 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
     </div>
   );
 }
-

@@ -59,20 +59,22 @@ export function AdminNotificationsPage() {
     setCreating(true);
     setError(null);
     try {
-      await apiCreateNotification(token, {
+      const created = await apiCreateNotification(token, {
         title,
         message,
         type,
         target_role: targetRole === "all" ? undefined : targetRole,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       });
+      if (created?.notification) {
+        setNotifications(prev => [created.notification, ...prev]);
+      }
       setShowForm(false);
       setTitle("");
       setMessage("");
       setType("info");
       setTargetRole("all");
       setExpiresAt("");
-      await loadNotifications();
     } catch (err: any) {
       setError(err.message || t("admin.notifications.createError"));
     } finally {
@@ -85,7 +87,7 @@ export function AdminNotificationsPage() {
     if (!window.confirm(t("admin.notifications.deleteConfirm"))) return;
     try {
       await apiDeleteNotification(token, id);
-      await loadNotifications();
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err: any) {
       setError(err.message || t("admin.notifications.deleteError"));
     }

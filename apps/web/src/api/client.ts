@@ -25,11 +25,15 @@ if (API_BASE_PROBLEM && API_BASE && import.meta.env.PROD) {
 const AUTH_STORAGE_KEY = "ruts_auth";
 
 type LoadingListener = (isLoading: boolean) => void;
+type HttpRequestInit = RequestInit & { cacheTtlMs?: number };
 
 const DEFAULT_FETCH_TIMEOUT_MS = 20000;
+const DEFAULT_GET_CACHE_TTL_MS = 15000;
 
 let inFlightRequests = 0;
 const loadingListeners = new Set<LoadingListener>();
+const apiGetCache = new Map<string, { expiresAt: number; data: unknown }>();
+const apiGetInFlight = new Map<string, Promise<unknown>>();
 
 function emitLoading() {
   const isLoading = inFlightRequests > 0;
@@ -150,10 +154,66 @@ function hasAuthHeader(init?: RequestInit): boolean {
   return !!headers.Authorization || !!headers.authorization;
 }
 
-async function http<T>(path: string, init?: RequestInit, _retry = true): Promise<T> {
+function getHeaderValue(headers: HeadersInit | undefined, headerName: string): string | undefined {
+  if (!headers) return undefined;
+  const target = headerName.toLowerCase();
+
+  if (headers instanceof Headers) {
+    return headers.get(headerName) ?? headers.get(target) ?? undefined;
+  }
+
+  if (Array.isArray(headers)) {
+    const row = headers.find(([k]) => String(k).toLowerCase() === target);
+    return row ? String(row[1]) : undefined;
+  }
+
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === target) return String(v);
+  }
+  return undefined;
+}
+
+function buildGetCacheKey(path: string, headers?: HeadersInit): string {
+  const normalizedPath = `${API_BASE}${withApiPrefix(path)}`;
+  const auth = getHeaderValue(headers, "Authorization") ?? "";
+  return `${normalizedPath}::${auth}`;
+}
+
+export function invalidateApiGetCache(pathPrefix?: string): void {
+  if (!pathPrefix) {
+    apiGetCache.clear();
+    apiGetInFlight.clear();
+    return;
+  }
+
+  const normalizedPrefix = `${API_BASE}${withApiPrefix(pathPrefix)}`;
+  for (const key of Array.from(apiGetCache.keys())) {
+    if (key.startsWith(normalizedPrefix)) apiGetCache.delete(key);
+  }
+}
+
+async function http<T>(path: string, init?: HttpRequestInit, _retry = true, _allowCache = true): Promise<T> {
   if (import.meta.env.DEV) {
     console.log('[API] Request:', init?.method || 'GET', path);
   }
+  const method = (init?.method ?? "GET").toUpperCase();
+  const isMutation = method !== "GET" && method !== "HEAD";
+  const cacheTtlMs = init?.cacheTtlMs ?? DEFAULT_GET_CACHE_TTL_MS;
+  const useGetCache = _allowCache && method === "GET" && cacheTtlMs > 0 && init?.cache !== "no-store";
+  const cacheKey = useGetCache ? buildGetCacheKey(path, init?.headers) : null;
+
+  if (useGetCache && cacheKey) {
+    const cached = apiGetCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data as T;
+    }
+    const inFlight = apiGetInFlight.get(cacheKey);
+    if (inFlight) {
+      return await inFlight as T;
+    }
+  }
+
+  const runRequest = async (): Promise<T> => {
   let res: Response;
   try {
     res = await trackedFetch(`${API_BASE}${withApiPrefix(path)}`, {
@@ -175,14 +235,14 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
   if (res.status === 401 && _retry && hasAuthHeader(init)) {
     const newToken = await refreshAccessTokenDedup();
     if (newToken) {
-      const nextInit: RequestInit = {
+      const nextInit: HttpRequestInit = {
         ...(init ?? {}),
         headers: {
           ...(init?.headers ?? {}),
           Authorization: `Bearer ${newToken}`,
         },
       };
-      return await http<T>(path, nextInit, false);
+      return await http<T>(path, nextInit, false, false);
     }
   }
 
@@ -217,11 +277,33 @@ async function http<T>(path: string, init?: RequestInit, _retry = true): Promise
 
   // For 204 No Content, return void/undefined instead of trying to parse JSON
   if (res.status === 204) {
+    if (isMutation) invalidateApiGetCache();
     return undefined as T;
   }
 
   const result = (await res.json()) as T;
+  if (isMutation) invalidateApiGetCache();
   return result;
+  };
+
+  const requestPromise = runRequest();
+  if (useGetCache && cacheKey) {
+    apiGetInFlight.set(cacheKey, requestPromise as Promise<unknown>);
+  }
+  try {
+    const result = await requestPromise;
+    if (useGetCache && cacheKey) {
+      apiGetCache.set(cacheKey, {
+        data: result,
+        expiresAt: Date.now() + cacheTtlMs,
+      });
+    }
+    return result;
+  } finally {
+    if (useGetCache && cacheKey) {
+      apiGetInFlight.delete(cacheKey);
+    }
+  }
 }
 
 function apiGet<T>(path: string, accessToken: string) {
@@ -286,7 +368,9 @@ async function apiPostForm<T>(path: string, formData: FormData, accessToken: str
     throw err;
   }
 
-  return (await res.json()) as T;
+  const result = (await res.json()) as T;
+  invalidateApiGetCache();
+  return result;
 }
 
 export async function apiLogin(username: string, password: string) {

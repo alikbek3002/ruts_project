@@ -43,7 +43,7 @@ export function TeacherCoursesPage() {
 
     try {
       await apiDeleteCourse(token, courseId, password);
-      await loadCourses();
+      setCourses(prev => prev.filter(c => c.id !== courseId));
     } catch (e) {
       alert(`Ошибка: ${String(e)}`);
     }
