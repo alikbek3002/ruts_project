@@ -36,6 +36,8 @@ type Grade = {
 type CellData = {
   grades: Grade[];
   present: boolean | null;
+  attendance_type?: string | null;
+  marked_by_name?: string | null;
 };
 
 type Lesson = {
@@ -108,6 +110,24 @@ export function AdminClassJournalPage() {
     unique.sort((a, b) => a.localeCompare(b, "ru"));
     return unique;
   }, [allSubjects]);
+
+  const lessonMarkedStats = useMemo(() => {
+    if (!detailedJournal) return {} as Record<string, { marked: number; total: number }>;
+    const stats: Record<string, { marked: number; total: number }> = {};
+    for (const lesson of detailedJournal.lessons) {
+      const key = `${lesson.date}_${lesson.timetable_entry_id}`;
+      let marked = 0;
+      for (const student of detailedJournal.students) {
+        const cell = detailedJournal.grades?.[student.id]?.[key];
+        if (!cell) continue;
+        const hasGrade = Array.isArray(cell.grades) && cell.grades.length > 0;
+        const hasAttendance = cell.attendance_type != null || cell.present != null;
+        if (hasGrade || hasAttendance) marked += 1;
+      }
+      stats[key] = { marked, total: detailedJournal.students.length };
+    }
+    return stats;
+  }, [detailedJournal]);
 
   async function loadJournal() {
     if (!token || !classId) return;
@@ -306,13 +326,20 @@ export function AdminClassJournalPage() {
                 <thead>
                   <tr>
                     <th className={styles.stickyCol}>Ученик</th>
-                    {detailedJournal.lessons.map((l) => (
-                      <th key={l.timetable_entry_id} title={l.lesson_topic || ""}>
+                    {detailedJournal.lessons.map((l) => {
+                      const lessonKey = `${l.date}_${l.timetable_entry_id}`;
+                      const stat = lessonMarkedStats[lessonKey];
+                      return (
+                      <th key={lessonKey} title={l.lesson_topic || ""}>
                         <div style={{ fontSize: "0.8em" }}>
                           {new Date(l.date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
                         </div>
+                        <div className={styles.lessonMarkedMeta}>
+                          {stat?.marked ?? 0}/{stat?.total ?? 0}
+                        </div>
                       </th>
-                    ))}
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -324,9 +351,18 @@ export function AdminClassJournalPage() {
                         const cell = detailedJournal.grades[student.id]?.[key];
                         const grades = cell?.grades || [];
                         const present = cell?.present;
+                        const attendanceType = cell?.attendance_type;
+                        const markedBy = grades[0]?.created_by_name || cell?.marked_by_name || null;
+
+                        let attendanceLabel: string | null = null;
+                        if (attendanceType === "absent" || (attendanceType == null && present === false)) attendanceLabel = "Н";
+                        if (attendanceType === "duty") attendanceLabel = "К";
+                        if (attendanceType === "excused") attendanceLabel = "А";
+                        if (attendanceType === "sick") attendanceLabel = "О";
+                        if (attendanceType === "present") attendanceLabel = "✓";
 
                         return (
-                          <td key={l.timetable_entry_id}>
+                          <td key={key}>
                             {grades.length > 0 ? (
                               grades.map((g, i) => {
                                 const gradeTitle = [
@@ -341,12 +377,15 @@ export function AdminClassJournalPage() {
                                   </span>
                                 );
                               })
-                            ) : present === false ? (
-                              <span className={styles.absent}>Н</span>
-                            ) : present === true ? (
-                              <span style={{ color: "var(--color-success)" }}>✓</span>
+                            ) : attendanceLabel ? (
+                              <span className={attendanceLabel === "Н" ? styles.absent : undefined}>{attendanceLabel}</span>
                             ) : (
                               <span style={{ color: "var(--color-text-light)" }}>·</span>
+                            )}
+                            {markedBy && (
+                              <div className={styles.cellAuthor} title={`Поставил(а): ${markedBy}`}>
+                                {markedBy}
+                              </div>
                             )}
                           </td>
                         );

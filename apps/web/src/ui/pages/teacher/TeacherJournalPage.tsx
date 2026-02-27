@@ -494,28 +494,39 @@ export function TeacherJournalPage() {
     setGradePopup({ studentId, studentName, timetableEntryId: lesson.timetable_entry_id, lessonDate: lesson.date, x, y, currentGrade, currentAttendance });
   }
 
-  async function quickSaveGrade(grade: number | null, attendanceType?: string) {
+  async function quickSaveGrade(grade?: number | null, attendanceType?: string | null) {
     if (!gradePopup || !token || !selectedClassId) return;
     const popup = gradePopup;
-    const isPresent = attendanceType ? (attendanceType === 'present' || attendanceType === 'duty') : true;
-    const nextAttendanceType = attendanceType ?? (grade !== null ? 'present' : null);
     const cellKey = `${popup.lessonDate}_${popup.timetableEntryId}`;
     const creatorName = user?.full_name || user?.username || "Вы";
+    const shouldUpdateGrade = grade !== undefined;
+    const shouldUpdateAttendance = attendanceType !== undefined;
 
     // Update local state immediately and close popup to allow rapid input.
     setGridData((prev) => {
       if (!prev) return prev;
       const studentCells = { ...(prev.grades?.[popup.studentId] || {}) };
       const currentCell = studentCells[cellKey] || { grades: [], present: null, attendance_type: null };
+      const nextAttendanceType = shouldUpdateAttendance ? attendanceType ?? null : (currentCell.attendance_type ?? null);
+      const nextPresent = shouldUpdateAttendance
+        ? (attendanceType == null ? null : attendanceType === "present" || attendanceType === "duty")
+        : (currentCell.present ?? null);
+
+      const nextGrades = shouldUpdateGrade
+        ? (grade !== null
+          ? [{
+            grade,
+            comment: currentCell.grades?.[0]?.comment || null,
+            created_by: user?.id,
+            created_by_name: creatorName,
+          }]
+          : [])
+        : (currentCell.grades || []);
+
       studentCells[cellKey] = {
         ...currentCell,
-        grades: grade !== null ? [{
-          grade,
-          comment: currentCell.grades?.[0]?.comment || null,
-          created_by: user?.id,
-          created_by_name: currentCell.grades?.[0]?.created_by_name || creatorName,
-        }] : [],
-        present: isPresent,
+        grades: nextGrades,
+        present: nextPresent,
         attendance_type: nextAttendanceType,
       };
       return {
@@ -532,14 +543,17 @@ export function TeacherJournalPage() {
     const queueKey = `${popup.studentId}:${cellKey}`;
     enqueueCellSave(queueKey, async () => {
       try {
-        await apiSaveLessonGrade(token, selectedClassId, {
+        const payload: Record<string, unknown> = {
           student_id: popup.studentId,
           timetable_entry_id: popup.timetableEntryId,
           lesson_date: popup.lessonDate,
-          grade,
-          present: isPresent,
-          attendance_type: nextAttendanceType || undefined,
-        });
+        };
+        if (shouldUpdateGrade) payload.grade = grade;
+        if (shouldUpdateAttendance) {
+          payload.attendance_type = attendanceType ?? null;
+          payload.present = attendanceType == null ? null : attendanceType === "present" || attendanceType === "duty";
+        }
+        await apiSaveLessonGrade(token, selectedClassId, payload);
       } catch (e) {
         console.error('Quick grade save failed:', e);
       } finally {
@@ -893,14 +907,14 @@ export function TeacherJournalPage() {
                         color: opt.color,
                         ...(gradePopup.currentAttendance === opt.value ? { background: opt.color, color: 'white', borderColor: opt.color } : {})
                       }}
-                      onClick={() => quickSaveGrade(null, opt.value)}
+                      onClick={() => quickSaveGrade(undefined, opt.value)}
                     >{opt.label}</button>
                   ))}
                 </div>
               </div>
               <button
                 className={styles.clearBtn}
-                onClick={() => quickSaveGrade(null, 'present')}
+                onClick={() => quickSaveGrade(null, null)}
               >Тазалоо / Очистить</button>
             </div>
           </>
@@ -963,17 +977,27 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
     { value: "sick", label: "О", color: "#8b5cf6", title: "Оруу (Болезнь)" },
   ];
 
-  async function saveGrade(studentId: string, grade: number | null, present: boolean | null, comment?: string, attendanceType?: string) {
+  async function saveGrade(
+    studentId: string,
+    grade?: number | null,
+    present?: boolean | null,
+    comment?: string | null,
+    attendanceType?: string | null
+  ) {
     if (!lessonDetails) return;
     try {
-      await apiSaveLessonGrade(token, lessonDetails.lesson.class_id, {
+      const payload: Record<string, unknown> = {
         student_id: studentId,
         timetable_entry_id: lessonDetails.lesson.timetable_entry_id,
         lesson_date: selectedDate,
-        grade,
-        present: present ?? (attendanceType === "present" || attendanceType === "duty"),
-        comment: comment,
-        attendance_type: attendanceType
+      };
+      if (grade !== undefined) payload.grade = grade;
+      if (present !== undefined) payload.present = present;
+      if (comment !== undefined) payload.comment = comment;
+      if (attendanceType !== undefined) payload.attendance_type = attendanceType;
+
+      await apiSaveLessonGrade(token, lessonDetails.lesson.class_id, {
+        ...payload,
       });
       onSaveGrade();
     } catch (e) { console.error(e); }
@@ -982,13 +1006,13 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
   function handleAttendanceChange(studentId: string, value: string) {
     const isPresent = value === "present" || value === "duty";
     // Передаем value как attendance_type
-    saveGrade(studentId, null, isPresent, undefined, value);
+    saveGrade(studentId, undefined, isPresent, undefined, value);
   }
 
   function handleGradeInput(studentId: string, val: string) {
     const g = val ? parseInt(val) : null;
     if (g !== null && (g < 2 || g > 5)) return; // Оценки от 2 до 5
-    saveGrade(studentId, g, null);
+    saveGrade(studentId, g);
   }
 
   if (!lessonDetails) return <Loader />;
@@ -1091,7 +1115,7 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
                   </select>
                 </td>
                 <td>
-                  <input className={styles.commentInput} placeholder="..." defaultValue={s.comment} onBlur={e => saveGrade(s.id, null, null, e.target.value)} />
+                  <input className={styles.commentInput} placeholder="..." defaultValue={s.comment} onBlur={e => saveGrade(s.id, undefined, undefined, e.target.value)} />
                 </td>
               </tr>
             );

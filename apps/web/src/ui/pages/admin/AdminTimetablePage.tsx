@@ -405,6 +405,7 @@ export function AdminTimetablePage() {
           lesson_type: formLessonType,
           teacher_id: formTeacherId || null,
           stream_id: selectedStreamId || null,
+          class_ids: formLessonType === "lecture" ? effectiveClassIds : (classId ? [classId] : []),
           lesson_number: formLessonNumber && formLessonNumber > 0 ? formLessonNumber : null,
           meet_url: formMeetUrl.trim() || null,
           lesson_date: ymd(modalDate),

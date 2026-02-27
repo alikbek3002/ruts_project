@@ -2932,6 +2932,7 @@ export type ClassJournalCell = {
   grades: JournalCellGrade[];
   present?: boolean | null;
   attendance_type?: string | null;
+  marked_by_name?: string | null;
 };
 
 export type ClassJournalLesson = {

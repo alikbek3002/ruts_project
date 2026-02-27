@@ -107,10 +107,12 @@ def _infer_stream_id_for_class(sb, class_id: str) -> str | None:
 
 
 def _validate_stream_and_classes(sb, *, class_id: str, stream_id: str | None, class_ids: list[str] | None) -> tuple[str, list[str]]:
-    ids = [str(x) for x in (class_ids or [class_id]) if x]
-    # Ensure class_id is included
-    if class_id and class_id not in ids:
-        ids.insert(0, class_id)
+    # If explicit class_ids are provided, trust that exact list.
+    # Fallback to legacy single class_id only when class_ids is not provided.
+    if class_ids is None:
+        ids = [str(x) for x in [class_id] if x]
+    else:
+        ids = [str(x) for x in class_ids if x]
     # Unique, preserve order
     ids = list(dict.fromkeys(ids))
     if not ids:
@@ -716,7 +718,11 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
             proposed_class_ids = existing.get("class_ids") if isinstance(existing.get("class_ids"), list) else [str(existing.get("class_id"))]
 
         proposed_stream_id = str(update.get("stream_id")) if "stream_id" in update else (str(existing.get("stream_id")) if existing.get("stream_id") else None)
-        base_class_id = str(existing.get("class_id"))
+        base_class_id = (
+            str(proposed_class_ids[0])
+            if isinstance(proposed_class_ids, list) and proposed_class_ids
+            else str(existing.get("class_id"))
+        )
         stream_id, class_ids = _validate_stream_and_classes(
             sb,
             class_id=base_class_id,

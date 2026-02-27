@@ -121,6 +121,23 @@
   font-weight: 700;
 }
 
+.lessonMarkedMeta {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.cellAuthor {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 96px;
+}
+
 .empty {
   text-align: center;
   padding: var(--spacing-xl);
