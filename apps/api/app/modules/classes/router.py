@@ -254,6 +254,7 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
         # basic access control: admin always; teacher if has timetable entry; student if enrolled
         if user["role"] == "teacher":
             allowed = False
+            # Check legacy class_id field
             tt = (
                 sb.table("timetable_entries")
                 .select("id")
@@ -266,9 +267,22 @@ def get_class(class_id: str, user: dict = Depends(get_current_user)):
             if tt:
                 allowed = True
             else:
-                cls = sb.table("classes").select("id,curator_id").eq("id", class_id).limit(1).execute().data
-                if cls and cls[0].get("curator_id") == user["id"]:
+                # Check new class_ids array field (for streams/multi-class entries)
+                tt_multi = (
+                    sb.table("timetable_entries")
+                    .select("id")
+                    .cs("class_ids", [class_id])
+                    .eq("teacher_id", user["id"])
+                    .limit(1)
+                    .execute()
+                    .data
+                )
+                if tt_multi:
                     allowed = True
+                else:
+                    cls = sb.table("classes").select("id,curator_id").eq("id", class_id).limit(1).execute().data
+                    if cls and cls[0].get("curator_id") == user["id"]:
+                        allowed = True
             if not allowed:
                 return {"class": None, "students": []}
 

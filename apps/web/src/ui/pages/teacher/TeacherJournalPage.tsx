@@ -338,16 +338,23 @@ export function TeacherJournalPage() {
     }
   }
 
+  const studentsRequestIdRef = useRef(0);
+
   async function loadClassStudents(classId: string, options?: { silent?: boolean }) {
     if (!token) return;
+    const requestId = ++studentsRequestIdRef.current;
     if (!options?.silent) setLoadingStudents(true);
     try {
       const data = await apiGetClass(token, classId);
-      setClassStudents(data.students || []);
+      if (requestId === studentsRequestIdRef.current) {
+        setClassStudents(data.students || []);
+      }
     } catch (e) {
       console.error("Failed to load students:", e);
     } finally {
-      if (!options?.silent) setLoadingStudents(false);
+      if (requestId === studentsRequestIdRef.current) {
+        if (!options?.silent) setLoadingStudents(false);
+      }
     }
   }
 
@@ -368,17 +375,24 @@ export function TeacherJournalPage() {
   //    Clicking a cell allows quick grade entry? Clicking column header opens "Lesson Details"?
 
   const [gridData, setGridData] = useState<ClassJournalResponse | null>(null);
+  const gridRequestIdRef = useRef(0);
 
   async function loadGrid(options?: { silent?: boolean }) {
     if (!token || !selectedClassId || !selectedSubjectId) return;
+    const requestId = ++gridRequestIdRef.current;
     if (!options?.silent) setLoadingLessons(true);
     try {
       const data = await apiGetClassJournal(token, selectedClassId, selectedSubjectId);
-      setGridData(data);
+      // Only update if this is still the latest request (prevents race condition)
+      if (requestId === gridRequestIdRef.current) {
+        setGridData(data);
+      }
     } catch (e) {
       console.error("Failed to load journal grid:", e);
     } finally {
-      if (!options?.silent) setLoadingLessons(false);
+      if (requestId === gridRequestIdRef.current) {
+        if (!options?.silent) setLoadingLessons(false);
+      }
     }
   }
 

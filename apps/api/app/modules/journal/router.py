@@ -691,7 +691,7 @@ def get_class_journal(
 
     enrollments = (
         sb.table("class_enrollments")
-        .select("legacy_student_id")
+        .select("id,legacy_student_id,student_full_name,student_number")
         .eq("class_id", class_id)
         .execute()
         .data
@@ -699,17 +699,35 @@ def get_class_journal(
     )
     student_ids = [e.get("legacy_student_id") for e in enrollments if e.get("legacy_student_id")]
 
-    students = []
+    users_by_id: dict[str, dict] = {}
     if student_ids:
-        students = (
+        user_rows = (
             sb.table("users")
             .select("id,username,full_name")
             .in_("id", student_ids)
-            .order("full_name")
             .execute()
             .data
             or []
         )
+        for u in user_rows:
+            users_by_id[str(u["id"])] = u
+
+    # Build students list from enrollments, merging user data where available
+    students = []
+    for enr in enrollments:
+        lid = enr.get("legacy_student_id")
+        user_data = users_by_id.get(str(lid)) if lid else None
+        if user_data:
+            students.append(user_data)
+        else:
+            # Student without user account - use enrollment data directly
+            students.append({
+                "id": str(enr.get("id")),
+                "full_name": enr.get("student_full_name"),
+                "username": None,
+                "student_number": enr.get("student_number"),
+            })
+    students.sort(key=lambda s: (s.get("student_number") is None, s.get("student_number") or 0, s.get("full_name") or ""))
 
     entry_ids = [e.get("id") for e in timetable if e.get("id")]
     journal_records = []
@@ -885,8 +903,9 @@ def get_class_journal(
     students_list = [
         {
             "id": s.get("id"),
-            "name": s.get("full_name") or s.get("username"),
-            "username": s.get("username")
+            "name": s.get("full_name") or s.get("username") or "—",
+            "username": s.get("username"),
+            "student_number": s.get("student_number"),
         }
         for s in students
     ]
@@ -1016,16 +1035,29 @@ def delete_grade(grade_id: str, user: dict = require_role("teacher", "admin", "m
     # Проверяем доступ
     if user["role"] == "teacher":
         # Учитель может удалить только свои оценки по своим предметам
+        # Check both class_ids array and legacy class_id field
+        g_class_id = grade_data.get("class_id")
         timetable = (
             sb.table("timetable_entries")
             .select("id")
-            .cs("class_ids", [grade_data.get("class_id")])
+            .cs("class_ids", [g_class_id])
             .eq("teacher_id", user["id"])
             .eq("subject", grade_data.get("subject"))
             .limit(1)
             .execute()
             .data
         )
+        if not timetable:
+            timetable = (
+                sb.table("timetable_entries")
+                .select("id")
+                .eq("class_id", g_class_id)
+                .eq("teacher_id", user["id"])
+                .eq("subject", grade_data.get("subject"))
+                .limit(1)
+                .execute()
+                .data
+            )
         if not timetable or grade_data.get("created_by") != user["id"]:
             raise HTTPException(status_code=403, detail="Access denied")
     

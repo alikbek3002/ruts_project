@@ -45,6 +45,29 @@ class CreateAssessmentIn(BaseModel):
 @router.post("/assessments")
 def create_assessment(payload: CreateAssessmentIn, user: dict = require_role("teacher", "admin")):
     sb = get_supabase()
+    # Verify teacher has access to the class
+    if user["role"] == "teacher":
+        tt = (
+            sb.table("timetable_entries")
+            .select("id")
+            .eq("class_id", payload.class_id)
+            .eq("teacher_id", user["id"])
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not tt:
+            tt = (
+                sb.table("timetable_entries")
+                .select("id")
+                .cs("class_ids", [payload.class_id])
+                .eq("teacher_id", user["id"])
+                .limit(1)
+                .execute()
+                .data
+            )
+        if not tt:
+            raise HTTPException(status_code=403, detail="No access to this class")
     resp = sb.table("assessments").insert({**payload.model_dump(), "created_by": user["id"]}).execute()
     _invalidate_gradebook_cache([payload.class_id])
     return {"assessment": resp.data[0] if isinstance(resp.data, list) and resp.data else resp.data}
@@ -68,12 +91,35 @@ class SetGradesIn(BaseModel):
 
 
 @router.put("/assessments/{assessment_id}/grades")
-def set_grades(assessment_id: str, payload: SetGradesIn, _: dict = require_role("teacher", "admin")):
+def set_grades(assessment_id: str, payload: SetGradesIn, user: dict = require_role("teacher", "admin")):
     sb = get_supabase()
     class_id = None
     a_rows = sb.table("assessments").select("class_id").eq("id", assessment_id).limit(1).execute().data or []
     if a_rows:
         class_id = a_rows[0].get("class_id")
+    # Verify teacher has access to the class
+    if user["role"] == "teacher" and class_id:
+        tt = (
+            sb.table("timetable_entries")
+            .select("id")
+            .eq("class_id", class_id)
+            .eq("teacher_id", user["id"])
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not tt:
+            tt = (
+                sb.table("timetable_entries")
+                .select("id")
+                .cs("class_ids", [class_id])
+                .eq("teacher_id", user["id"])
+                .limit(1)
+                .execute()
+                .data
+            )
+        if not tt:
+            raise HTTPException(status_code=403, detail="No access to this class")
     rows = [
         {
             "assessment_id": assessment_id,
@@ -369,8 +415,8 @@ def class_journal_by_dates(
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
     try:
-        # Получаем все уроки класса (class_ids — массив UUID)
-        timetable = (
+        # Получаем все уроки класса (check both class_ids array and legacy class_id)
+        tt_multi = (
             sb.table("timetable_entries")
             .select("id,subject,teacher_id")
             .cs("class_ids", [class_id])
@@ -378,6 +424,20 @@ def class_journal_by_dates(
             .data
             or []
         )
+        tt_legacy = (
+            sb.table("timetable_entries")
+            .select("id,subject,teacher_id")
+            .eq("class_id", class_id)
+            .execute()
+            .data
+            or []
+        )
+        tt_by_id: dict[str, dict] = {}
+        for row in tt_multi + tt_legacy:
+            rid = row.get("id")
+            if rid:
+                tt_by_id[str(rid)] = row
+        timetable = list(tt_by_id.values())
         entry_ids = [e.get("id") for e in timetable if e.get("id")]
         if not entry_ids:
             return {"students": [], "dates": [], "data": {}}
@@ -474,8 +534,8 @@ def class_journal_by_subject(
         raise HTTPException(status_code=400, detail="Lesson journal not supported")
 
     try:
-        # Получаем все уроки класса (class_ids — массив UUID)
-        timetable = (
+        # Получаем все уроки класса (check both class_ids array and legacy class_id)
+        tt_multi = (
             sb.table("timetable_entries")
             .select("id,subject,teacher_id")
             .cs("class_ids", [class_id])
@@ -483,6 +543,20 @@ def class_journal_by_subject(
             .data
             or []
         )
+        tt_legacy = (
+            sb.table("timetable_entries")
+            .select("id,subject,teacher_id")
+            .eq("class_id", class_id)
+            .execute()
+            .data
+            or []
+        )
+        tt_by_id: dict[str, dict] = {}
+        for row in tt_multi + tt_legacy:
+            rid = row.get("id")
+            if rid:
+                tt_by_id[str(rid)] = row
+        timetable = list(tt_by_id.values())
         entry_ids = [e.get("id") for e in timetable if e.get("id")]
         entries_by_id = {e.get("id"): e for e in timetable if e.get("id")}
 
