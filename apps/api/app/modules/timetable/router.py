@@ -755,7 +755,7 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
         # Conflict detection (exclude current entry)
         overlapping = (
             sb.table("timetable_entries")
-            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room")
+            .select("id,stream_id,class_id,class_ids,teacher_id,subject,subject_id,lesson_type,weekday,start_time,end_time,room,lesson_date")
             .eq("active", True)
             .eq("weekday", result_weekday)
             .lt("start_time", result_end)
@@ -765,10 +765,6 @@ def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, _: dict = requi
             .data
             or []
         )
-
-        for e in overlapping:
-            # handled below via structured conflict payload
-            pass
 
         # Filter overlapping by lesson_date (same logic as create_entry)
         real_conflicts = []
@@ -1049,22 +1045,35 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
         class_id = e.get("class_id")
         if class_id and class_id in stream_class_map:
             stream_info = stream_class_map[class_id]
-            start_date = stream_info.get("start_date")
-            end_date = stream_info.get("end_date")
+            s_start_date = stream_info.get("start_date")
+            s_end_date = stream_info.get("end_date")
             # Only include if current week is within stream date range
-            if start_date and start > end_date if end_date else False:
+            if s_end_date and start > s_end_date:
                 continue  # Week is after stream ended
-            if start_date and end < start_date:
+            if s_start_date and end < s_start_date:
                 continue  # Week is before stream started
             filtered_entries.append(e)
-        # Skip entries for classes not in any stream
-    
+        else:
+            # Include entries for classes not in any stream (don't drop them)
+            filtered_entries.append(e)
+
     entries = filtered_entries
-    
-    if user["role"] == "student" and class_ids:
-        # Filter entries by selected class
-        enrolled = {str(x) for x in class_ids}
-        entries = [e for e in entries if str(e.get("class_id") or "") in enrolled or enrolled.intersection(_entry_class_ids(e))]
+
+    if user["role"] == "student":
+        # Get student's enrolled classes and filter entries accordingly
+        student_enrollments = (
+            sb.table("class_enrollments")
+            .select("class_id")
+            .eq("student_id", user["id"])
+            .execute()
+            .data
+            or []
+        )
+        enrolled = {str(e.get("class_id")) for e in student_enrollments if e.get("class_id")}
+        if enrolled:
+            entries = [e for e in entries if str(e.get("class_id") or "") in enrolled or enrolled.intersection(_entry_class_ids(e))]
+        else:
+            entries = []
 
     # Optional class filter for admin/manager/teacher
     if classId and user["role"] in ("admin", "manager", "teacher"):
@@ -1106,6 +1115,14 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
         if not teacher_name:
             teacher_name = "---"
 
+        raw_lesson_date = e.get("lesson_date")
+        lesson_date_str = None
+        if raw_lesson_date:
+            s = str(raw_lesson_date).strip()
+            if "T" in s:
+                s = s.split("T", 1)[0]
+            lesson_date_str = s[:10] if len(s) >= 10 else s
+
         enriched.append(
             {
                 "id": e.get("id"),
@@ -1120,6 +1137,7 @@ def get_week(weekStart: str, classId: str | None = None, user: dict = require_ro
                 "end_time": str(e.get("end_time"))[:5],
                 "room": e.get("room"),
                 "meet_url": e.get("meet_url"),
+                "lesson_date": lesson_date_str,
             }
         )
 

@@ -1027,6 +1027,7 @@ export function AdminTimetablePage() {
                           lesson_type: editEntry.lesson_type,
                           teacher_id: editEntry.teacher_id,
                           stream_id: editEntry.stream_id || undefined,
+                          lesson_date: editEntry.lesson_date || undefined,
                         });
                       }
                       setDuplicateModalOpen(false);
