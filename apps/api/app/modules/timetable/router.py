@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 # Fixed rooms list for manual scheduling (auditoria): 20, 22, 30..52
-FIXED_ROOMS: list[str] = ["2", "4", "20", "22"] + [str(n) for n in range(30, 53)] + ["Спорт зал"]
+FIXED_ROOMS: list[str] = ["2", "4", "20", "22"] + [str(n) for n in range(29, 53)] + ["Спорт зал", "Интернет тир"]
 
 
 def _raise_db_http_exception(exc: Exception, *, fallback: str) -> None:
