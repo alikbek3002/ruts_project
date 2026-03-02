@@ -9,6 +9,7 @@ import {
   apiGetClass,
   apiListClasses,
   apiListDirections,
+  apiRemoveStudent,
   apiUpdateClass,
   type AdminUser,
   type ClassItem,
@@ -479,6 +480,7 @@ export function AdminClassesPage() {
                         <tr>
                           <th style={{ width: 60 }}>№</th>
                           <th>ФИО</th>
+                          <th style={{ width: 60 }}></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -486,6 +488,25 @@ export function AdminClassesPage() {
                           <tr key={s.id}>
                             <td>{s.student_number ?? idx + 1}</td>
                             <td>{s.full_name || s.username}</td>
+                            <td>
+                              <button
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4 }}
+                                title="Удалить ученика"
+                                onClick={async () => {
+                                  if (!token || !enrollingClassId) return;
+                                  if (!confirm(`Удалить "${s.full_name || s.username}" из группы?`)) return;
+                                  try {
+                                    await apiRemoveStudent(token, enrollingClassId, s.id);
+                                    void reloadClassStudents(enrollingClassId);
+                                    void reloadAll();
+                                  } catch (e) {
+                                    setErr(String(e));
+                                  }
+                                }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

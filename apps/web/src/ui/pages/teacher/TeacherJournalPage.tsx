@@ -24,6 +24,7 @@ import {
   apiSaveLessonTopic,
   apiGetClass,
   apiGetSubjectTopics,
+  invalidateApiGetCache,
   type ClassJournalResponse,
 } from "../../../api/client";
 import styles from "./TeacherJournalPage.module.css";
@@ -166,9 +167,12 @@ export function TeacherJournalPage() {
     if (journalRevalidateTimerRef.current != null) {
       window.clearTimeout(journalRevalidateTimerRef.current);
     }
+    // Force clear GET cache for journal data before reloading
+    invalidateApiGetCache("/journal");
+    invalidateApiGetCache("/gradebook");
     journalRevalidateTimerRef.current = window.setTimeout(() => {
       void loadGrid({ silent: true });
-    }, 900);
+    }, 500);
   }
 
   // Helper functions
@@ -968,7 +972,7 @@ export function TeacherJournalPage() {
                     saveLessonInfo={saveLessonInfo}
                     token={token}
                     selectedDate={selectedLesson.date}
-                    onSaveGrade={() => { void loadLessonDetails({ silent: true }); }}
+                    onSaveGrade={() => { invalidateApiGetCache("/journal"); void loadLessonDetails({ silent: true }); }}
                   />
                 )}
               </div>

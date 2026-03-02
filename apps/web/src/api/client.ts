@@ -1014,6 +1014,13 @@ export async function apiBulkEnrollStudents(token: string, classId: string, stud
   return apiPost<{ ok: boolean; count: number }>(`/classes/${classId}/enroll-bulk`, { students }, token);
 }
 
+export async function apiRemoveStudent(token: string, classId: string, enrollmentId: string) {
+  return http<{ ok: boolean }>(`/classes/${classId}/students/${enrollmentId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export type TimetableEntry = {
   id: string;
   class_id: string;
