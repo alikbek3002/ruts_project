@@ -309,13 +309,18 @@ def _build_conflicts_payload(
             )
 
         if proposed_teacher_id and str(e.get("teacher_id") or "") == str(proposed_teacher_id):
-            conflicts.append(
-                {
-                    "type": "TEACHER_BUSY",
-                    "title": "Конфликт: преподаватель занят",
-                    "entry": _format_conflict_entry(e, class_name_by_id),
-                }
-            )
+            # Allow same teacher in the same room (multi-group lecture scenario)
+            e_room = str(e.get("room") or "").strip()
+            p_room = str(proposed_room or "").strip()
+            same_room = p_room and e_room and p_room == e_room
+            if not same_room:
+                conflicts.append(
+                    {
+                        "type": "TEACHER_BUSY",
+                        "title": "Конфликт: преподаватель занят",
+                        "entry": _format_conflict_entry(e, class_name_by_id),
+                    }
+                )
 
         # Room conflicts disabled: multiple groups can share the same room
 
