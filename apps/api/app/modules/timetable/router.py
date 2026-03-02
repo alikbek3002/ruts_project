@@ -317,14 +317,7 @@ def _build_conflicts_payload(
                 }
             )
 
-        if proposed_room and str(e.get("room") or "") == str(proposed_room):
-            conflicts.append(
-                {
-                    "type": "ROOM_BUSY",
-                    "title": "Конфликт: аудитория занята",
-                    "entry": _format_conflict_entry(e, class_name_by_id),
-                }
-            )
+        # Room conflicts disabled: multiple groups can share the same room
 
     # Dedupe by (type, entry.id, affected)
     seen: set[str] = set()
