@@ -516,6 +516,14 @@
   border-color: currentColor;
 }
 
+.attendBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  color: #9ca3af !important;
+  border-color: #d1d5db !important;
+  background: #f9fafb !important;
+}
+
 .attendBtn.active {
   color: white !important;
 }

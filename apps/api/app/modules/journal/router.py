@@ -13,6 +13,7 @@ from app.core.security import hash_password
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
+ABSENCE_ATTENDANCE_TYPES = {"absent", "excused", "sick"}
 
 
 def _timetable_entries_for_teacher(sb, teacher_id: str, select_fields: str, weekday: int | None = None) -> list[dict]:
@@ -188,6 +189,14 @@ def _teacher_can_access_entry(sb, teacher_id: str, entry_data: dict) -> bool:
     return entry_data.get("teacher_id") == teacher_id
 
 
+def _lesson_journal_makeup_supported(sb) -> bool:
+    try:
+        sb.table("lesson_journal").select("makeup_grade,attendance_makeup").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
 class GradeEntry(BaseModel):
     subject: str
     grade: int
@@ -204,9 +213,11 @@ class AddGradeIn(BaseModel):
     timetable_entry_id: str
     lesson_date: str  # YYYY-MM-DD
     grade: int | None = None  # None = no grade, 2-5 valid values
+    makeup_grade: int | None = None  # Additional grade after rework (keeps original grade)
     present: bool | None = None
     comment: str | None = None
     attendance_type: str | None = None  # present, absent, duty (Кезмет), excused (Арыз), sick (Оруу)
+    attendance_makeup: bool | None = None  # True = absence was worked off (ОТР)
 
 
 @router.get("/teacher/classes")
@@ -574,9 +585,16 @@ def get_lesson_details(
         users_by_id = {str(s.get("id")): s for s in students_resp if s.get("id")}
     
     # Получаем записи из журнала для этого урока
+    makeup_supported = _lesson_journal_makeup_supported(sb)
+    journal_select = "student_id,grade,present,comment,lesson_topic,homework,attendance_type,subject_topic_id"
+    if makeup_supported:
+        journal_select = (
+            "student_id,grade,makeup_grade,present,comment,lesson_topic,homework,"
+            "attendance_type,attendance_makeup,subject_topic_id"
+        )
     journal_records = (
         sb.table("lesson_journal")
-        .select("student_id,grade,present,comment,lesson_topic,homework,attendance_type,subject_topic_id")
+        .select(journal_select)
         .eq("timetable_entry_id", timetable_entry_id)
         .eq("lesson_date", lesson_date)
         .execute()
@@ -620,9 +638,11 @@ def get_lesson_details(
             "username": user_row.get("username") if user_row else None,
             "student_number": student_number,
             "grade": journal.get("grade"),
+            "makeup_grade": journal.get("makeup_grade"),
             "present": journal.get("present"),
             "comment": journal.get("comment"),
-            "attendance_type": journal.get("attendance_type")
+            "attendance_type": journal.get("attendance_type"),
+            "attendance_makeup": bool(journal.get("attendance_makeup")),
         })
     
     # Сортируем по номеру студента
@@ -731,13 +751,20 @@ def get_class_journal(
 
     entry_ids = [e.get("id") for e in timetable if e.get("id")]
     journal_records = []
+    makeup_supported = _lesson_journal_makeup_supported(sb)
     if entry_ids:
+        journal_select = (
+            "timetable_entry_id,lesson_date,student_id,grade,present,comment,"
+            "lesson_topic,homework,attendance_type,subject_topic_id,created_by,updated_at"
+        )
+        if makeup_supported:
+            journal_select = (
+                "timetable_entry_id,lesson_date,student_id,grade,makeup_grade,present,comment,"
+                "lesson_topic,homework,attendance_type,attendance_makeup,subject_topic_id,created_by,updated_at"
+            )
         journal_records = (
             sb.table("lesson_journal")
-            .select(
-                "timetable_entry_id,lesson_date,student_id,grade,present,comment,"
-                "lesson_topic,homework,attendance_type,subject_topic_id,created_by,updated_at"
-            )
+            .select(journal_select)
             .in_("timetable_entry_id", entry_ids)
             .order("lesson_date", desc=False)
             .execute()
@@ -887,6 +914,8 @@ def get_class_journal(
 
             present = latest_record.get("present") if latest_record else None
             attendance_type = latest_record.get("attendance_type") if latest_record else None
+            makeup_grade = latest_record.get("makeup_grade") if latest_record else None
+            attendance_makeup = bool(latest_record.get("attendance_makeup")) if latest_record else False
             marked_by_name = (
                 creator_names.get(str(latest_record.get("created_by")), "Unknown")
                 if latest_record and latest_record.get("created_by")
@@ -897,6 +926,8 @@ def get_class_journal(
                 "grades": lesson_grades,
                 "present": present,
                 "attendance_type": attendance_type,
+                "makeup_grade": makeup_grade,
+                "attendance_makeup": attendance_makeup,
                 "marked_by_name": marked_by_name
             }
 
@@ -925,14 +956,22 @@ def add_grade(
 ):
     """Partial create/update for lesson grade/attendance/comment."""
     sb = get_supabase()
+    makeup_supported = _lesson_journal_makeup_supported(sb)
 
     fields_set = set(payload.model_fields_set)
-    mutating_fields = {"grade", "present", "comment", "attendance_type"}
+    mutating_fields = {"grade", "makeup_grade", "present", "comment", "attendance_type", "attendance_makeup"}
     if fields_set.isdisjoint(mutating_fields):
         raise HTTPException(status_code=400, detail="No grade/attendance fields to update")
+    if not makeup_supported and {"makeup_grade", "attendance_makeup"} & fields_set:
+        raise HTTPException(
+            status_code=400,
+            detail="DB schema is missing makeup fields. Apply migration supabase/migrations/20260305_000001_lesson_journal_makeup.sql and restart the API.",
+        )
 
     if "grade" in fields_set and payload.grade is not None and (payload.grade < 2 or payload.grade > 5):
         raise HTTPException(status_code=400, detail="Grade must be between 2 and 5")
+    if "makeup_grade" in fields_set and payload.makeup_grade is not None and (payload.makeup_grade < 2 or payload.makeup_grade > 5):
+        raise HTTPException(status_code=400, detail="Makeup grade must be between 2 and 5")
 
     valid_attendance_types = ["present", "absent", "duty", "excused", "sick", None]
     if "attendance_type" in fields_set and payload.attendance_type not in valid_attendance_types:
@@ -986,6 +1025,8 @@ def add_grade(
 
     if "grade" in fields_set:
         record_data["grade"] = payload.grade
+    if "makeup_grade" in fields_set:
+        record_data["makeup_grade"] = payload.makeup_grade
     if "comment" in fields_set:
         record_data["comment"] = payload.comment
 
@@ -995,14 +1036,22 @@ def add_grade(
             record_data["present"] = payload.attendance_type in ["present", "duty"]
         elif "present" in fields_set:
             record_data["present"] = bool(payload.present) if payload.present is not None else None
+        if makeup_supported and "attendance_makeup" not in fields_set and payload.attendance_type not in ABSENCE_ATTENDANCE_TYPES:
+            record_data["attendance_makeup"] = False
     elif "present" in fields_set:
         record_data["present"] = bool(payload.present) if payload.present is not None else None
+
+    if makeup_supported and "attendance_makeup" in fields_set:
+        record_data["attendance_makeup"] = bool(payload.attendance_makeup)
 
     if not is_update:
         record_data.setdefault("grade", None)
         record_data.setdefault("present", True)
         record_data.setdefault("comment", None)
         record_data.setdefault("attendance_type", None)
+        if makeup_supported:
+            record_data.setdefault("makeup_grade", None)
+            record_data.setdefault("attendance_makeup", False)
 
     sb.table("lesson_journal").upsert(
         record_data,
@@ -1410,5 +1459,3 @@ def get_student_homework(user: dict = require_role("student")):
         })
     
     return {"homework": result}
-
-

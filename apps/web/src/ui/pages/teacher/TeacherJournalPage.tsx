@@ -50,6 +50,9 @@ type Student = {
   grade: number | null;
   present: boolean | null;
   comment: string | null;
+  attendance_type?: string | null;
+  makeup_grade?: number | null;
+  attendance_makeup?: boolean;
 };
 
 type LessonDetails = {
@@ -80,6 +83,57 @@ type ClassSubject = {
   name: string;
   is_mine: boolean;
 };
+
+type AttendanceType = "present" | "absent" | "duty" | "excused" | "sick";
+
+function resolveAttendanceType(attendanceType?: string | null, present?: boolean | null): AttendanceType | null {
+  if (attendanceType === "present" || attendanceType === "absent" || attendanceType === "duty" || attendanceType === "excused" || attendanceType === "sick") {
+    return attendanceType;
+  }
+  if (present === false) return "absent";
+  if (present === true) return "present";
+  return null;
+}
+
+function isAbsenceAttendanceType(attendanceType?: string | null): boolean {
+  return attendanceType === "absent" || attendanceType === "excused" || attendanceType === "sick";
+}
+
+function attendanceCode(attendanceType?: string | null, present?: boolean | null): string | null {
+  const resolved = resolveAttendanceType(attendanceType, present);
+  switch (resolved) {
+    case "present":
+      return "✓";
+    case "absent":
+      return "НБ";
+    case "duty":
+      return "К";
+    case "excused":
+      return "А";
+    case "sick":
+      return "О";
+    default:
+      return null;
+  }
+}
+
+function attendanceColor(attendanceType?: string | null, present?: boolean | null): string {
+  const resolved = resolveAttendanceType(attendanceType, present);
+  switch (resolved) {
+    case "present":
+      return "#22c55e";
+    case "absent":
+      return "#ef4444";
+    case "duty":
+      return "#f59e0b";
+    case "excused":
+      return "#3b82f6";
+    case "sick":
+      return "#8b5cf6";
+    default:
+      return "#6b7280";
+  }
+}
 
 
 export function TeacherJournalPage() {
@@ -145,7 +199,9 @@ export function TeacherJournalPage() {
     x: number;
     y: number;
     currentGrade?: number | null;
+    currentMakeupGrade?: number | null;
     currentAttendance?: string | null;
+    currentAttendanceMakeup?: boolean;
   } | null>(null);
   const journalRevalidateTimerRef = useRef<number | null>(null);
   const cellSaveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -501,39 +557,73 @@ export function TeacherJournalPage() {
   function openGradePopup(e: React.MouseEvent, studentId: string, studentName: string, lesson: { timetable_entry_id: string, date: string }) {
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     const cell = gridData?.grades?.[studentId]?.[`${lesson.date}_${lesson.timetable_entry_id}`];
-    const currentGrade = cell?.grades?.[0]?.grade || null;
-    const currentAttendance = cell?.attendance_type || (cell?.present === false ? 'absent' : null);
+    const currentGrade = cell?.grades?.[0]?.grade ?? null;
+    const currentMakeupGrade = cell?.makeup_grade ?? null;
+    const currentAttendance = resolveAttendanceType(cell?.attendance_type, cell?.present);
+    const currentAttendanceMakeup = Boolean(cell?.attendance_makeup);
     // Position popup near cell, but keep on screen
     let x = rect.left + rect.width / 2;
     let y = rect.bottom + 4;
     if (x + 120 > window.innerWidth) x = window.innerWidth - 130;
     if (x < 10) x = 10;
     if (y + 200 > window.innerHeight) y = rect.top - 204;
-    setGradePopup({ studentId, studentName, timetableEntryId: lesson.timetable_entry_id, lessonDate: lesson.date, x, y, currentGrade, currentAttendance });
+    setGradePopup({
+      studentId,
+      studentName,
+      timetableEntryId: lesson.timetable_entry_id,
+      lessonDate: lesson.date,
+      x,
+      y,
+      currentGrade,
+      currentMakeupGrade,
+      currentAttendance,
+      currentAttendanceMakeup,
+    });
   }
 
-  async function quickSaveGrade(grade?: number | null, attendanceType?: string | null) {
+  async function quickSaveGrade(update: {
+    grade?: number | null;
+    attendanceType?: string | null;
+    makeupGrade?: number | null;
+    attendanceMakeup?: boolean;
+  }) {
     if (!gradePopup || !token || !selectedClassId) return;
     const popup = gradePopup;
     const cellKey = `${popup.lessonDate}_${popup.timetableEntryId}`;
     const creatorName = user?.full_name || user?.username || "Вы";
-    const shouldUpdateGrade = grade !== undefined;
-    const shouldUpdateAttendance = attendanceType !== undefined;
+    const shouldUpdateGrade = update.grade !== undefined;
+    const shouldUpdateAttendance = update.attendanceType !== undefined;
+    const shouldUpdateMakeupGrade = update.makeupGrade !== undefined;
+    const shouldUpdateAttendanceMakeup = update.attendanceMakeup !== undefined;
+    const nextAttendanceTypeForPayload = shouldUpdateAttendance ? (update.attendanceType ?? null) : (popup.currentAttendance ?? null);
 
     // Update local state immediately and close popup to allow rapid input.
     setGridData((prev) => {
       if (!prev) return prev;
       const studentCells = { ...(prev.grades?.[popup.studentId] || {}) };
-      const currentCell = studentCells[cellKey] || { grades: [], present: null, attendance_type: null };
-      const nextAttendanceType = shouldUpdateAttendance ? attendanceType ?? null : (currentCell.attendance_type ?? null);
+      const currentCell = studentCells[cellKey] || {
+        grades: [],
+        present: null,
+        attendance_type: null,
+        makeup_grade: null,
+        attendance_makeup: false,
+      };
+      const nextAttendanceType = shouldUpdateAttendance ? (update.attendanceType ?? null) : (currentCell.attendance_type ?? null);
       const nextPresent = shouldUpdateAttendance
-        ? (attendanceType == null ? null : attendanceType === "present" || attendanceType === "duty")
+        ? (update.attendanceType == null ? null : update.attendanceType === "present" || update.attendanceType === "duty")
         : (currentCell.present ?? null);
+      const nextMakeupGrade = shouldUpdateMakeupGrade ? (update.makeupGrade ?? null) : (currentCell.makeup_grade ?? null);
+      const nextAttendanceMakeup = shouldUpdateAttendanceMakeup
+        ? Boolean(update.attendanceMakeup)
+        : (shouldUpdateAttendance
+          ? (isAbsenceAttendanceType(nextAttendanceType) ? Boolean(currentCell.attendance_makeup) : false)
+          : Boolean(currentCell.attendance_makeup));
+      const nextPrimaryGrade = shouldUpdateGrade ? (update.grade ?? null) : null;
 
       const nextGrades = shouldUpdateGrade
-        ? (grade !== null
+        ? (nextPrimaryGrade !== null
           ? [{
-            grade,
+            grade: nextPrimaryGrade,
             comment: currentCell.grades?.[0]?.comment || null,
             created_by: user?.id,
             created_by_name: creatorName,
@@ -546,6 +636,8 @@ export function TeacherJournalPage() {
         grades: nextGrades,
         present: nextPresent,
         attendance_type: nextAttendanceType,
+        makeup_grade: nextMakeupGrade,
+        attendance_makeup: nextAttendanceMakeup,
       };
       return {
         ...prev,
@@ -566,10 +658,16 @@ export function TeacherJournalPage() {
           timetable_entry_id: popup.timetableEntryId,
           lesson_date: popup.lessonDate,
         };
-        if (shouldUpdateGrade) payload.grade = grade;
+        if (shouldUpdateGrade) payload.grade = update.grade ?? null;
+        if (shouldUpdateMakeupGrade) payload.makeup_grade = update.makeupGrade ?? null;
         if (shouldUpdateAttendance) {
-          payload.attendance_type = attendanceType ?? null;
-          payload.present = attendanceType == null ? null : attendanceType === "present" || attendanceType === "duty";
+          payload.attendance_type = update.attendanceType ?? null;
+          payload.present = update.attendanceType == null ? null : update.attendanceType === "present" || update.attendanceType === "duty";
+        }
+        if (shouldUpdateAttendanceMakeup) {
+          payload.attendance_makeup = Boolean(update.attendanceMakeup);
+        } else if (shouldUpdateAttendance && !isAbsenceAttendanceType(nextAttendanceTypeForPayload)) {
+          payload.attendance_makeup = false;
         }
         await apiSaveLessonGrade(token, selectedClassId, payload);
       } catch (e) {
@@ -790,29 +888,23 @@ export function TeacherJournalPage() {
                             const cell = sGrades[key];
                             const isCompact = filteredLessons.length > 15;
                             const firstGrade = cell?.grades?.[0];
-                            const gradeVal = firstGrade?.grade;
-                            const gradeTitle = firstGrade
-                              ? [
-                                firstGrade.comment?.trim(),
-                                firstGrade.created_by_name ? `Поставил(а): ${firstGrade.created_by_name}` : null,
-                              ].filter(Boolean).join("\n")
-                              : "";
-
-                            let attendanceMark = null;
-                            if (cell?.attendance_type) {
-                              switch (cell.attendance_type) {
-                                case 'present': attendanceMark = <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>✓</span>; break;
-                                case 'absent': attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>; break;
-                                case 'duty': attendanceMark = <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>К</span>; break;
-                                case 'excused': attendanceMark = <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>А</span>; break;
-                                case 'sick': attendanceMark = <span style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>О</span>; break;
-                                default: attendanceMark = null;
-                              }
-                            } else if (cell?.present === false) {
-                              attendanceMark = <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>КЖ</span>;
-                            } else if (cell?.present === true) {
-                              attendanceMark = <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: isCompact ? 10 : 12 }}>✓</span>;
-                            }
+                            const gradeVal = firstGrade?.grade ?? null;
+                            const makeupGradeVal = cell?.makeup_grade ?? null;
+                            const resolvedAttendance = resolveAttendanceType(cell?.attendance_type, cell?.present);
+                            const attendanceLabel = attendanceCode(cell?.attendance_type, cell?.present);
+                            const attendanceWorkedOff = isAbsenceAttendanceType(resolvedAttendance) && Boolean(cell?.attendance_makeup);
+                            const primaryText = gradeVal != null ? String(gradeVal) : attendanceLabel;
+                            const reworkText = gradeVal != null
+                              ? (makeupGradeVal != null ? String(makeupGradeVal) : null)
+                              : (attendanceWorkedOff ? "ОТР" : null);
+                            const displayText = primaryText && reworkText ? `${primaryText}/${reworkText}` : (primaryText || reworkText || "");
+                            const gradeTitle = [
+                              firstGrade?.comment?.trim() || null,
+                              firstGrade?.created_by_name ? `Поставил(а): ${firstGrade.created_by_name}` : null,
+                              makeupGradeVal != null ? `Отработка оценки: ${makeupGradeVal}` : null,
+                              attendanceWorkedOff ? "Отработка отсутствия: ОТР" : null,
+                            ].filter(Boolean).join("\n");
+                            const attendanceTextColor = attendanceColor(cell?.attendance_type, cell?.present);
 
                             return (
                               <td
@@ -827,12 +919,26 @@ export function TeacherJournalPage() {
                                   opacity: canEditCell ? 1 : 0.65
                                 }}
                               >
-                                {attendanceMark}
-                                {gradeVal && <span className={gradeColorClass(gradeVal)} style={{
-                                  marginLeft: attendanceMark ? 2 : 0,
-                                  fontSize: isCompact ? 11 : 13
-                                }}>{gradeVal}</span>}
-                                {!attendanceMark && !gradeVal && (
+                                {displayText ? (
+                                  <span
+                                    className={gradeVal != null ? gradeColorClass(gradeVal) : undefined}
+                                    style={{
+                                      fontSize: isCompact ? 11 : 13,
+                                      ...(gradeVal == null
+                                        ? {
+                                          color: attendanceTextColor,
+                                          fontWeight: 700,
+                                          padding: "2px 4px",
+                                          borderRadius: 4,
+                                          background: attendanceWorkedOff ? "#f3f4f6" : "transparent",
+                                          display: "inline-block",
+                                        }
+                                        : {}),
+                                    }}
+                                  >
+                                    {displayText}
+                                  </span>
+                                ) : (
                                   <span style={{ color: '#d1d5db', fontSize: isCompact ? 12 : 14, fontWeight: 300 }}>+</span>
                                 )}
                               </td>
@@ -870,7 +976,7 @@ export function TeacherJournalPage() {
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Белгилөө / Обозначения:</h3>
               <div style={{ display: 'flex', gap: 24, padding: '16px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', marginTop: 8, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: 4 }}>КЖ</span>
+                  <span style={{ fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: 4 }}>НБ</span>
                   <span style={{ fontSize: 13, color: '#4b5563' }}>Келген жок (Отсутствует)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -884,6 +990,10 @@ export function TeacherJournalPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontWeight: 'bold', color: '#8b5cf6', background: '#f5f3ff', padding: '2px 6px', borderRadius: 4 }}>О</span>
                   <span style={{ fontSize: 13, color: '#4b5563' }}>Оруу (Болезнь)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 'bold', color: '#111827', background: '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>2/5, НБ/ОТР</span>
+                  <span style={{ fontSize: 13, color: '#4b5563' }}>Отработка рядом с основной отметкой</span>
                 </div>
               </div>
             </div>
@@ -906,9 +1016,28 @@ export function TeacherJournalPage() {
                       key={g}
                       className={`${styles.gradeBtn} ${styles[`gradeBtn${g}` as keyof typeof styles]} ${gradePopup.currentGrade === g ? styles.active || '' : ''}`}
                       style={gradePopup.currentGrade === g ? { background: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626', color: 'white', borderColor: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626' } : {}}
-                      onClick={() => quickSaveGrade(g, 'present')}
+                      onClick={() => quickSaveGrade({ grade: g, attendanceType: "present" })}
                     >{g}</button>
                   ))}
+                </div>
+              </div>
+              <div className={styles.gradePopupSection}>
+                <div className={styles.gradePopupSectionLabel}>Отработка оценки</div>
+                <div className={styles.gradePopupRow}>
+                  {[5, 4, 3, 2].map(g => (
+                    <button
+                      key={`mk-${g}`}
+                      className={`${styles.gradeBtn} ${styles[`gradeBtn${g}` as keyof typeof styles]} ${gradePopup.currentMakeupGrade === g ? styles.active || '' : ''}`}
+                      style={gradePopup.currentMakeupGrade === g ? { background: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626', color: 'white', borderColor: g === 5 ? '#16a34a' : g === 4 ? '#2563eb' : g === 3 ? '#ea580c' : '#dc2626' } : {}}
+                      onClick={() => quickSaveGrade({ makeupGrade: g })}
+                    >{g}</button>
+                  ))}
+                  <button
+                    className={styles.attendBtn}
+                    onClick={() => quickSaveGrade({ makeupGrade: null })}
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
               <div className={styles.gradePopupSection}>
@@ -916,7 +1045,7 @@ export function TeacherJournalPage() {
                 <div className={styles.gradePopupRow}>
                   {[
                     { value: 'present', label: '✓', color: '#22c55e' },
-                    { value: 'absent', label: 'КЖ', color: '#ef4444' },
+                    { value: 'absent', label: 'НБ', color: '#ef4444' },
                     { value: 'duty', label: 'К', color: '#f59e0b' },
                     { value: 'excused', label: 'А', color: '#3b82f6' },
                     { value: 'sick', label: 'О', color: '#8b5cf6' },
@@ -928,14 +1057,36 @@ export function TeacherJournalPage() {
                         color: opt.color,
                         ...(gradePopup.currentAttendance === opt.value ? { background: opt.color, color: 'white', borderColor: opt.color } : {})
                       }}
-                      onClick={() => quickSaveGrade(undefined, opt.value)}
+                      onClick={() => quickSaveGrade({ attendanceType: opt.value })}
                     >{opt.label}</button>
                   ))}
                 </div>
               </div>
+              <div className={styles.gradePopupSection}>
+                <div className={styles.gradePopupSectionLabel}>Отработка отсутствия</div>
+                <div className={styles.gradePopupRow}>
+                  <button
+                    className={styles.attendBtn}
+                    disabled={!isAbsenceAttendanceType(gradePopup.currentAttendance)}
+                    style={{
+                      color: "#0f766e",
+                      ...(gradePopup.currentAttendanceMakeup ? { background: "#0f766e", color: "white", borderColor: "#0f766e" } : {}),
+                    }}
+                    onClick={() => quickSaveGrade({ attendanceMakeup: true })}
+                  >
+                    ОТР
+                  </button>
+                  <button
+                    className={styles.attendBtn}
+                    onClick={() => quickSaveGrade({ attendanceMakeup: false })}
+                  >
+                    Сброс
+                  </button>
+                </div>
+              </div>
               <button
                 className={styles.clearBtn}
-                onClick={() => quickSaveGrade(null, null)}
+                onClick={() => quickSaveGrade({ grade: null, attendanceType: null, makeupGrade: null, attendanceMakeup: false })}
               >Тазалоо / Очистить</button>
             </div>
           </>
@@ -992,7 +1143,7 @@ function LessonEditingView({ lessonDetails, lessonTopic, setLessonTopic, homewor
   // Отметки посещаемости на кыргызском
   const attendanceOptions = [
     { value: "present", label: "✓", color: "#22c55e", title: "Келди (Присутствует)" },
-    { value: "absent", label: "КЖ", color: "#ef4444", title: "Келген жок (Отсутствует)" },
+    { value: "absent", label: "НБ", color: "#ef4444", title: "Келген жок (Отсутствует)" },
     { value: "duty", label: "К", color: "#f59e0b", title: "Кезмет (Дежурство)" },
     { value: "excused", label: "А", color: "#3b82f6", title: "Арыз (Уважительная причина)" },
     { value: "sick", label: "О", color: "#8b5cf6", title: "Оруу (Болезнь)" },
